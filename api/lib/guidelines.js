@@ -12,5 +12,6 @@ module.exports = {
 		 PREFIX swrlb: <http://www.w3.org/2003/11/swrlb#>
 		 PREFIX vocab: <http://anonymous.org/vocab/>
 		 PREFIX xml: <http://www.w3.org/XML/1998/namespace>
-		 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>`
+		 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+		 BASE <http://anonymous.org/data/>`
 };

@@ -2,13 +2,13 @@ const express = require('express');
 const router = express.Router();
 const request = require('request');
 
-const utils = require('../lib/utils');
+const utils = require('../lib/utils').default;
 const logger = require('../config/winston');
 
 router.post('/interactions', function(req, res, next) {
 
   var postData = require('querystring').stringify({
-      'guideline_group_id' : `CIG-` + req.body.guideline_group_id,
+      'guideline_id' : `CIG-` + req.body.guideline_id,
   });
 
   logger.info("Determining interactions with data: " + JSON.stringify(postData));
@@ -27,7 +27,7 @@ router.post('/interactions', function(req, res, next) {
 
 router.post('/get', function(req, res, next) {
 
-  utils.sparqlGraphInstanceOf("CIG-" + req.body.guideline_group_id, "<http://anonymous.org/vocab/ClinicalRecommendation>", function(uris) {
+  utils.sparqlGraphInstanceOf("CIG-" + req.body.guideline_id, "<http://anonymous.org/vocab/ClinicalRecommendation>", function(uris) {
 
     res.send(uris);
 

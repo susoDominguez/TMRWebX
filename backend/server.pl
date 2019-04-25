@@ -41,6 +41,7 @@ show_interactions(Request) :-
   loadOntologies(),
   http_parameters(Request, [ guideline_group_id(GuidelineGroupID, [ string ]) ]),
   load_guideline_group(GuidelineGroupID, GuidelinesGraphPath),
+  propagGroupingCriteriaDrugToEventType, 
   inferInternalInteractions,
   format('Content-type: text/plain~n~n'),
   atom_concat('http://anonymous.org/data/', GuidelineGroupID, DataGuidelineGroupID), %TODO: switch to rdf_global_id.

@@ -4,7 +4,7 @@ const request = require('request');
 
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
-const utils = require('../lib/utils');
+const utils = require('../lib/utils').default;
 
 function postTransition(transitionData, res, insertOrDelete) {
 

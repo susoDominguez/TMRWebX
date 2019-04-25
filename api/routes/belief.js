@@ -4,7 +4,7 @@ const request = require('request');
 
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
-const utils = require('../lib/utils');
+const utils = require('../lib/utils').default;
 
 function action(req, res, insertOrDelete) {
 
@@ -23,7 +23,7 @@ function action(req, res, insertOrDelete) {
       data:CB` + req.body.belief_id + `
           a                             vocab:CausationBelief ;
           vocab:strength                "` + req.body.strength + `"^^xsd:string;
-          vocab:frequency               "` + req.body.frequency + `"^^xsd:string.
+          vocab:frequency               "always"^^xsd:string.
   }`;
 
   const provenance = `data:CB` + req.body.belief_id + `_provenance {
@@ -37,7 +37,7 @@ function action(req, res, insertOrDelete) {
 
   const publication = `data:CB` + req.body.belief_id + `_publicationinfo {
       data:CB` + req.body.belief_id + `_nanopub
-          prov:generatedAtTime          "1922-12-28"^^xsd:dateTime ;
+          prov:generatedAtTime          "2019-01-01T13:14:15"^^xsd:dateTime ;
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;
 
