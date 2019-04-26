@@ -39,9 +39,8 @@ load_guideline_group(GuidelineGroupID, GuidelinesGraphPath) :-
 
 show_interactions(Request) :-
   loadOntologies(),
-  http_parameters(Request, [ guideline_group_id(GuidelineGroupID, [ string ]) ]),
+  http_parameters(Request, [ guideline_id(GuidelineGroupID, [ string ]) ]),
   load_guideline_group(GuidelineGroupID, GuidelinesGraphPath),
-  propagGroupingCriteriaDrugToEventType, 
   inferInternalInteractions,
   format('Content-type: text/plain~n~n'),
   atom_concat('http://anonymous.org/data/', GuidelineGroupID, DataGuidelineGroupID), %TODO: switch to rdf_global_id.
@@ -55,7 +54,7 @@ show_interactions(Request) :-
 
 show_drug(Request) :-
   loadOntologies(),
-  http_parameters(Request, [ guideline_id(GuidelineID, [ string ]), guideline_group_id(GuidelineGroupID, [ string ]) ]),
+  http_parameters(Request, [ guideline_id(GuidelineID, [ string ]), guideline_id(GuidelineGroupID, [ string ]) ]),
   load_guideline_group(GuidelineGroupID, GuidelinesGraphPath),
   format('Content-type: text/plain~n~n', []),
   atom_string(GuidelineID_atom, GuidelineID),
@@ -67,7 +66,7 @@ show_drug(Request) :-
 
 show_drug_effects(Request) :-
   loadOntologies(),
-  http_parameters(Request, [ drug_full_id(DrugID, [ string ]) ]),
+  http_parameters(Request, [ drug_URI(DrugID, [ string ]) ]),
   format('Content-type: text/plain~n~n', []),
   atom_string(DrugID_atom, DrugID),
   rdf(DrugAdministration, vocab:administrationOf, DrugID_atom),

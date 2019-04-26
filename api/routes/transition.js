@@ -4,7 +4,7 @@ const request = require('request');
 
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
-const utils = require('../lib/utils').default;
+const utils = require('../lib/utils');
 
 function postTransition(transitionData, res, insertOrDelete) {
 
@@ -40,27 +40,27 @@ router.post('/delete', function(req, res, next) {
 
 function actionSituation(req, res, insertOrDelete) {
 
-  var transitionSituation = `:Sit` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
+  var situationDef = `:Sit` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
               rdfs:label "` + req.body.situation_label + `"@en `;
 
   if ( req.body.umlsCodes ) {
 
-    transitionSituation += `;`;
+    situationDef += `;`;
 
     req.body.umlsCodes.split(",").forEach(function(code) {
 
-      transitionSituation += `
+      situationDef += `
       vocab:umlsCode   "` + code.trim() + `"^^xsd:string ;`
 
     });
 
-    transitionSituation = transitionSituation.substring(0, transitionSituation.length - 1);
+    situationDef = situationDef.substring(0, situationDef.length - 1);
 
   }
 
-  transitionSituation += `.`
+  situationDef += `.`
 
-  postTransition(transitionSituation, res, insertOrDelete);
+  postTransition(situationDef, res, insertOrDelete);
 
 }
 
@@ -80,21 +80,39 @@ router.post('/situation/delete', function(req, res, next) {
 
 router.post('/all/get/', function(req, res, next) {
 
-  utils.sparqlSubject("transitions", req.body.transition_full_id, function(transitionData) {
+  if(req.body.transition_URI){
+    utils.sparqlSubject("transitions", req.body.transition_URI, function(transitionData) {
 
-    res.send(transitionData);
+      res.send(transitionData);
+  
+    });
+  } else{
+    utils.sparqlSubject("transitions", "http://anonymous.org/data/Tr"+req.body.transition_id, function(transitionData) {
 
-  });
-
+      res.send(transitionData);
+    });
+  }
 });
+  
+
+
 
 router.post('/situation/all/get/', function(req, res, next) {
 
-  utils.sparqlSubject("transitions", req.body.situation_full_id, function(situationData) {
+  if(req.body.situation_URI){
+    utils.sparqlSubject("transitions", req.body.situation_URI, function(situationData) {
 
-    res.send(situationData);
+      res.send(situationData);
+  
+    });
+  } else{
+    utils.sparqlSubject("transitions", "http://anonymous.org/data/Sit"+req.body.situation_id, function(situationData) {
 
-  });
+      res.send(situationData);
+  
+    });
+  }
+  
 
 });
 

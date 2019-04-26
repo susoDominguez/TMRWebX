@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const request = require('request');
 
-const utils = require('../lib/utils').default;
+const utils = require('../lib/utils');
 const logger = require('../config/winston');
 
 router.post('/interactions', function(req, res, next) {

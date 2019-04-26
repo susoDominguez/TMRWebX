@@ -4,7 +4,7 @@ const request = require('request');
 
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
-const utils = require('../lib/utils').default;
+const utils = require('../lib/utils');
 
 router.post('/create', function(req, res, next) {
 
@@ -98,10 +98,21 @@ router.post('/delete', function(req, res, next) {
 
 router.post('/drug/get', function(req, res, next) {
 
-  var postData = require('querystring').stringify({
-      'guideline_group_id' : `CIG-` + req.body.guideline_id,
-      'guideline_id' : req.body.rec_id
-  });
+  var postData=""
+  
+  if(req.body.rec_id)
+  {
+    postData = require('querystring').stringify({
+      'guideline_id' : `CIG-` + req.body.guideline_id,
+      'rec_id' : "http://anonymous.org/data/Rec"+req.body.guideline_id+"-"+req.body.rec_id
+    });
+  } else
+  {
+    postData = require('querystring').stringify({
+      'guideline_id' : `CIG-` + req.body.guideline_id,
+      'rec_URI' : req.body.rec_URI
+    });
+  }
 
   utils.callPrologServer("drug", postData, res, function(data) {
 
@@ -117,11 +128,21 @@ router.post('/drug/get', function(req, res, next) {
 
 router.post('/all/get/', function(req, res, next) {
 
-  utils.sparqlGraph("CIG-" + req.body.guideline_id, req.body.guideline_full_id, function(guidelineData) {
+  if(req.body.rec_id){
+    utils.sparqlGraph("CIG-" + req.body.guideline_id, 
+        "http://anonymous.org/data/Rec"+req.body.guideline_id+"-"+req.body.rec_id, function(guidelineData) {
+
+    res.send(guidelineData);
+
+    });
+  } else {
+    utils.sparqlGraph("CIG-" + req.body.guideline_id, req.body.rec_URI, function(guidelineData) {
 
     res.send(guidelineData);
 
   });
+  }
+  
 
 });
 

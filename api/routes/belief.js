@@ -4,7 +4,7 @@ const request = require('request');
 
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
-const utils = require('../lib/utils').default;
+const utils = require('../lib/utils');
 
 function action(req, res, insertOrDelete) {
 
@@ -63,11 +63,20 @@ router.post('/delete', function(req, res, next) {
 
 router.post('/all/get/', function(req, res, next) {
 
-  utils.sparqlGraph("beliefs", req.body.belief_full_id, function(beliefData) {
+  if(req.body.belief_id){
+    utils.sparqlGraph("beliefs", "http://anonymous.org/data/CB"+req.body.belief_id, function(beliefData) {
 
     res.send(beliefData);
 
-  });
+    });
+  } else {
+    utils.sparqlGraph("beliefs", req.body.belief_URI, function(beliefData) {
+
+    res.send(beliefData);
+
+    });
+  }
+  
 
 });
 

@@ -59,9 +59,26 @@ router.post('/category/delete', function(req, res) {
 
 router.post('/effect/get', function(req, res) {
 
-  var postData = require('querystring').stringify({
-      'drug_URI' : req.body.drug_URI
-  });
+  var postData = ""
+
+  if(req.body.drugCat_id){
+    postData = require('querystring').stringify({
+     'drugCat_id' : "http://anonymous.org/data/DrugCat"+req.body.drugCat_id
+     });
+  } 
+  else
+  {
+     if (req.body.drugT_id){
+        postData = require('querystring').stringify({
+          'drugT_id' : "http://anonymous.org/data/DrugT"+req.body.drugT_id
+          });
+    } 
+    else {
+          postData = require('querystring').stringify({
+            'drug_URI' : req.body.drug_URI
+              });
+          }
+  }
 
   utils.callPrologServer("drugeffects", postData, res, function(data) {
 
@@ -73,35 +90,33 @@ router.post('/effect/get', function(req, res) {
 
 router.post('/all/get/', function(req, res) {
 
-  utils.sparqlSubject("drugs", req.body.drug_URI, function(drugData) {
+  if(req.body.drugCat_id){
+
+    utils.sparqlSubject("drugs", "http://anonymous.org/data/DrugCat"+req.body.drugCat_id, function(drugData) {
 
     res.send(drugData);
 
-  });
+    });
+  } else
+  { 
+    if (req.body.drugT_id){
+    utils.sparqlSubject("drugs", "http://anonymous.org/data/DrugT"+req.body.drugT_id, function(drugData) {
+
+      res.send(drugData);
+  
+      });
+    } else {
+      utils.sparqlSubject("drugs", req.body.drug_URI, function(drugData) {
+
+      res.send(drugData);
+  
+      });
+    }
+  } 
+  
 
 });
 
-/*
-router.post('/situation/add', function(req, res) {
-
-  situationDef(req, config.INSERT, function(status) {
-
-    res.sendStatus(status);
-
-  });
-
-});
-
-router.post('/situation/delete', function(req, res) {
-
-  situationDef(req, config.DELETE, function(status) {
-
-    res.sendStatus(status);
-
-  });
-
-});
-*/
 //////////////////////////////
 
 //Defines drug types and categories, providing an english label. 
@@ -205,44 +220,5 @@ function drugCatCareAction(req, insertOrDelete, callback) {
 
   postDrugs(drugCat + " " + adminActDrugCat, insertOrDelete, callback);
 }
-
-
-/*
-//defines a situation type
-function situationDef(req, insertOrDelete, callback) {
-
-  // Drug situation format:
-  const drugSituation = `:Sit` + req.body.drug_situation_id + `rdf:type vocab:SituationType, owl:NamedIndividual ;
-                  rdfs:label     "` + req.body.drug_situation_label + `"@en`;
-
-  if ( req.body.umlsCode_Ids ) {
-
-    drugSituation += situationClinicalCodes(req.body.umlsCode_Ids);
-  } 
-                
-  drugSituation += ` .`
-
-  postDrugs(drugSituation, insertOrDelete, callback);
-
-}
-
-//generates rdf for umls clinical does on a situation
-function situationClinicalCodes(clinicalCodes) {
-
-  var codes = ` ;
-                       vocab:umlsCode  `;
-
-  clinicalCodes.split(",").forEach(function(code) {
-
-    codes += (`"` + code.trim() + `"^^xsd:string, `);
-
-  });
-
-  //remove last comma and whitespace
-  codes = codes.substring(0, codes.length - 2);
-
-  return codes;
-}
-*/
 
 module.exports = router;
