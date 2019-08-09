@@ -9,11 +9,11 @@ const logger = require('./config/winston');
 require('dotenv').config()
 
 const guidelineRouter = require('./routes/guideline');
-const drugRouter = require('./routes/drug');
+const careActionRouter = require('./routes/careAction');
 const beliefRouter = require('./routes/belief');
 const transitionRouter = require('./routes/transition');
 const guidelinesRouter = require('./routes/guidelines');
-const drugsRouter = require('./routes/drugs');
+const careActionsRouter = require('./routes/careActions');
 const beliefsRouter = require('./routes/beliefs');
 const transitionsRouter = require('./routes/transitions');
 
@@ -37,11 +37,11 @@ router.get('/', function(req, res, next) {
 });
 
 router.use('/guideline', guidelineRouter);
-router.use('/drug', drugRouter);
+router.use('/careAction', careActionRouter);
 router.use('/belief', beliefRouter);
 router.use('/transition', transitionRouter);
 router.use('/guidelines', guidelinesRouter);
-router.use('/drugs', drugsRouter);
+router.use('/careActions', careActionsRouter);
 router.use('/beliefs', beliefsRouter);
 router.use('/transitions', transitionsRouter);
 

@@ -1,9 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const request = require('request');
 
 const config = require('../lib/config');
-const guidelines = require('../lib/guidelines');
 const utils = require('../lib/utils');
 
 function action(req, res, insertOrDelete) {
@@ -17,7 +15,20 @@ function action(req, res, insertOrDelete) {
           nanopub:hasPublicationInfo    data:CB` + req.body.belief_id + `_publicationinfo .
   }`;
 
-  const body = `data:CB` + req.body.belief_id + ` {
+  var body =""
+
+  if(req.body.careAct_cause_id) { 
+     body = `data:CB` + req.body.belief_id + ` {
+      data:ActPerform` + req.body.careAct_cause_id + `
+          vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
+      data:CB` + req.body.belief_id + `
+          a                             vocab:CausationBelief ;
+          vocab:strength                "` + req.body.strength + `"^^xsd:string;
+          vocab:frequency               "always"^^xsd:string.
+  }`;
+  }
+   else {
+     body = `data:CB` + req.body.belief_id + ` {
       data:ActAdminister` + req.body.drug_cause_id + `
           vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
       data:CB` + req.body.belief_id + `
@@ -25,6 +36,9 @@ function action(req, res, insertOrDelete) {
           vocab:strength                "` + req.body.strength + `"^^xsd:string;
           vocab:frequency               "always"^^xsd:string.
   }`;
+  }
+
+  const body1 = body
 
   const provenance = `data:CB` + req.body.belief_id + `_provenance {
       data:CB` + req.body.belief_id + `_provenance
@@ -41,7 +55,7 @@ function action(req, res, insertOrDelete) {
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;
 
-  utils.sparqlUpdate("beliefs", head + " " + body + " " + provenance + " " + publication, insertOrDelete, function(status) {
+  utils.sparqlUpdate("beliefs", head + " " + body1 + " " + provenance + " " + publication, insertOrDelete, function(status) {
 
     res.sendStatus(status);
 
@@ -49,19 +63,19 @@ function action(req, res, insertOrDelete) {
 
 }
 
-router.post('/add', function(req, res, next) {
+router.post('/add', function(req, res) {
 
   action(req, res, config.INSERT);
 
 });
 
-router.post('/delete', function(req, res, next) {
+router.post('/delete', function(req, res) {
 
   action(req, res, config.DELETE);
 
 });
 
-router.post('/all/get/', function(req, res, next) {
+router.post('/all/get/', function(req, res) {
 
   if(req.body.belief_id){
     utils.sparqlGraph("beliefs", "http://anonymous.org/data/CB"+req.body.belief_id, function(beliefData) {

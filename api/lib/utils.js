@@ -213,9 +213,9 @@ class Util {
       	URL, {
 				headers: {
 					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: data },
+          			"Content-Type": "application/x-www-form-urlencoded"
+        		},
+        		body: data },
 
       function (error, response, body) {
 

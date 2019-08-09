@@ -96,7 +96,7 @@ router.post('/delete', function(req, res, next) {
 
 //
 
-router.post('/drug/get', function(req, res, next) {
+router.post('/careAction/get', function(req, res, next) {
 
   var postData=""
   
