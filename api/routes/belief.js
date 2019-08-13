@@ -17,9 +17,9 @@ function action(req, res, insertOrDelete) {
 
   var body =""
 
-  if(req.body.careAct_cause_id) { 
+  if(req.body.nonDrug_cause_id) { 
      body = `data:CB` + req.body.belief_id + ` {
-      data:ActPerform` + req.body.careAct_cause_id + `
+      data:Act` + req.body.nonDrug_cause_id + `
           vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
       data:CB` + req.body.belief_id + `
           a                             vocab:CausationBelief ;
