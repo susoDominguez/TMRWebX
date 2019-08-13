@@ -29,7 +29,7 @@ router.post('/create', function(req, res, next) {
     utils.sparqlUpdate("CIG-" + req.body.guideline_id, description, config.INSERT, function(body) {
 
       console.log(body);
-      res.sendStatus(200);
+      res.sendStatus(200); #status could also be the URI of the created guideline
 
     });
 
@@ -47,7 +47,7 @@ function action(req, res, insertOrDelete) {
             nanopub:hasProvenance       :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance ;
             nanopub:hasPublicationInfo  :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo .
   }`
-
+#to be modified so that nonDrug ids are added without the :ActAdminister prefix, only :Act prefix
   const body = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` {
     :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `
             a                       vocab:ClinicalRecommendation ;
@@ -55,7 +55,8 @@ function action(req, res, insertOrDelete) {
             vocab:aboutExecutionOf  :ActAdminister` + req.body.drug_id + ` ;
             vocab:basedOn           :CB` + req.body.belief_id + ` ;
             vocab:partOf            :CIG-` + req.body.guideline_id + ` ;
-            vocab:strength          "` + req.body.should_or_shouldnot + `" .
+            vocab:strength          "` + req.body.should_or_shouldnot + `" ;
+            vocab:motivation        "` + req.body.motivation + `" .
   }`
 
   const provenance = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance {
@@ -107,7 +108,7 @@ router.post('/careAction/get', function(req, res, next) {
       'rec_id' : "http://anonymous.org/data/Rec"+req.body.guideline_id+"-"+req.body.rec_id
     });
   } else
-  {
+  {  ##this one will be more accurate when combining guidelines
     postData = require('querystring').stringify({
       'guideline_id' : `CIG-` + req.body.guideline_id,
       'rec_URI' : req.body.rec_URI
@@ -135,7 +136,7 @@ router.post('/all/get/', function(req, res, next) {
     res.send(guidelineData);
 
     });
-  } else {
+  } else { #more useful when combining guidelines
     utils.sparqlGraph("CIG-" + req.body.guideline_id, req.body.rec_URI, function(guidelineData) {
 
     res.send(guidelineData);
