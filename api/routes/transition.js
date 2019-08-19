@@ -18,9 +18,9 @@ function postTransition(transitionData, res, insertOrDelete) {
 
 function action(req, res, insertOrDelete) {
 
-  const transition = `:Tr#` + req.body.transition_id + ` rdf:type vocab:TransitionType, owl:NamedIndividual ;
-                  vocab:hasTransformableSituation :Sit#` + req.body.prior_situation_id + ` ;
-                  vocab:hasExpectedSituation :Sit#` + req.body.post_situation_id + ` .`
+  const transition = `:Tr` + req.body.transition_id + ` rdf:type vocab:TransitionType, owl:NamedIndividual ;
+                  vocab:hasTransformableSituation :Sit` + req.body.prior_situation_id + ` ;
+                  vocab:hasExpectedSituation :Sit` + req.body.post_situation_id + ` .`
 
   postTransition(transition, res, insertOrDelete);
 
@@ -40,7 +40,7 @@ router.post('/delete', function(req, res, next) {
 
 function actionSituation(req, res, insertOrDelete) {
 
-  var situationDef = `:Sit#` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
+  var situationDef = `:Sit` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
               rdfs:label "` + req.body.situation_label + `"@en `;
 
   if ( req.body.umlsCodes ) {
@@ -87,7 +87,7 @@ router.post('/all/get/', function(req, res, next) {
   
     });
   } else{
-    utils.sparqlSubject("transitions", "http://anonymous.org/data/Tr#"+req.body.transition_id, function(transitionData) {
+    utils.sparqlSubject("transitions", "http://anonymous.org/data/Tr"+req.body.transition_id, function(transitionData) {
 
       res.send(transitionData);
     });
@@ -106,7 +106,7 @@ router.post('/situation/all/get/', function(req, res, next) {
   
     });
   } else{
-    utils.sparqlSubject("transitions", "http://anonymous.org/data/Sit#"+req.body.situation_id, function(situationData) {
+    utils.sparqlSubject("transitions", "http://anonymous.org/data/Sit"+req.body.situation_id, function(situationData) {
 
       res.send(situationData);
   
