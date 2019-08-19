@@ -73,20 +73,20 @@ router.post('/effect/get', function(req, res) {
 
   if(req.body.drugCat_id){
     postData = require('querystring').stringify({
-     'drugCat_id' : "http://anonymous.org/data/DrugCat"+req.body.drugCat_id
+     'drugCat_id' : "http://anonymous.org/data/DrugCat#"+req.body.drugCat_id
      });
   } 
   else
   {
      if (req.body.drugT_id){
         postData = require('querystring').stringify({
-          'drugT_id' : "http://anonymous.org/data/DrugT"+req.body.drugT_id
+          'drugT_id' : "http://anonymous.org/data/DrugT#"+req.body.drugT_id
           });
     } 
     else {
       if (req.body.nonDrugT_id) {
         postData = require('querystring').stringify({
-          'nonDrugT_id' : "http://anonymous.org/data/NonDrugT"+req.body.nonDrugT_id
+          'nonDrugT_id' : "http://anonymous.org/data/NonDrugT#"+req.body.nonDrugT_id
           });
       } else {
         postData = require('querystring').stringify({
@@ -109,7 +109,7 @@ router.post('/all/get/', function(req, res) {
 
   if(req.body.drugCat_id){
 
-    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugCat"+req.body.drugCat_id, function(drugData) {
+    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugCat#"+req.body.drugCat_id, function(drugData) {
 
     res.send(drugData);
 
@@ -117,14 +117,14 @@ router.post('/all/get/', function(req, res) {
   } else
   { 
     if (req.body.drugT_id){
-    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugT"+req.body.drugT_id, function(drugData) {
+    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugT#"+req.body.drugT_id, function(drugData) {
 
       res.send(drugData);
   
       });
     } else {
       if (req.body.nonDrugT_id) {
-        utils.sparqlSubject("careActions", "http://anonymous.org/data/CareActT"+req.body.nonDrugT_id, function(drugData) {
+        utils.sparqlSubject("careActions", "http://anonymous.org/data/CareActT#"+req.body.nonDrugT_id, function(drugData) {
 
       res.send(drugData);
   
@@ -148,14 +148,14 @@ router.post('/all/get/', function(req, res) {
 //Defines drug types and categories, providing an english label. 
 function drugDef(typeOrCat, id, label) {
   return drug = 
-  `:Drug` + typeOrCat + id + ` a vocab:DrugType, owl:NamedIndividual ;
+  `:Drug` + typeOrCat + `#` + id + ` a vocab:DrugType, owl:NamedIndividual ;
                                      rdfs:label "` + label + `"@en `
 }
 
 //Defines non-drug related care actions
 function careActTDef(typeOrCat, id, label) {
   return action = 
-  `:NonDrug` + typeOrCat + id + ` a vocab:NonDrugType, owl:NamedIndividual ;
+  `:NonDrug` + typeOrCat + `#` + id + ` a vocab:NonDrugType, owl:NamedIndividual ;
                                      rdfs:label "` + label + `"@en `
 }
 
@@ -165,9 +165,9 @@ function careActTDef(typeOrCat, id, label) {
 function drugAdminActDef(typeOrCat, id, label) {
 
   var drugAdministration =
-   `:ActAdminister` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
+   `:Act#Administer` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "Administer ` + label + `"@en ;
-                               vocab:administrationOf :Drug` + typeOrCat + id;
+                               vocab:administrationOf :Drug` + typeOrCat + `#` + id;
 
   return drugAdministration;
 }
@@ -176,7 +176,7 @@ function drugAdminActDef(typeOrCat, id, label) {
 function adminActSub(id) {
 
   return ` ;
-             vocab:subsumes :ActAdminister` + id;
+             vocab:subsumes :Act#Administer` + id;
 }
 
 //////
@@ -186,9 +186,9 @@ function adminActSub(id) {
 function careAdminActDef(typeOrCat, id, actLabel) {
 
   var careActAdmin =
-   `:Act` + id + ` a vocab:NonDrugAExecutionType, owl:NamedIndividual ;
+   `:Act#` + id + ` a vocab:NonDrugAExecutionType, owl:NamedIndividual ;
                                rdfs:label "` + actLabel + `"@en ;
-                               vocab:executionOf :NonDrug` + typeOrCat + id;
+                               vocab:executionOf :NonDrug` + typeOrCat + `#` + id;
 
   return careActAdmin;
 }
@@ -197,7 +197,7 @@ function careAdminActDef(typeOrCat, id, actLabel) {
 function adminCareActSub(id) {
 
   return ` ;
-             vocab:subsumes :Act` + id;
+             vocab:subsumes :Act#` + id;
 }
 ///////
 
@@ -257,7 +257,7 @@ function addGroupingCriteria(groupingCriteriaIds) {
 
   groupingCriteriaIds.split(",").forEach(function(criteriaId) {
 
-    groupingCriteria += (`:Tr` + criteriaId.trim() + `, `);
+    groupingCriteria += (`:Tr#` + criteriaId.trim() + `, `);
 
   });
   //remove last comma and whitespace
@@ -274,7 +274,7 @@ function adminActSubs(drugIds) {
 
   drugIds.split(",").forEach(function(elem) {
 
-    adminSubs += (`:ActAdminister` + elem.trim() + `, `);
+    adminSubs += (`:Act#Administer` + elem.trim() + `, `);
 
   });
   //return after removing the last comma and whitespace
