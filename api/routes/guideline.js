@@ -29,7 +29,7 @@ router.post('/create', function(req, res, next) {
     utils.sparqlUpdate("CIG-" + req.body.guideline_id, description, config.INSERT, function(body) {
 
       console.log(body);
-      res.sendStatus(200); #status could also be the URI of the created guideline
+      res.sendStatus(200); //status could also be the URI of the created guideline
 
     });
 
@@ -108,7 +108,7 @@ router.post('/delete', function(req, res, next) {
 
 });
 
-//
+/////
 
 router.post('/careAction/get', function(req, res, next) {
 
@@ -121,7 +121,7 @@ router.post('/careAction/get', function(req, res, next) {
       'rec_id' : "http://anonymous.org/data/Rec#"+req.body.guideline_id+"-"+req.body.rec_id
     });
   } else
-  {  ##this one will be more accurate when combining guidelines
+  {  //this one will be more accurate when combining guidelines
     postData = require('querystring').stringify({
       'guideline_id' : `CIG-` + req.body.guideline_id,
       'rec_URI' : req.body.rec_URI
@@ -149,7 +149,7 @@ router.post('/all/get/', function(req, res, next) {
     res.send(guidelineData);
 
     });
-  } else { #more useful when combining guidelines
+  } else { //more useful when combining guidelines
     utils.sparqlGraph("CIG-" + req.body.guideline_id, req.body.rec_URI, function(guidelineData) {
 
     res.send(guidelineData);
