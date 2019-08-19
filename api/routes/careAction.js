@@ -257,7 +257,7 @@ function addGroupingCriteria(groupingCriteriaIds) {
 
   groupingCriteriaIds.split(",").forEach(function(criteriaId) {
 
-    groupingCriteria += (`:` + criteriaId.trim() + `, `);
+    groupingCriteria += (`:Tr` + criteriaId.trim() + `, `);
 
   });
   //remove last comma and whitespace
