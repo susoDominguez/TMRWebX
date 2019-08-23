@@ -186,9 +186,9 @@ function adminActSub(id) {
 function careAdminActDef(typeOrCat, id, actLabel) {
 
   var careActAdmin =
-   `:Act` + id + ` a vocab:NonDrugAExecutionType, owl:NamedIndividual ;
+   `:Act` + id + ` a vocab:NonDrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "` + actLabel + `"@en ;
-                               vocab:executionOf :NonDrug` + typeOrCat + id;
+                               vocab:applicationOf :NonDrug` + typeOrCat + id;
 
   return careActAdmin;
 }
