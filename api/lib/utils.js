@@ -47,13 +47,13 @@ class Util {
 
         } else {
 
-          sparqlUpdate += `
-          }`;
+            sparqlUpdate += `
+            }`;
 
-          var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
-					const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
+            var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		    const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
 
-          request.post(
+            request.post(
 
             URL, {
 							headers: {
@@ -206,6 +206,7 @@ class Util {
 
 	static callPrologServer(path, data, res, callback) {
 
+		//path to swi-prolog server
 		const URL = "http://" + config.PROLOG_HOST + ":" + config.PROLOG_PORT + "/" + path;
 
 	  request.post(

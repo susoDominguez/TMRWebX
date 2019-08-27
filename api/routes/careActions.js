@@ -7,7 +7,7 @@ const guidelines = require('../lib/guidelines');
 const utils = require('../lib/utils');
 
 //to be tested
-router.post('drug/get', function(req, res, next) {
+router.post('/drugs/get', function(req, res, next) {
 
   utils.sparqlInstanceOf("careActions", "<http://anonymous.org/vocab/DrugType>", function(uris) {
 
@@ -18,7 +18,7 @@ router.post('drug/get', function(req, res, next) {
 });
 
 //to be tested
-router.post('nonDrug/get', function(req, res, next) {
+router.post('/nonDrugs/get', function(req, res, next) {
 
   utils.sparqlInstanceOf("careActions", "<http://anonymous.org/vocab/NonDrugType>", function(uris) {
 
