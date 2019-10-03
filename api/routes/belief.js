@@ -8,18 +8,18 @@ function action(req, res, insertOrDelete) {
 
   // Belief format:
   const head = `data:CB` + req.body.belief_id + `_head {
-      data:CB` + req.body.belief_id + `_nanopub
-          a                             nanopub:Nanopublication ;
-          nanopub:hasAssertion          data:CB` + req.body.belief_id + ` ;
-          nanopub:hasProvenance         data:CB` + req.body.belief_id + `_provenance ;
-          nanopub:hasPublicationInfo    data:CB` + req.body.belief_id + `_publicationinfo .
+      data:CB` + req.body.belief_id + `_head
+           a                             nanopub:Nanopublication ;
+              nanopub:hasAssertion          data:CB` + req.body.belief_id + ` ;
+              nanopub:hasProvenance         data:CB` + req.body.belief_id + `_provenance ;
+              nanopub:hasPublicationInfo    data:CB` + req.body.belief_id + `_publicationinfo .
   }`;
 
   var body =""
 
   if(req.body.nonDrug_cause_id) { 
      body = `data:CB` + req.body.belief_id + ` {
-      data:Act` + req.body.nonDrug_cause_id + `
+      data:ActAdminister` + req.body.nonDrug_cause_id + `
           vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
       data:CB` + req.body.belief_id + `
           a                             vocab:CausationBelief ;
@@ -50,7 +50,7 @@ function action(req, res, insertOrDelete) {
   }`;
 
   const publication = `data:CB` + req.body.belief_id + `_publicationinfo {
-      data:CB` + req.body.belief_id + `_nanopub
+      data:CB` + req.body.belief_id + `_head
           prov:generatedAtTime          "2019-01-01T13:14:15"^^xsd:dateTime ;
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;
@@ -78,7 +78,7 @@ router.post('/delete', function(req, res) {
 router.post('/all/get/', function(req, res) {
 
   if(req.body.belief_id){
-    utils.sparqlGraph("beliefs", "http://anonymous.org/data/CB"+req.body.belief_id, function(beliefData) {
+    utils.sparqlGraph("beliefs", "data:CB"+req.body.belief_id, function(beliefData) {
 
     res.send(beliefData);
 

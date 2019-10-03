@@ -124,7 +124,7 @@ router.post('/all/get/', function(req, res) {
       });
     } else {
       if (req.body.nonDrugT_id) {
-        utils.sparqlSubject("careActions", "http://anonymous.org/data/CareActT"+req.body.nonDrugT_id, function(drugData) {
+        utils.sparqlSubject("careActions", "http://anonymous.org/data/NonDrugT"+req.body.nonDrugT_id, function(drugData) {
 
       res.send(drugData);
   
@@ -153,7 +153,7 @@ function drugDef(typeOrCat, id, label) {
 }
 
 //Defines non-drug related care actions
-function careActTDef(typeOrCat, id, label) {
+function nonDrugDef(typeOrCat, id, label) {
   return action = 
   `:NonDrug` + typeOrCat + id + ` a vocab:NonDrugType, owl:NamedIndividual ;
                                      rdfs:label "` + label + `"@en `
@@ -174,7 +174,6 @@ function drugAdminActDef(typeOrCat, id, label) {
 
 // Administration Action Care specialisation of a drugT from a drugT.
 function adminActSub(id) {
-
   return ` ;
              vocab:subsumes :ActAdminister` + id;
 }
@@ -183,25 +182,25 @@ function adminActSub(id) {
 ////////////////
 
 //Administration non drug action care 
-function careAdminActDef(typeOrCat, id, actLabel) {
+function nonDrugAdminActDef(typeOrCat, id, actLabel) {
 
-  var careActAdmin =
+  var nonDrugAdmin =
    `:Act` + id + ` a vocab:NonDrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "` + actLabel + `"@en ;
                                vocab:applicationOf :NonDrug` + typeOrCat + id;
 
-  return careActAdmin;
+  return nonDrugAdmin;
 }
 
 // Administration Action Care specialisation of a careAct from a careAct.
-function adminCareActSub(id) {
+//function adminNonDrugSub(id) {
 
-  return ` ;
-             vocab:subsumes :Act` + id;
-}
+  //return ` ;
+    //         vocab:subsumes :Act` + id;
+//}
 ///////
 
-//defines DrugT and also DrugT Admin. Also non drug careActT and careActT Admin
+//defines ALL DrugT and also DrugT Admin. Also non drug careActT and careActT Admin
 function careActDef(req, insertOrDelete, callback) {
   var action=""
 
@@ -211,15 +210,15 @@ function careActDef(req, insertOrDelete, callback) {
   if(req.body.nonDrugExec_label){
     //it is not a drug
     if (req.body.nonDrug_label) {
-       action = careActTDef("T", req.body.nonDrug_id, req.body.nonDrug_label) + ` .`
+       action = nonDrugDef("T", req.body.nonDrug_id, req.body.nonDrug_label) + ` .`
     } else {
-       action = careActTDef("T", req.body.nonDrug_id, req.body.nonDrug_id) + ` .`
+       action = nonDrugDef("T", req.body.nonDrug_id, req.body.nonDrug_id) + ` .`
     }
-     careAdmin = careAdminActDef("T", req.body.nonDrug_id, req.body.nonDrugExec_label);
+     careAdmin = nonDrugAdminActDef("T", req.body.nonDrug_id, req.body.nonDrugExec_label);
 
     if ( req.body.subsumed_nonDrug_id ) {
 
-      careAdmin += adminCareActSub(req.body.subsumed_nonDrug_id);
+      careAdmin += adminActSub(req.body.subsumed_nonDrug_id);
     }
   } else {
      // Individual drug format:

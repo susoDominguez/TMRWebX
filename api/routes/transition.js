@@ -19,8 +19,10 @@ function postTransition(transitionData, res, insertOrDelete) {
 function action(req, res, insertOrDelete) {
 
   const transition = `:Tr` + req.body.transition_id + ` rdf:type vocab:TransitionType, owl:NamedIndividual ;
-                  vocab:hasTransformableSituation :Sit` + req.body.prior_situation_id + ` ;
-                  vocab:hasExpectedSituation :Sit` + req.body.post_situation_id + ` .`
+                  vocab:hasTransformableSituation :Sit` + req.body.pre_situation_id + ` ;
+                  vocab:hasExpectedSituation :Sit` + req.body.post_situation_id + ` ;
+                  vocab:derivative ` + req.body.derivative + ` ;
+                  vocab:affects :Prop` + req.body.affected_property_id + ` .`
 
   postTransition(transition, res, insertOrDelete);
 
@@ -41,7 +43,8 @@ router.post('/delete', function(req, res, next) {
 function actionSituation(req, res, insertOrDelete) {
 
   var situationDef = `:Sit` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
-              rdfs:label "` + req.body.situation_label + `"@en `;
+              rdfs:label "` + req.body.situation_label + `"@en ; 
+               vocab:stateOf  "`+ req.body.stateOfproperty +`" `
 
   if ( req.body.umlsCodes ) {
 
@@ -55,7 +58,6 @@ function actionSituation(req, res, insertOrDelete) {
     });
 
     situationDef = situationDef.substring(0, situationDef.length - 1);
-
   }
 
   situationDef += `.`
@@ -76,6 +78,29 @@ router.post('/situation/delete', function(req, res, next) {
 
 });
 
+///////
+
+function actionProperty(req, res, insertOrDelete) {
+
+  const property = `:Prop` + req.body.property_id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
+                    rdfs:label "` + req.body.property_label + `"@en .`
+
+  postTransition(transition, res, insertOrDelete);
+
+}
+
+router.post('/property/add', function(req, res, next) {
+
+  actionProperty(req, res, config.INSERT);
+
+});
+
+router.post('/property/delete', function(req, res, next) {
+
+  actionProperty(req, res, config.DELETE);
+
+});
+
 //
 
 router.post('/all/get/', function(req, res, next) {
@@ -86,8 +111,8 @@ router.post('/all/get/', function(req, res, next) {
       res.send(transitionData);
   
     });
-  } else{
-    utils.sparqlSubject("transitions", "http://anonymous.org/data/Tr"+req.body.transition_id, function(transitionData) {
+  } else{ 
+    utils.sparqlSubject("transitions", "data:Tr"+req.body.transition_id, function(transitionData) {
 
       res.send(transitionData);
     });
@@ -106,9 +131,28 @@ router.post('/situation/all/get/', function(req, res, next) {
   
     });
   } else{
-    utils.sparqlSubject("transitions", "http://anonymous.org/data/Sit"+req.body.situation_id, function(situationData) {
+    utils.sparqlSubject("transitions", "data:Sit"+req.body.situation_id, function(situationData) {
 
       res.send(situationData);
+  
+    });
+  }
+  
+
+});
+
+router.post('/property/all/get/', function(req, res, next) {
+
+  if(req.body.property_URI){
+    utils.sparqlSubject("transitions", req.body.property_URI, function(propertyData) {
+
+      res.send(propertyData);
+  
+    });
+  } else{
+    utils.sparqlSubject("transitions", "data:Sit"+req.body.property_id, function(propertyData) {
+
+      res.send(propertyData);
   
     });
   }

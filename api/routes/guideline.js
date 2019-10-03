@@ -41,35 +41,25 @@ function action(req, res, insertOrDelete) {
 
   // Guideline format:
   const head = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_head {
-    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_nanopub
+    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_head
             a                           nanopub:Nanopublication ;
             nanopub:hasAssertion        :Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` ;
             nanopub:hasProvenance       :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance ;
             nanopub:hasPublicationInfo  :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo .
   }`
-  
-//to be modified so that nonDrug ids are added without the :ActAdminister prefix, only :Act prefix
-  //if it is drug_id (instead of nonDrug_id) do not add Administer to ActAdminister
-  var adminString = `Administer`
-  
-  var careAction_id =``
-  
-  if(req.body.nonDrug_id){
-    careAction_id = req.body.nonDrug_id
-    adminString = ``
-  } else {
-    careAction_id = req.body.drug_id
-  }
+
     
   const body = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` {
     :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `
             a                       vocab:ClinicalRecommendation ;
             rdfs:label              "` + req.body.label  + `"@en ;
-            vocab:aboutExecutionOf  :Act` + adminString + careAction_id + ` ;
+            vocab:aboutExecutionOf  :ActAdminister` + careAction_id + ` ;
             vocab:basedOn           :CB` + req.body.belief_id + ` ;
             vocab:partOf            :CIG-` + req.body.guideline_id + ` ;
             vocab:strength          "` + req.body.should_or_shouldnot + `" ;
             vocab:motivation        "` + req.body.motivation + `"@en .
+            :CB` + req.body.belief_id +
+            ` vocab:contribution     "` + req.body.contribution+ `" .
   }`
 
   const provenance = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance {

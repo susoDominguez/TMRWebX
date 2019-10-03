@@ -26,4 +26,14 @@ router.post('/situations/get', function(req, res, next) {
 
 });
 
+router.post('/properties/get', function(req, res, next) {
+
+  utils.sparqlInstanceOf("transitions", "<http://anonymous.org/vocab/TropeType>", function(uris) {
+
+    res.send(uris);
+
+  });
+
+});
+
 module.exports = router;
