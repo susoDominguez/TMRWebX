@@ -207,14 +207,14 @@ function careActDef(req, insertOrDelete, callback) {
   var careAdmin = ""
 
 
-  if(req.body.nonDrugExec_label){
+  if(req.body.nonDrugAct_label){
     //it is not a drug
     if (req.body.nonDrug_label) {
        action = nonDrugDef("T", req.body.nonDrug_id, req.body.nonDrug_label) + ` .`
     } else {
        action = nonDrugDef("T", req.body.nonDrug_id, req.body.nonDrug_id) + ` .`
     }
-     careAdmin = nonDrugAdminActDef("T", req.body.nonDrug_id, req.body.nonDrugExec_label);
+     careAdmin = nonDrugAdminActDef("T", req.body.nonDrug_id, req.body.nonDrugAct_label);
 
     if ( req.body.subsumed_nonDrug_id ) {
 
