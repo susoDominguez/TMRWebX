@@ -21,7 +21,7 @@ function action(req, res, insertOrDelete) {
   const transition = `:Tr` + req.body.transition_id + ` rdf:type vocab:TransitionType, owl:NamedIndividual ;
                   vocab:hasTransformableSituation :Sit` + req.body.pre_situation_id + ` ;
                   vocab:hasExpectedSituation :Sit` + req.body.post_situation_id + ` ;
-                  vocab:derivative ` + req.body.derivative + ` ;
+                  vocab:derivative   "` + req.body.derivative + `" ;
                   vocab:affects :Prop` + req.body.affected_property_id + ` .`
 
   postTransition(transition, res, insertOrDelete);
