@@ -85,7 +85,7 @@ function actionProperty(req, res, insertOrDelete) {
   const property = `:Prop` + req.body.property_id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
                     rdfs:label "` + req.body.property_label + `"@en .`
 
-  postTransition(transition, res, insertOrDelete);
+  postTransition(property, res, insertOrDelete);
 
 }
 
