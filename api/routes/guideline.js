@@ -26,6 +26,7 @@ router.post('/create', function(req, res, next) {
 
     utils.sparqlUpdate("CIG-" + req.body.guideline_id, description, config.INSERT, function(body) {
 
+      //console.log(response);
       console.log(body);
       res.sendStatus(200); //status could also be the URI of the created guideline
 

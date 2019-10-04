@@ -9,6 +9,7 @@ router.post('/interactions', function(req, res, next) {
 
   //guideline is now not strict to prefix CIG-
   const guidelineId = (req.body.guideline_id)? (`CIG-` + req.body.guideline_id) : req.body.dataset_id; 
+  
   var postData = require('querystring').stringify({
       'guideline_id' : guidelineId,
   });
