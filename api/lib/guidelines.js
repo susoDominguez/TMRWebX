@@ -1,6 +1,6 @@
 module.exports = {
 	PREFIXES:
-		`PREFIX : <http://anonymous.org/data/>
+		`PREFIX : <.>
 		 PREFIX data: <http://anonymous.org/data/>
 		 PREFIX nanopub: <http://www.nanopub.org/nschema#>
 		 PREFIX oa: <http://www.w3.org/ns/oa#>

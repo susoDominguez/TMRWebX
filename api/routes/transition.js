@@ -18,11 +18,11 @@ function postTransition(transitionData, res, insertOrDelete) {
 
 function action(req, res, insertOrDelete) {
 
-  const transition = `:Tr` + req.body.transition_id + ` rdf:type vocab:TransitionType, owl:NamedIndividual ;
-                  vocab:hasTransformableSituation :Sit` + req.body.pre_situation_id + ` ;
-                  vocab:hasExpectedSituation :Sit` + req.body.post_situation_id + ` ;
+  const transition = `data:Tr` + req.body.transition_id + ` rdf:type vocab:TransitionType, owl:NamedIndividual ;
+                  vocab:hasTransformableSituation data:Sit` + req.body.pre_situation_id + ` ;
+                  vocab:hasExpectedSituation data:Sit` + req.body.post_situation_id + ` ;
                   vocab:derivative   "` + req.body.derivative + `" ;
-                  vocab:affects :Prop` + req.body.affected_property_id + ` .`
+                  vocab:affects data:Prop` + req.body.affected_property_id + ` .`
 
   postTransition(transition, res, insertOrDelete);
 
@@ -42,7 +42,7 @@ router.post('/delete', function(req, res, next) {
 
 function actionSituation(req, res, insertOrDelete) {
 
-  var situationDef = `:Sit` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
+  var situationDef = `data:Sit` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
               rdfs:label "` + req.body.situation_label + `"@en ; 
                vocab:stateOf  "`+ req.body.stateOfproperty +`" `
 
@@ -82,7 +82,7 @@ router.post('/situation/delete', function(req, res, next) {
 
 function actionProperty(req, res, insertOrDelete) {
 
-  const property = `:Prop` + req.body.property_id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
+  const property = `data:Prop` + req.body.property_id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
                     rdfs:label "` + req.body.property_label + `"@en .`
 
   postTransition(property, res, insertOrDelete);
@@ -106,7 +106,7 @@ router.post('/property/delete', function(req, res, next) {
 router.post('/all/get/', function(req, res, next) {
 
   if(req.body.transition_URI){
-    utils.sparqlSubject("transitions", req.body.transition_URI, function(transitionData) {
+    utils.sparqlSubject("transitions", ":"+req.body.transition_URI, function(transitionData) {
 
       res.send(transitionData);
   
@@ -125,7 +125,7 @@ router.post('/all/get/', function(req, res, next) {
 router.post('/situation/all/get/', function(req, res, next) {
 
   if(req.body.situation_URI){
-    utils.sparqlSubject("transitions", req.body.situation_URI, function(situationData) {
+    utils.sparqlSubject("transitions", ":"+req.body.situation_URI, function(situationData) {
 
       res.send(situationData);
   
@@ -144,7 +144,7 @@ router.post('/situation/all/get/', function(req, res, next) {
 router.post('/property/all/get/', function(req, res, next) {
 
   if(req.body.property_URI){
-    utils.sparqlSubject("transitions", req.body.property_URI, function(propertyData) {
+    utils.sparqlSubject("transitions", ":"+req.body.property_URI, function(propertyData) {
 
       res.send(propertyData);
   

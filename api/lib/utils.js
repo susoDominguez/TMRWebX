@@ -13,8 +13,8 @@ class Util {
 	static sparqlUpdate(dataset_id, content, insertOrDelete, callback) {
 
     var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
-    `;
-
+    ` + content + `}`;
+/*
     // Parsing allows us to express the guidelines in TRIG (as per the original work), and then convert them into triples for the SPARQL update. TODO: look at adding the TRIG directly to Jena.
     parser.parse(
 
@@ -35,21 +35,26 @@ class Util {
           } else {
 
             sparqlUpdate += `
-            GRAPH <default> {
+             {
             `;
 
           }
 
-          sparqlUpdate += (quad.subject.termType == "NamedNode" ? `<` : ``) + quad.subject.id + (quad.subject.termType == "NamedNode" ? `> ` : ` `) + (quad.predicate.termType == "NamedNode" ? `<` : ``) + quad.predicate.id + (quad.predicate.termType == "NamedNode" ? `> ` : ` `) + (quad.object.id.indexOf('http') > -1 ? quad.object.id.replace('http', '<http') : quad.object.id) + (quad.object.id.indexOf('http') > -1 ? `>` : ``)
+		  sparqlUpdate += (quad.subject.termType == "NamedNode" ? `<` : ``) +
+			   quad.subject.id + (quad.subject.termType == "NamedNode" ? `> ` : ` `) +
+				(quad.predicate.termType == "NamedNode" ? `<` : ``) +
+				 quad.predicate.id + (quad.predicate.termType == "NamedNode" ? `> ` : ` `) +
+				  (quad.object.id.indexOf('http') > -1 ? quad.object.id.replace('http', '<http') : quad.object.id) +
+				   (quad.object.id.indexOf('http') > -1 ? `>` : ``)
           + `
           }
           `;
 
         } else {
-
+			//TODO: check what this does. the insert data element seems it has no content for this case
             sparqlUpdate += `
             }`;
-
+*/
             var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		    const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
 
@@ -81,11 +86,11 @@ class Util {
 
         }
 
-      }
+     // }
 
-    );
+   // );
 
-  }
+//  }
 
 	static sparqlQuery(dataset_id, query, callback) {
 

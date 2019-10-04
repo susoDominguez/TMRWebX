@@ -15,30 +15,15 @@ function action(req, res, insertOrDelete) {
               nanopub:hasPublicationInfo    data:CB` + req.body.belief_id + `_publicationinfo .
   }`;
 
-  var body =""
-
-  if(req.body.nonDrug_cause_id) { 
-     body = `data:CB` + req.body.belief_id + ` {
-      data:ActAdminister` + req.body.nonDrug_cause_id + `
+  
+  const  body = `data:CB` + req.body.belief_id + ` {
+      data:ActAdminister` + req.body.careAct_cause_id + `
           vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
       data:CB` + req.body.belief_id + `
           a                             vocab:CausationBelief ;
           vocab:strength                "` + req.body.strength + `"^^xsd:string;
           vocab:frequency               "always"^^xsd:string.
   }`;
-  }
-   else {
-     body = `data:CB` + req.body.belief_id + ` {
-      data:ActAdminister` + req.body.drug_cause_id + `
-          vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
-      data:CB` + req.body.belief_id + `
-          a                             vocab:CausationBelief ;
-          vocab:strength                "` + req.body.strength + `"^^xsd:string;
-          vocab:frequency               "always"^^xsd:string.
-  }`;
-  }
-
-  const body1 = body
 
   const provenance = `data:CB` + req.body.belief_id + `_provenance {
       data:CB` + req.body.belief_id + `_provenance
@@ -55,7 +40,7 @@ function action(req, res, insertOrDelete) {
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;
 
-  utils.sparqlUpdate("beliefs", head + " " + body1 + " " + provenance + " " + publication, insertOrDelete, function(status) {
+  utils.sparqlUpdate("beliefs", "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication, insertOrDelete, function(status) {
 
     res.sendStatus(status);
 
@@ -84,7 +69,7 @@ router.post('/all/get/', function(req, res) {
 
     });
   } else {
-    utils.sparqlGraph("beliefs", req.body.belief_URI, function(beliefData) {
+    utils.sparqlGraph("beliefs", ":"+req.body.belief_URI, function(beliefData) {
 
     res.send(beliefData);
 

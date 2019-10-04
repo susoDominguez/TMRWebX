@@ -27,7 +27,7 @@ router.post('/interactions', function(req, res, next) {
 
 router.post('/get', function(req, res, next) {
 
-  utils.sparqlGraphInstanceOf("CIG-" + req.body.guideline_id, "<http://anonymous.org/vocab/ClinicalRecommendation>", function(uris) {
+  utils.sparqlGraphInstanceOf("CIG-" + req.body.guideline_id, "<vocab:ClinicalRecommendation", function(uris) {
 
     res.send(uris);
 

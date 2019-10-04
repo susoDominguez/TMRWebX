@@ -21,10 +21,8 @@ router.post('/create', function(req, res, next) {
       req.body.description = `CIG-` + req.body.guideline_id
     }
 
-    const description = `:CIG-` + req.body.guideline_id + ` {
-        :CIG-` + req.body.guideline_id + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
-            rdfs:label "` + req.body.description + `"@en .
-    }`;
+    const description = `data:CIG-` + req.body.guideline_id + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
+                     rdfs:label "` + req.body.description + `"@en .`;
 
     utils.sparqlUpdate("CIG-" + req.body.guideline_id, description, config.INSERT, function(body) {
 
@@ -40,40 +38,40 @@ router.post('/create', function(req, res, next) {
 function action(req, res, insertOrDelete) {
 
   // Guideline format:
-  const head = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_head {
-    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_head
+  const head = `data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_head {
+    data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_head
             a                           nanopub:Nanopublication ;
-            nanopub:hasAssertion        :Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` ;
-            nanopub:hasProvenance       :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance ;
-            nanopub:hasPublicationInfo  :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo .
+            nanopub:hasAssertion        data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` ;
+            nanopub:hasProvenance       data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance ;
+            nanopub:hasPublicationInfo  data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo .
   }`
 
     
-  const body = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` {
-    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `
+  const body = `data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` {
+    data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `
             a                       vocab:ClinicalRecommendation ;
             rdfs:label              "` + req.body.label  + `"@en ;
-            vocab:aboutExecutionOf  :ActAdminister` + careAction_id + ` ;
-            vocab:basedOn           :CB` + req.body.belief_id + ` ;
-            vocab:partOf            :CIG-` + req.body.guideline_id + ` ;
+            vocab:aboutExecutionOf  data:ActAdminister` + careAction_id + ` ;
+            vocab:basedOn           data:CB` + req.body.belief_id + ` ;
+            vocab:partOf            data:CIG-` + req.body.guideline_id + ` ;
             vocab:strength          "` + req.body.should_or_shouldnot + `" ;
             vocab:motivation        "` + req.body.motivation + `"@en .
-            :CB` + req.body.belief_id +
+            data:CB` + req.body.belief_id +
             ` vocab:contribution     "` + req.body.contribution+ `" .
   }`
 
-  const provenance = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance {
-    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `
+  const provenance = `data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance {
+    data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `
             prov:wasDerivedFrom  <http://hdl.handle.net/10222/43703> .
 
-    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance
+    data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance
             a             oa:Annotation ;
-            oa:hasBody    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` ;
+            oa:hasBody    data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + ` ;
             oa:hasTarget  [ oa:hasSource  <http://hdl.handle.net/10222/43703> ] .
   }`
 
-  const publication = `:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo {
-    :Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_nanopub
+  const publication = `data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo {
+    data:Rec` + req.body.guideline_id + `-` + req.body.rec_id + `_nanopub
             prov:generatedAtTime  "1922-12-28"^^xsd:dateTime ;
             prov:wasAttributedTo  :` + req.body.author + ` .
   }`
@@ -134,13 +132,13 @@ router.post('/all/get/', function(req, res, next) {
 
   if(req.body.rec_id){
     utils.sparqlGraph("CIG-" + req.body.guideline_id, 
-        "http://anonymous.org/data/Rec"+req.body.guideline_id+"-"+req.body.rec_id, function(guidelineData) {
+        "data:Rec"+req.body.guideline_id+"-"+req.body.rec_id, function(guidelineData) {
 
     res.send(guidelineData);
 
     });
-  } else { //more useful when combining guidelines
-    utils.sparqlGraph("CIG-" + req.body.guideline_id, req.body.rec_URI, function(guidelineData) {
+  } else { //:URI == <URI> if prefixes from guideline.js are added
+    utils.sparqlGraph("CIG-" + req.body.guideline_id, ":"+req.body.rec_URI, function(guidelineData) {
 
     res.send(guidelineData);
 

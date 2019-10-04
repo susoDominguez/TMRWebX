@@ -148,14 +148,14 @@ router.post('/all/get/', function(req, res) {
 //Defines drug types and categories, providing an english label. 
 function drugDef(typeOrCat, id, label) {
   return drug = 
-  `:Drug` + typeOrCat  + id + ` a vocab:DrugType, owl:NamedIndividual ;
+  `data:Drug` + typeOrCat  + id + ` a vocab:DrugType, owl:NamedIndividual ;
                                      rdfs:label "` + label + `"@en `
 }
 
 //Defines non-drug related care actions
 function nonDrugDef(typeOrCat, id, label) {
   return action = 
-  `:NonDrug` + typeOrCat + id + ` a vocab:NonDrugType, owl:NamedIndividual ;
+  `data:NonDrug` + typeOrCat + id + ` a vocab:NonDrugType, owl:NamedIndividual ;
                                      rdfs:label "` + label + `"@en `
 }
 
@@ -165,9 +165,9 @@ function nonDrugDef(typeOrCat, id, label) {
 function drugAdminActDef(typeOrCat, id, label) {
 
   var drugAdministration =
-   `:ActAdminister` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
+   `data:ActAdminister` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "Administer ` + label + `"@en ;
-                               vocab:administrationOf :Drug` + typeOrCat + id;
+                               vocab:administrationOf data:Drug` + typeOrCat + id;
 
   return drugAdministration;
 }
@@ -175,7 +175,7 @@ function drugAdminActDef(typeOrCat, id, label) {
 // Administration Action Care specialisation of a drugT from a drugT.
 function adminActSub(id) {
   return ` ;
-             vocab:subsumes :ActAdminister` + id;
+             vocab:subsumes data:ActAdminister` + id;
 }
 
 //////
@@ -185,20 +185,12 @@ function adminActSub(id) {
 function nonDrugAdminActDef(typeOrCat, id, actLabel) {
 
   var nonDrugAdmin =
-   `:ActAdminister` + id + ` a vocab:NonDrugAdministrationType, owl:NamedIndividual ;
+   `data:ActAdminister` + id + ` a vocab:NonDrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "` + actLabel + `"@en ;
-                               vocab:applicationOf :NonDrug` + typeOrCat + id;
+                               vocab:applicationOf data:NonDrug` + typeOrCat + id;
 
   return nonDrugAdmin;
 }
-
-// Administration Action Care specialisation of a careAct from a careAct.
-//function adminNonDrugSub(id) {
-
-  //return ` ;
-    //         vocab:subsumes :Act` + id;
-//}
-///////
 
 //defines ALL DrugT and also DrugT Admin. Also non drug careActT and careActT Admin
 function careActDef(req, insertOrDelete, callback) {
@@ -256,7 +248,7 @@ function addGroupingCriteria(groupingCriteriaIds) {
 
   groupingCriteriaIds.split(",").forEach(function(criteriaId) {
 
-    groupingCriteria += (`:Tr` + criteriaId.trim() + `, `);
+    groupingCriteria += (`data:Tr` + criteriaId.trim() + `, `);
 
   });
   //remove last comma and whitespace
@@ -273,7 +265,7 @@ function adminActSubs(drugIds) {
 
   drugIds.split(",").forEach(function(elem) {
 
-    adminSubs += (`:ActAdminister` + elem.trim() + `, `);
+    adminSubs += (`data:ActAdminister` + elem.trim() + `, `);
 
   });
   //return after removing the last comma and whitespace

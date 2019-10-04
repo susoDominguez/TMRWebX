@@ -9,7 +9,7 @@ const utils = require('../lib/utils');
 //to be tested
 router.post('/drugs/get', function(req, res, next) {
 
-  utils.sparqlInstanceOf("careActions", "<http://anonymous.org/vocab/DrugType>", function(uris) {
+  utils.sparqlInstanceOf("careActions", "vocab:DrugType", function(uris) {
 
     res.send(uris);
 
@@ -20,7 +20,7 @@ router.post('/drugs/get', function(req, res, next) {
 //to be tested
 router.post('/nonDrugs/get', function(req, res, next) {
 
-  utils.sparqlInstanceOf("careActions", "<http://anonymous.org/vocab/NonDrugType>", function(uris) {
+  utils.sparqlInstanceOf("careActions", "vocab:NonDrugType", function(uris) {
 
     res.send(uris);
 
