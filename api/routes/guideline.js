@@ -128,17 +128,17 @@ router.post('/careAction/get', function(req, res, next) {
 
 });
 
-router.post('/all/get/', function(req, res, next) {
+router.post('/rec/all/get/', function(req, res, next) {
 
   if(req.body.rec_id){
-    utils.sparqlGraph("CIG-" + req.body.guideline_id, 
+    utils.sparqlGetResourcesFromNamedGraph("CIG-" + req.body.guideline_id, 
         "data:Rec"+req.body.guideline_id+"-"+req.body.rec_id, function(guidelineData) {
 
     res.send(guidelineData);
 
     });
   } else { //:URI == <URI> if prefixes from guideline.js are added
-    utils.sparqlGraph("CIG-" + req.body.guideline_id, ":"+req.body.rec_URI, function(guidelineData) {
+    utils.sparqlGetResourcesFromNamedGraph("CIG-" + req.body.guideline_id, ":"+req.body.rec_URI, function(guidelineData) {
 
     res.send(guidelineData);
 

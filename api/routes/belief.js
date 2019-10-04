@@ -63,13 +63,13 @@ router.post('/delete', function(req, res) {
 router.post('/all/get/', function(req, res) {
 
   if(req.body.belief_id){
-    utils.sparqlGraph("beliefs", "data:CB"+req.body.belief_id, function(beliefData) {
+    utils.sparqlGetResourcesFromNamedGraph("beliefs", "data:CB"+req.body.belief_id, function(beliefData) {
 
     res.send(beliefData);
 
     });
   } else {
-    utils.sparqlGraph("beliefs", ":"+req.body.belief_URI, function(beliefData) {
+    utils.sparqlGetResourcesFromNamedGraph("beliefs", ":"+req.body.belief_URI, function(beliefData) {
 
     res.send(beliefData);
 

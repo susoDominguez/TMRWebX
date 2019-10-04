@@ -109,7 +109,7 @@ router.post('/all/get/', function(req, res) {
 
   if(req.body.drugCat_id){
 
-    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugCat"+req.body.drugCat_id, function(drugData) {
+    utils.sparqlGetPreds_Objcts("careActions", "http://anonymous.org/data/DrugCat"+req.body.drugCat_id, function(drugData) {
 
     res.send(drugData);
 
@@ -117,20 +117,20 @@ router.post('/all/get/', function(req, res) {
   } else
   { 
     if (req.body.drugT_id){
-    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugT"+req.body.drugT_id, function(drugData) {
+    utils.sparqlGetPreds_Objcts("careActions", "http://anonymous.org/data/DrugT"+req.body.drugT_id, function(drugData) {
 
       res.send(drugData);
   
       });
     } else {
       if (req.body.nonDrugT_id) {
-        utils.sparqlSubject("careActions", "http://anonymous.org/data/NonDrugT"+req.body.nonDrugT_id, function(drugData) {
+        utils.sparqlGetPreds_Objcts("careActions", "http://anonymous.org/data/NonDrugT"+req.body.nonDrugT_id, function(drugData) {
 
       res.send(drugData);
   
       });
       } else {
-        utils.sparqlSubject("careActions", req.body.drug_URI, function(drugData) {
+        utils.sparqlGetPreds_Objcts("careActions", req.body.drug_URI, function(drugData) {
 
           res.send(drugData);
       

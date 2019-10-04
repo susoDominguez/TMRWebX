@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const request = require('request');
+//const request = require('request');
 
 const utils = require('../lib/utils');
 const logger = require('../config/winston');
@@ -25,9 +25,11 @@ router.post('/interactions', function(req, res, next) {
 
 });
 
-router.post('/get', function(req, res, next) {
+router.post('/rec/get', function(req, res, next) {
 
-  utils.sparqlGraphInstanceOf("CIG-" + req.body.guideline_id, "<vocab:ClinicalRecommendation", function(uris) {
+  const guideline_id = (req.body.guideline_id) ? ("CIG-" + req.body.guideline_id) : req.body.dataset_id;
+
+  utils.sparqlGetSubjectAllNamedGraphs( guideline_id, "vocab:ClinicalRecommendation", function(uris) {
 
     res.send(uris);
 

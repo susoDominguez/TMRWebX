@@ -51,7 +51,7 @@ class Util {
           `;
 
         } else {
-			//TODO: check what this does. the insert data element seems it has no content for this case
+
             sparqlUpdate += `
             }`;
 */
@@ -94,9 +94,46 @@ class Util {
 
 	static sparqlQuery(dataset_id, query, callback) {
 
-		request.get(
+		const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query
+		const url = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query";
 
-			"http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query?query=" + query,
+		request.post(url, {
+			
+				headers: {
+				
+					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")			
+				},
+			
+				form: { query: prefixAndSparqlQuery }
+			},
+			function (error, response, body) {
+
+				if ( !error && response && response.statusCode == 200 ) {
+
+					var data = [];
+
+					var queryContainer = xmlQuery(xmlReader.parseSync(body));
+
+					queryContainer.find('binding').each(function(binding) {
+
+						data.push(binding.children[0].children[0].value);
+
+					});
+
+					callback(data);
+
+				} else {
+
+					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
+					callback(null);
+
+				}
+
+			}/*
+		request.get(
+		
+
+			"http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query?sparql=" +guidelines.PREFIXES + "\n" + query,
 
 			function (error, response, body) {
 
@@ -121,18 +158,31 @@ class Util {
 
 				}
 
-			}
+			}*/
 
 		);
 
 	}
 
-	static sparqlInstanceOf(dataset_id, instance, callback) {
+	static sparqlGetSubjectAllNamedGraphs(dataset_id, instance, callback) {
 
 		var query = `
 		SELECT ?s
 		WHERE {
 		  GRAPH ?g { ?s a ` + instance + ` }
+		}
+		`;
+
+		this.sparqlQuery(dataset_id, query, callback)
+
+	}
+
+	static sparqlGetSubjectDefaultGraph(dataset_id, instance, callback) {
+
+		var query = `
+		SELECT ?s
+		WHERE {
+		   ?s a ` + instance + ` 
 		}
 		`;
 
@@ -162,12 +212,12 @@ class Util {
 
 	}
 
-	static sparqlGraph(dataset_id, graph, callback) {
+	static sparqlGetResourcesFromNamedGraph(dataset_id, graph, callback) {
 
 		var query = `
 		SELECT ?s ?p ?o
 		WHERE {
-			GRAPH <` + graph + `> { ?s ?p ?o }
+			GRAPH  `+ graph +`  { ?s ?p ?o }
 		}
 		`;
 
@@ -179,12 +229,12 @@ class Util {
 
 	}
 
-	static sparqlSubject(dataset_id, subject, callback) {
+	static sparqlGetPreds_Objcts(dataset_id, subject, callback) {
 
 		var query = `
 		SELECT ?p ?o
 		WHERE {
-		  GRAPH ?g { <`+ subject  +`> ?p ?o }
+		  GRAPH ?g { `+ subject  +` ?p ?o }
 		}
 		`;
 
@@ -196,7 +246,7 @@ class Util {
 
 	}
 
-	static sparqlGraphInstanceOf(dataset_id, instance, callback) {
+	static sparqlGetNamedGraphsFromObject(dataset_id, instance, callback) {
 
 		var query = `
 		SELECT ?g

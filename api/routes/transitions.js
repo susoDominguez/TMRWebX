@@ -8,7 +8,7 @@ const utils = require('../lib/utils');
 
 router.post('/get', function(req, res, next) {
 
-  utils.sparqlInstanceOf("transitions", "vocab:TransitionType", function(uris) {
+  utils.sparqlGetSubjectDefaultGraph("transitions", "vocab:TransitionType", function(uris) {
 
     res.send(uris);
 
@@ -18,7 +18,7 @@ router.post('/get', function(req, res, next) {
 
 router.post('/situations/get', function(req, res, next) {
 
-  utils.sparqlInstanceOf("transitions", "vocab:SituationType", function(uris) {
+  utils.sparqlGetSubjectDefaultGraph("transitions", "vocab:SituationType", function(uris) {
 
     res.send(uris);
 
@@ -28,7 +28,7 @@ router.post('/situations/get', function(req, res, next) {
 
 router.post('/properties/get', function(req, res, next) {
 
-  utils.sparqlInstanceOf("transitions", "vocab:TropeType", function(uris) {
+  utils.sparqlGetSubjectDefaultGraph("transitions", "vocab:TropeType", function(uris) {
 
     res.send(uris);
 
