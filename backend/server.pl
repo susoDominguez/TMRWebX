@@ -9,10 +9,10 @@
 
 :- rdf_prefix(vocab, 'http://anonymous.org/vocab/').
 
-:- http_handler(root(guidelines), get_available_guidelines, []).
+%:- http_handler(root(guidelines), get_available_guidelines, []).
 :- http_handler(root(interactions), show_interactions, []).
-:- http_handler(root(drug), show_drug, []).
-:- http_handler(root(drugeffects), show_drug_effects, []).
+%:- http_handler(root(drug), show_drug, []).
+%:- http_handler(root(drugeffects), show_drug_effects, []).
 
 :- set_prolog_flag(color_term,false).
 
