@@ -3,6 +3,7 @@ module.exports = {
 		`PREFIX : <.>
 		 PREFIX data: <http://anonymous.org/data/>
 		 PREFIX nanopub: <http://www.nanopub.org/nschema#>
+		 PREFIX np: <http://www.nanopub.org/nschema#>
 		 PREFIX oa: <http://www.w3.org/ns/oa#>
 		 PREFIX owl: <http://www.w3.org/2002/07/owl#>
 		 PREFIX prov: <http://www.w3.org/ns/prov#>

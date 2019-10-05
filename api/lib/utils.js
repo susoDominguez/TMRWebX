@@ -259,6 +259,7 @@ class Util {
 
 	}
 
+	//path: interactions,drugeffects etc.., data=parameters for querying
 	static callPrologServer(path, data, res, callback) {
 
 		//path to swi-prolog server

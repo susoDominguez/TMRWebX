@@ -6,36 +6,39 @@ const utils = require('../lib/utils');
 
 function action(req, res, insertOrDelete) {
 
+  //data id for this belief
+  const id = `data:CB` + req.body.belief_id ;
+
   // Belief format:
-  const head = `data:CB` + req.body.belief_id + `_head {
-      data:CB` + req.body.belief_id + `_head
-           a                             nanopub:Nanopublication ;
-              nanopub:hasAssertion          data:CB` + req.body.belief_id + ` ;
-              nanopub:hasProvenance         data:CB` + req.body.belief_id + `_provenance ;
-              nanopub:hasPublicationInfo    data:CB` + req.body.belief_id + `_publicationinfo .
+  const head = id + `_head {
+       ` + id + `_head
+              a            nanopub:Nanopublication ;
+              nanopub:hasAssertion          `+ id + ` ;
+              nanopub:hasProvenance         `+ id + `_provenance ;
+              nanopub:hasPublicationInfo    `+ id + `_publicationinfo .
   }`;
 
   
-  const  body = `data:CB` + req.body.belief_id + ` {
+  const  body = id + ` {
       data:ActAdminister` + req.body.careAct_cause_id + `
           vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
-      data:CB` + req.body.belief_id + `
+          `+ id + `
           a                             vocab:CausationBelief ;
           vocab:strength                "` + req.body.strength + `"^^xsd:string;
           vocab:frequency               "always"^^xsd:string.
   }`;
 
-  const provenance = `data:CB` + req.body.belief_id + `_provenance {
-      data:CB` + req.body.belief_id + `_provenance
+  const provenance = id + `_provenance {
+          `+ id + `_provenance
           a                             oa:Annotation ;
-          oa:hasBody                    data:CB` + req.body.belief_id + ` ;
+          oa:hasBody                    `+ id + ` ;
           oa:hasTarget                  [ oa:hasSource <http://hdl.handle.net/10222/43703> ] .
-      data:CB` + req.body.belief_id + `
+          `+ id + `
           prov:wasDerivedFrom           <http://hdl.handle.net/10222/43703> .
   }`;
 
-  const publication = `data:CB` + req.body.belief_id + `_publicationinfo {
-      data:CB` + req.body.belief_id + `_head
+  const publication = id + `_publicationinfo {
+          `+ id + `_head
           prov:generatedAtTime          "2019-01-01T13:14:15"^^xsd:dateTime ;
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;

@@ -11,6 +11,7 @@ router.post('/interactions', function(req, res, next) {
   const guidelineId = (req.body.guideline_id)? (`CIG-` + req.body.guideline_id) : req.body.dataset_id; 
   
   var postData = require('querystring').stringify({
+    //Jena dataset name
       'guideline_id' : guidelineId,
   });
 
