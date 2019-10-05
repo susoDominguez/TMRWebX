@@ -61,7 +61,7 @@ show_drug(Request) :-
   rdf(GuidelineID_atom, vocab:'aboutExecutionOf', DrugAdministration),
   rdf(DrugAdministration, vocab:'administrationOf', Drug),
   format(Drug),
-  rdf_unload_graph(GuidelinesGraphPath),
+  rdf_unload_graph(GuidelinesGraphPath).
   % unloadOntologies().
 
 show_drug_effects(Request) :-
@@ -73,5 +73,5 @@ show_drug_effects(Request) :-
   rdf(DrugAdministration, vocab:'causes', Transition),
   string_concat(' causes ', Transition, Join1),
   string_concat(DrugAdministration, Join1, Join2),
-  format(Join2),
+  format(Join2).
   % unloadOntologies().
