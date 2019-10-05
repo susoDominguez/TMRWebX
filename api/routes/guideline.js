@@ -149,4 +149,36 @@ router.post('/rec/all/get/', function(req, res, next) {
 
 });
 
+
+///create subguideline by referencing assertion graphs in main guideline
+router.post('/create', function(req, res, next) {
+
+  request.post({
+
+    url: "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/$/datasets?dbType=tdb&dbName=CIG-" + req.body.guideline_id,
+    headers: {
+      Authorization: "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+    },
+
+  }, function (error, response, body) {
+
+    if(!req.body.description){
+      req.body.description = `CIG-` + req.body.guideline_id
+    }
+
+    const description = `data:CIG-` + req.body.guideline_id + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
+                     rdfs:label "` + req.body.description + `"@en .`;
+
+    utils.sparqlUpdate("CIG-" + req.body.guideline_id, description, config.INSERT, function(body) {
+
+      //console.log(response);
+      console.log(body);
+      res.sendStatus(200); //status could also be the URI of the created guideline
+
+    });
+
+  });
+
+});
+
 module.exports = router;
