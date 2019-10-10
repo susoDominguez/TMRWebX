@@ -7,7 +7,15 @@
 :- use_module(library(semweb/rdf_db)).
 :- use_module(library(semweb/rdf_ntriples)).
 
+%:- rdf_prefix(vocab, 'http://anonymous.org/vocab/').
+
+% Prefixes
+:- rdf_prefix(data, 'http://anonymous.org/data/').
 :- rdf_prefix(vocab, 'http://anonymous.org/vocab/').
+:- rdf_prefix(vocab4i, 'http://anonymous.org/vocab4i/').
+:- rdf_prefix(oa, 'http,//www.w3.org/ns/oa#').
+:- rdf_prefix(prov, 'http://www.w3.org/ns/prov#').
+:- rdf_prefix(nanopub, 'http://www.nanopub.org/nschema#').
 
 %:- http_handler(root(guidelines), get_available_guidelines, []).
 :- http_handler(root(interactions), show_interactions, []).
@@ -38,7 +46,7 @@ load_guideline_group(GuidelineGroupID, GuidelinesGraphPath) :-
   rdf_load(MainGuidelinesPath, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph(GuidelinesGraphPath)]).
 
 show_interactions(Request) :-
-  % loadOntologies(),
+  % loadOntologies(), JESUS: loaded at start time
   http_parameters(Request, [ guideline_id(GuidelineGroupID, [ string ]) ]),
   load_guideline_group(GuidelineGroupID, GuidelinesGraphPath),
   inferInternalInteractions,
