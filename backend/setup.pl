@@ -22,7 +22,7 @@
 loadOntologies() :-
    rdf_load('tmr/data/careActions.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
    rdf_load('tmr/data/transitions.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/Transition&SituationTypes')]),
-   rdf_load('tmr/data/beliefs', [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
+   rdf_load('tmr/data/beliefs', [format('trig'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
   %getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
   %atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_DRUGS_URL),
   %rdf_load(FUSEKI_DRUGS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
