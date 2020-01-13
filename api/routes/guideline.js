@@ -18,16 +18,15 @@ router.post('/create', function(req, res, next) {
   }, function (error, response, body) {
 
     if(!req.body.description){
-      req.body.description = `CIG-` + req.body.guideline_id
+      req.body.description = `Guideline CIG-` + req.body.guideline_id
     }
 
-    const description = `:CIG-` + req.body.guideline_id + ` {
-        :CIG-` + req.body.guideline_id + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
-            rdfs:label "` + req.body.description + `"@en .
-    }`;
+    const description = `data:CIG-` + req.body.guideline_id + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
+                     rdfs:label "` + req.body.description + `"@en .`;
 
     utils.sparqlUpdate("CIG-" + req.body.guideline_id, description, config.INSERT, function(body) {
 
+      //console.log(response);
       console.log(body);
       res.sendStatus(200); //status could also be the URI of the created guideline
 
@@ -39,59 +38,63 @@ router.post('/create', function(req, res, next) {
 
 function action(req, res, insertOrDelete) {
 
+  //data id for this rec
+  const id = `data:Rec` + req.body.guideline_id + `-` + req.body.rec_id ;
+
+  //this nanopublication is included in the main  guideline (to be added to default graph)
+  const id2CIG = id + ` vocab:isPartOf data:CIG-`+ req.body.guideline_id + ` .`;
+
   // Guideline format:
-  const head = `:Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_head {
-    :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_nanopub
+  const head = id + `_head { 
+        ` + id + `_head
             a                           nanopub:Nanopublication ;
-            nanopub:hasAssertion        :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + ` ;
-            nanopub:hasProvenance       :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance ;
-            nanopub:hasPublicationInfo  :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo .
-  }`
-  
-//to be modified so that nonDrug ids are added without the :ActAdminister prefix, only :Act prefix
-  //if it is drug_id (instead of nonDrug_id) do not add Administer to ActAdminister
-  var adminString = `#Administer`
-  
-  var careAction_id =``
-  
-  if(req.body.nonDrug_id){
-    careAction_id = req.body.nonDrug_id
-    adminString = `#`
-  } else {
-    careAction_id = req.body.drug_id
-  }
+            nanopub:hasAssertion        `+ id  + ` ;
+            nanopub:hasProvenance       `+ id  + `_provenance ;
+            nanopub:hasPublicationInfo  `+ id  + `_publicationinfo .
+  }`;
+
     
-  const body = `:Rec#` + req.body.guideline_id + `-` + req.body.rec_id + ` {
-    :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `
+  const body = id + ` {
+    ` + id + `
             a                       vocab:ClinicalRecommendation ;
             rdfs:label              "` + req.body.label  + `"@en ;
-            vocab:aboutExecutionOf  :Act` + adminString + careAction_id + ` ;
-            vocab:basedOn           :CB#` + req.body.belief_id + ` ;
-            vocab:partOf            :CIG-` + req.body.guideline_id + ` ;
+            vocab:aboutExecutionOf  data:ActAdminister` + req.body.careAction_id + ` ;
+            vocab:basedOn           data:CB` + req.body.belief_id + ` ;
+            vocab:partOf            data:CIG-` + req.body.guideline_id + ` ;
             vocab:strength          "` + req.body.should_or_shouldnot + `" ;
-            vocab:motivation        "` + req.body.motivation + `" .
-  }`
+            vocab:motivation        "` + ( (!req.body.motivation) ? "" : req.body.motivation) + `"@en .
+            data:CB` + req.body.belief_id +
+            ` vocab:contribution     "` + req.body.contribution+ `" .
+  }`;
 
-  const provenance = `:Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance {
-    :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `
+  const provenance = id + `_provenance {
+    ` + id + `
             prov:wasDerivedFrom  <http://hdl.handle.net/10222/43703> .
 
-    :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_provenance
+    ` + id + `_provenance
             a             oa:Annotation ;
-            oa:hasBody    :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + ` ;
+            oa:hasBody    ` + id + ` ;
             oa:hasTarget  [ oa:hasSource  <http://hdl.handle.net/10222/43703> ] .
-  }`
+  }`;
 
-  const publication = `:Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_publicationinfo {
-    :Rec#` + req.body.guideline_id + `-` + req.body.rec_id + `_nanopub
+  const publication = id + `_publicationinfo {
+      ` + id + `_nanopub
             prov:generatedAtTime  "1922-12-28"^^xsd:dateTime ;
-            prov:wasAttributedTo  :` + req.body.author + ` .
-  }`
+            prov:wasAttributedTo  data:` + req.body.author + ` .
+  }`;
 
-  utils.sparqlUpdate("CIG-" + req.body.guideline_id, head + " " + body + " " + provenance + " " + publication, insertOrDelete, function(status) {
-
-    res.sendStatus(status);
-
+  utils.sparqlUpdate("CIG-" + req.body.guideline_id, "GRAPH " +head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication,
+   insertOrDelete, function(status) {
+      if(status === 200){
+        //add assertion id to default graph as part of CIG
+        utils.sparqlUpdate("CIG-" + req.body.guideline_id, id2CIG,
+                    insertOrDelete, function(status2) {
+                      res.sendStatus(status2);  
+              });
+      } else {
+        //didnt work. send first status back
+        res.sendStatus(status);
+      }
   });
 
 }
@@ -108,7 +111,7 @@ router.post('/delete', function(req, res, next) {
 
 });
 
-/////
+////
 
 router.post('/careAction/get', function(req, res, next) {
 
@@ -118,7 +121,7 @@ router.post('/careAction/get', function(req, res, next) {
   {
     postData = require('querystring').stringify({
       'guideline_id' : `CIG-` + req.body.guideline_id,
-      'rec_id' : "http://anonymous.org/data/Rec#"+req.body.guideline_id+"-"+req.body.rec_id
+      'rec_id' : "http://anonymous.org/data/Rec"+req.body.guideline_id+"-"+req.body.rec_id
     });
   } else
   {  //this one will be more accurate when combining guidelines
@@ -140,24 +143,57 @@ router.post('/careAction/get', function(req, res, next) {
 
 });
 
-router.post('/all/get/', function(req, res, next) {
+router.post('/rec/all/get/', function(req, res, next) {
 
-  if(req.body.rec_id){
-    utils.sparqlGraph("CIG-" + req.body.guideline_id, 
-        "http://anonymous.org/data/Rec#"+req.body.guideline_id+"-"+req.body.rec_id, function(guidelineData) {
+  const guideline = (!req.body.guideline_id) ? req.body.guideline_URI : ("CIG-" + req.body.guideline_id);
+ 
+  const rec = (!req.body.rec_id) ? req.body.rec_URI : ("data:Rec"+req.body.guideline_id+"-"+req.body.rec_id);
 
+  utils.sparqlGetResourcesFromNamedGraph(guideline, rec, function(guidelineData) {
     res.send(guidelineData);
-
-    });
-  } else { //more useful when combining guidelines
-    utils.sparqlGraph("CIG-" + req.body.guideline_id, req.body.rec_URI, function(guidelineData) {
-
-    res.send(guidelineData);
-
   });
-  }
-  
-
 });
+
+///create subguideline by referencing assertion  resources which are same as assertion graph names in main guideline
+router.post('/subGuideline/add', function(req, res, next) {
+  actionSubguideline(req, res, config.INSERT);
+});
+
+//delete subguideline along with its components
+router.post('/subGuideline/delete', function(req, res, next) {
+  actionSubguideline(req, res, config.DELETE);
+});
+
+function actionSubguideline(req, res, insertOrDelete) {
+
+  if(!req.body.description) { req.body.description = "subGuideline " + req.body.subGuideline_id}
+
+    // SubGuideline declaration:
+    const description = `data:subCIG-` + req.body.subGuideline_id + ` rdf:type vocab:subGuideline, owl:NamedIndividual ;
+                         rdfs:label "` + req.body.description + `"@en ;
+                         vocab:isSubGuidelineOf  data:CIG-` + req.body.guideline_id + ` .`;
+     
+    //var to construct the assignment of recs to a subguideline. initial whitespace to be kept
+    var recDeclaration =  " ";
+
+    if(req.body.recs_ids){
+      
+      //nanopublication is part of this subGuideline. contains  pred and object of resource
+      const isPartOf = ` vocab:isPartOf   data:subCIG-` +  req.body.subGuideline_id + ` .\n`;
+    
+      req.body.recs_ids.split(",").forEach(function(recId) {
+
+        recDeclaration += (`data:Rec` + req.body.guideline_id + `-`+ recId.trim() + isPartOf);
+      });
+    }
+
+  
+    utils.sparqlUpdate("CIG-" + req.body.guideline_id, description + recDeclaration, insertOrDelete, function(status) {
+  
+      res.sendStatus(status);
+  
+    });
+  
+  }
 
 module.exports = router;

@@ -3,6 +3,14 @@
 :- use_module(library(semweb/rdf_db)).
 :- use_module(library(semweb/rdfs)).
 
+% Prefixes
+:- rdf_prefix(data, 'http://anonymous.org/data/').
+:- rdf_prefix(vocab, 'http://anonymous.org/vocab/').
+:- rdf_prefix(vocab4i, 'http://anonymous.org/vocab4i/').
+:- rdf_prefix(oa, 'http,//www.w3.org/ns/oa#').
+:- rdf_prefix(prov, 'http://www.w3.org/ns/prov#').
+:- rdf_prefix(nanopub, 'http://www.nanopub.org/nschema#').
+
 % Base ontologies.
 
 :- rdf_load('tmr/schema/model.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/vocab/'), graph('http://anonymous.org/vocab')]).
@@ -10,21 +18,27 @@
 
 % User ontologies, at Jena endpoint.
 
+%Jesus: load them from a file in TMR folder
 loadOntologies() :-
-  getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
-  atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_CAREACTIONS_URL),
-  rdf_load(FUSEKI_CAREACTIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
-  atom_concat(FUSEKI_HOST_PORT, "transitions", FUSEKI_TRANSITIONS_URL),
-  rdf_load(FUSEKI_TRANSITIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/Transition&SituationTypes')]),
-  atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_BELIEFS_URL),
-  rdf_load(FUSEKI_BELIEFS_URL, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
+   rdf_load('tmr/data/careActions.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
+   rdf_load('tmr/data/transitions.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/Transition&SituationTypes')]),
+   rdf_load('tmr/data/beliefs', [format('trig'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
+  %getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
+  %atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_DRUGS_URL),
+  %rdf_load(FUSEKI_DRUGS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
+  %atom_concat(FUSEKI_HOST_PORT, "transitions", FUSEKI_TRANSITIONS_URL),
+  %rdf_load(FUSEKI_TRANSITIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/Transition&SituationTypes')]),
+  %atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_BELIEFS_URL),
+  %rdf_load(FUSEKI_BELIEFS_URL, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
 
 unloadOntologies() :-
   rdf_unload_graph('http://anonymous.org/CareAction&DrugTypes'),
   rdf_unload_graph('http://anonymous.org/Transition&SituationTypes'),
   rdf_unload_graph('http://anonymous.org/CausationBeliefs-Nanopub').
 
-% Logic libraries
+% keep ontologies loaded from the start. then, dont unload it foreach iteration
+:-loadOntologies.
 
+% Logic libraries
 :- include('tmr/logic/interactionRules').
 :- include('tmr/logic/interaction_graph').

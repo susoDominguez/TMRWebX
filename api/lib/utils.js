@@ -13,8 +13,8 @@ class Util {
 	static sparqlUpdate(dataset_id, content, insertOrDelete, callback) {
 
     var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
-    `;
-
+    ` + content + `}`;
+/*
     // Parsing allows us to express the guidelines in TRIG (as per the original work), and then convert them into triples for the SPARQL update. TODO: look at adding the TRIG directly to Jena.
     parser.parse(
 
@@ -35,25 +35,30 @@ class Util {
           } else {
 
             sparqlUpdate += `
-            GRAPH <default> {
+             {
             `;
 
           }
 
-          sparqlUpdate += (quad.subject.termType == "NamedNode" ? `<` : ``) + quad.subject.id + (quad.subject.termType == "NamedNode" ? `> ` : ` `) + (quad.predicate.termType == "NamedNode" ? `<` : ``) + quad.predicate.id + (quad.predicate.termType == "NamedNode" ? `> ` : ` `) + (quad.object.id.indexOf('http') > -1 ? quad.object.id.replace('http', '<http') : quad.object.id) + (quad.object.id.indexOf('http') > -1 ? `>` : ``)
+		  sparqlUpdate += (quad.subject.termType == "NamedNode" ? `<` : ``) +
+			   quad.subject.id + (quad.subject.termType == "NamedNode" ? `> ` : ` `) +
+				(quad.predicate.termType == "NamedNode" ? `<` : ``) +
+				 quad.predicate.id + (quad.predicate.termType == "NamedNode" ? `> ` : ` `) +
+				  (quad.object.id.indexOf('http') > -1 ? quad.object.id.replace('http', '<http') : quad.object.id) +
+				   (quad.object.id.indexOf('http') > -1 ? `>` : ``)
           + `
           }
           `;
 
         } else {
 
-          sparqlUpdate += `
-          }`;
+            sparqlUpdate += `
+            }`;
+*/
+            var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		    const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
 
-          var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
-					const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
-
-          request.post(
+            request.post(
 
             URL, {
 							headers: {
@@ -81,17 +86,54 @@ class Util {
 
         }
 
-      }
+     // }
 
-    );
+   // );
 
-  }
+//  }
 
 	static sparqlQuery(dataset_id, query, callback) {
 
-		request.get(
+		const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query
+		const url = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query";
 
-			"http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query?query=" + query,
+		request.post(url, {
+			
+				headers: {
+				
+					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")			
+				},
+			
+				form: { query: prefixAndSparqlQuery }
+			},
+			function (error, response, body) {
+
+				if ( !error && response && response.statusCode == 200 ) {
+
+					var data = [];
+
+					var queryContainer = xmlQuery(xmlReader.parseSync(body));
+
+					queryContainer.find('binding').each(function(binding) {
+
+						data.push(binding.children[0].children[0].value);
+
+					});
+
+					callback(data);
+
+				} else {
+
+					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
+					callback(null);
+
+				}
+
+			}/*
+		request.get(
+		
+
+			"http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query?sparql=" +guidelines.PREFIXES + "\n" + query,
 
 			function (error, response, body) {
 
@@ -116,18 +158,31 @@ class Util {
 
 				}
 
-			}
+			}*/
 
 		);
 
 	}
 
-	static sparqlInstanceOf(dataset_id, instance, callback) {
+	static sparqlGetSubjectAllNamedGraphs(dataset_id, instance, callback) {
 
 		var query = `
 		SELECT ?s
 		WHERE {
 		  GRAPH ?g { ?s a ` + instance + ` }
+		}
+		`;
+
+		this.sparqlQuery(dataset_id, query, callback)
+
+	}
+
+	static sparqlGetSubjectDefaultGraph(dataset_id, instance, callback) {
+
+		var query = `
+		SELECT ?s
+		WHERE {
+		   ?s a ` + instance + ` 
 		}
 		`;
 
@@ -157,12 +212,12 @@ class Util {
 
 	}
 
-	static sparqlGraph(dataset_id, graph, callback) {
+	static sparqlGetResourcesFromNamedGraph(dataset_id, graph, callback) {
 
 		var query = `
 		SELECT ?s ?p ?o
 		WHERE {
-			GRAPH <` + graph + `> { ?s ?p ?o }
+			GRAPH  `+ graph +`  { ?s ?p ?o }
 		}
 		`;
 
@@ -174,12 +229,12 @@ class Util {
 
 	}
 
-	static sparqlSubject(dataset_id, subject, callback) {
+	static sparqlGetPreds_Objcts(dataset_id, subject, callback) {
 
 		var query = `
 		SELECT ?p ?o
 		WHERE {
-		  GRAPH ?g { <`+ subject  +`> ?p ?o }
+		  GRAPH ?g { `+ subject  +` ?p ?o }
 		}
 		`;
 
@@ -191,7 +246,7 @@ class Util {
 
 	}
 
-	static sparqlGraphInstanceOf(dataset_id, instance, callback) {
+	static sparqlGetNamedGraphsFromObject(dataset_id, instance, callback) {
 
 		var query = `
 		SELECT ?g
@@ -204,8 +259,10 @@ class Util {
 
 	}
 
+	//path: interactions,drugeffects etc.., data=parameters for querying
 	static callPrologServer(path, data, res, callback) {
-		logger.error(" Prolog server pre-call - path: "+path+". Data: "+data+". res: "+res+". callback: "+callback)
+
+		//path to swi-prolog server
 		const URL = "http://" + config.PROLOG_HOST + ":" + config.PROLOG_PORT + "/" + path;
 
 	  request.post(

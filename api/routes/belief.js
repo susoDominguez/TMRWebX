@@ -6,56 +6,44 @@ const utils = require('../lib/utils');
 
 function action(req, res, insertOrDelete) {
 
+  //data id for this belief
+  const id = `data:CB` + req.body.belief_id ;
+
   // Belief format:
-  const head = `data:CB#` + req.body.belief_id + `_head {
-      data:CB#` + req.body.belief_id + `_nanopub
-          a                             nanopub:Nanopublication ;
-          nanopub:hasAssertion          data:CB#` + req.body.belief_id + ` ;
-          nanopub:hasProvenance         data:CB#` + req.body.belief_id + `_provenance ;
-          nanopub:hasPublicationInfo    data:CB#` + req.body.belief_id + `_publicationinfo .
+  const head = id + `_head {
+       ` + id + `_head
+              a            nanopub:Nanopublication ;
+              nanopub:hasAssertion          `+ id + ` ;
+              nanopub:hasProvenance         `+ id + `_provenance ;
+              nanopub:hasPublicationInfo    `+ id + `_publicationinfo .
   }`;
 
-  var body =""
-
-  if(req.body.nonDrug_cause_id) { 
-     body = `data:CB#` + req.body.belief_id + ` {
-      data:Act#` + req.body.nonDrug_cause_id + `
-          vocab:causes 									data:Tr#` + req.body.transition_effect_id + ` .
-      data:CB#` + req.body.belief_id + `
+  
+  const  body = id + ` {
+      data:ActAdminister` + req.body.careAct_cause_id + `
+          vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
+          `+ id + `
           a                             vocab:CausationBelief ;
           vocab:strength                "` + req.body.strength + `"^^xsd:string;
           vocab:frequency               "always"^^xsd:string.
   }`;
-  }
-   else {
-     body = `data:CB#` + req.body.belief_id + ` {
-      data:Act#Administer` + req.body.drug_cause_id + `
-          vocab:causes 									data:Tr#` + req.body.transition_effect_id + ` .
-      data:CB#` + req.body.belief_id + `
-          a                             vocab:CausationBelief ;
-          vocab:strength                "` + req.body.strength + `"^^xsd:string;
-          vocab:frequency               "always"^^xsd:string.
-  }`;
-  }
 
-  const body1 = body
-
-  const provenance = `data:CB#` + req.body.belief_id + `_provenance {
-      data:CB#` + req.body.belief_id + `_provenance
+  const provenance = id + `_provenance {
+          `+ id + `_provenance
           a                             oa:Annotation ;
-          oa:hasBody                    data:CB#` + req.body.belief_id + ` ;
+          oa:hasBody                    `+ id + ` ;
           oa:hasTarget                  [ oa:hasSource <http://hdl.handle.net/10222/43703> ] .
-      data:CB#` + req.body.belief_id + `
+          `+ id + `
           prov:wasDerivedFrom           <http://hdl.handle.net/10222/43703> .
   }`;
 
-  const publication = `data:CB#` + req.body.belief_id + `_publicationinfo {
-      data:CB#` + req.body.belief_id + `_nanopub
+  const publication = id + `_publicationinfo {
+          `+ id + `_head
           prov:generatedAtTime          "2019-01-01T13:14:15"^^xsd:dateTime ;
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;
 
-  utils.sparqlUpdate("beliefs", head + " " + body1 + " " + provenance + " " + publication, insertOrDelete, function(status) {
+  utils.sparqlUpdate("beliefs", "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication, insertOrDelete, function(status) {
 
     res.sendStatus(status);
 
@@ -78,13 +66,13 @@ router.post('/delete', function(req, res) {
 router.post('/all/get/', function(req, res) {
 
   if(req.body.belief_id){
-    utils.sparqlGraph("beliefs", "http://anonymous.org/data/CB#"+req.body.belief_id, function(beliefData) {
+    utils.sparqlGetResourcesFromNamedGraph("beliefs", "data:CB"+req.body.belief_id, function(beliefData) {
 
     res.send(beliefData);
 
     });
   } else {
-    utils.sparqlGraph("beliefs", req.body.belief_URI, function(beliefData) {
+    utils.sparqlGetResourcesFromNamedGraph("beliefs", ":"+req.body.belief_URI, function(beliefData) {
 
     res.send(beliefData);
 

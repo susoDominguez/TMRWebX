@@ -73,20 +73,20 @@ router.post('/effect/get', function(req, res) {
 
   if(req.body.drugCat_id){
     postData = require('querystring').stringify({
-     'drugCat_id' : "http://anonymous.org/data/DrugCat#"+req.body.drugCat_id
+     'drugCat_id' : "http://anonymous.org/data/DrugCat"+req.body.drugCat_id
      });
   } 
   else
   {
      if (req.body.drugT_id){
         postData = require('querystring').stringify({
-          'drugT_id' : "http://anonymous.org/data/DrugT#"+req.body.drugT_id
+          'drugT_id' : "http://anonymous.org/data/DrugT"+req.body.drugT_id
           });
     } 
     else {
       if (req.body.nonDrugT_id) {
         postData = require('querystring').stringify({
-          'nonDrugT_id' : "http://anonymous.org/data/NonDrugT#"+req.body.nonDrugT_id
+          'nonDrugT_id' : "http://anonymous.org/data/NonDrugT"+req.body.nonDrugT_id
           });
       } else {
         postData = require('querystring').stringify({
@@ -109,7 +109,7 @@ router.post('/all/get/', function(req, res) {
 
   if(req.body.drugCat_id){
 
-    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugCat#"+req.body.drugCat_id, function(drugData) {
+    utils.sparqlGetPreds_Objcts("careActions", "http://anonymous.org/data/DrugCat"+req.body.drugCat_id, function(drugData) {
 
     res.send(drugData);
 
@@ -117,20 +117,20 @@ router.post('/all/get/', function(req, res) {
   } else
   { 
     if (req.body.drugT_id){
-    utils.sparqlSubject("careActions", "http://anonymous.org/data/DrugT#"+req.body.drugT_id, function(drugData) {
+    utils.sparqlGetPreds_Objcts("careActions", "http://anonymous.org/data/DrugT"+req.body.drugT_id, function(drugData) {
 
       res.send(drugData);
   
       });
     } else {
       if (req.body.nonDrugT_id) {
-        utils.sparqlSubject("careActions", "http://anonymous.org/data/CareActT#"+req.body.nonDrugT_id, function(drugData) {
+        utils.sparqlGetPreds_Objcts("careActions", "http://anonymous.org/data/NonDrugT"+req.body.nonDrugT_id, function(drugData) {
 
       res.send(drugData);
   
       });
       } else {
-        utils.sparqlSubject("careActions", req.body.drug_URI, function(drugData) {
+        utils.sparqlGetPreds_Objcts("careActions", req.body.drug_URI, function(drugData) {
 
           res.send(drugData);
       
@@ -148,14 +148,14 @@ router.post('/all/get/', function(req, res) {
 //Defines drug types and categories, providing an english label. 
 function drugDef(typeOrCat, id, label) {
   return drug = 
-  `:Drug` + typeOrCat + `#` + id + ` a vocab:DrugType, owl:NamedIndividual ;
+  `data:Drug` + typeOrCat  + id + ` a vocab:DrugType, owl:NamedIndividual ;
                                      rdfs:label "` + label + `"@en `
 }
 
 //Defines non-drug related care actions
-function careActTDef(typeOrCat, id, label) {
+function nonDrugDef(typeOrCat, id, label) {
   return action = 
-  `:NonDrug` + typeOrCat + `#` + id + ` a vocab:NonDrugType, owl:NamedIndividual ;
+  `data:NonDrug` + typeOrCat + id + ` a vocab:NonDrugType, owl:NamedIndividual ;
                                      rdfs:label "` + label + `"@en `
 }
 
@@ -165,61 +165,52 @@ function careActTDef(typeOrCat, id, label) {
 function drugAdminActDef(typeOrCat, id, label) {
 
   var drugAdministration =
-   `:Act#Administer` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
+   `data:ActAdminister` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "Administer ` + label + `"@en ;
-                               vocab:administrationOf :Drug` + typeOrCat + `#` + id;
+                               vocab:administrationOf data:Drug` + typeOrCat + id;
 
   return drugAdministration;
 }
 
 // Administration Action Care specialisation of a drugT from a drugT.
 function adminActSub(id) {
-
   return ` ;
-             vocab:subsumes :Act#Administer` + id;
+             vocab:subsumes data:ActAdminister` + id;
 }
 
 //////
 ////////////////
 
 //Administration non drug action care 
-function careAdminActDef(typeOrCat, id, actLabel) {
+function nonDrugAdminActDef(typeOrCat, id, actLabel) {
 
-  var careActAdmin =
-   `:Act#` + id + ` a vocab:NonDrugAExecutionType, owl:NamedIndividual ;
+  var nonDrugAdmin =
+   `data:ActAdminister` + id + ` a vocab:NonDrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "` + actLabel + `"@en ;
-                               vocab:executionOf :NonDrug` + typeOrCat + `#` + id;
+                               vocab:applicationOf data:NonDrug` + typeOrCat + id;
 
-  return careActAdmin;
+  return nonDrugAdmin;
 }
 
-// Administration Action Care specialisation of a careAct from a careAct.
-function adminCareActSub(id) {
-
-  return ` ;
-             vocab:subsumes :Act#` + id;
-}
-///////
-
-//defines DrugT and also DrugT Admin. Also non drug careActT and careActT Admin
+//defines ALL DrugT and also DrugT Admin. Also non drug careActT and careActT Admin
 function careActDef(req, insertOrDelete, callback) {
   var action=""
 
   var careAdmin = ""
 
 
-  if(req.body.nonDrugExec_label){
+  if(req.body.nonDrugAct_label){
     //it is not a drug
     if (req.body.nonDrug_label) {
-       action = careActTDef("T", req.body.nonDrug_id, req.body.nonDrug_label) + ` .`
+       action = nonDrugDef("T", req.body.nonDrug_id, req.body.nonDrug_label) + ` .`
     } else {
-       action = careActTDef("T", req.body.nonDrug_id, req.body.nonDrug_id) + ` .`
+       action = nonDrugDef("T", req.body.nonDrug_id, req.body.nonDrug_id) + ` .`
     }
-     careAdmin = careAdminActDef("T", req.body.nonDrug_id, req.body.nonDrugExec_label);
+     careAdmin = nonDrugAdminActDef("T", req.body.nonDrug_id, req.body.nonDrugAct_label);
 
     if ( req.body.subsumed_nonDrug_id ) {
 
-      careAdmin += adminCareActSub(req.body.subsumed_nonDrug_id);
+      careAdmin += adminActSub(req.body.subsumed_nonDrug_id);
     }
   } else {
      // Individual drug format:
@@ -257,7 +248,7 @@ function addGroupingCriteria(groupingCriteriaIds) {
 
   groupingCriteriaIds.split(",").forEach(function(criteriaId) {
 
-    groupingCriteria += (`:Tr#` + criteriaId.trim() + `, `);
+    groupingCriteria += (`data:Tr` + criteriaId.trim() + `, `);
 
   });
   //remove last comma and whitespace
@@ -274,7 +265,7 @@ function adminActSubs(drugIds) {
 
   drugIds.split(",").forEach(function(elem) {
 
-    adminSubs += (`:Act#Administer` + elem.trim() + `, `);
+    adminSubs += (`data:ActAdminister` + elem.trim() + `, `);
 
   });
   //return after removing the last comma and whitespace
