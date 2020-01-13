@@ -13,5 +13,7 @@ module.exports = {
 		 PREFIX vocab: <http://anonymous.org/vocab/>
 		 PREFIX xml: <http://www.w3.org/XML/1998/namespace>
 		 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-		 BASE <http://anonymous.org/data/>`
+		 BASE <http://anonymous.org/data/> 
+		  
+		 `
 };

@@ -205,7 +205,7 @@ class Util {
 	}
 
 	static callPrologServer(path, data, res, callback) {
-
+		logger.error(" Prolog server pre-call - path: "+path+". Data: "+data+". res: "+res+". callback: "+callback)
 		const URL = "http://" + config.PROLOG_HOST + ":" + config.PROLOG_PORT + "/" + path;
 
 	  request.post(

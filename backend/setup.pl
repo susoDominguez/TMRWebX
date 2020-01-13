@@ -12,8 +12,8 @@
 
 loadOntologies() :-
   getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
-  atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_DRUGS_URL),
-  rdf_load(FUSEKI_DRUGS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
+  atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_CAREACTIONS_URL),
+  rdf_load(FUSEKI_CAREACTIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
   atom_concat(FUSEKI_HOST_PORT, "transitions", FUSEKI_TRANSITIONS_URL),
   rdf_load(FUSEKI_TRANSITIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/Transition&SituationTypes')]),
   atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_BELIEFS_URL),
