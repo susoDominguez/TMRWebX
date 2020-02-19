@@ -31,7 +31,7 @@ Navigate to http://localhost:3030, login with the username `admin` and the passw
 Clone this repository:
 
 ```
-git clone https://github.com/consult-kcl/drug-interaction
+git clone https://github.kcl.ac.uk/k1214757/TMR
 ```
 
 Change into the backend directory:
