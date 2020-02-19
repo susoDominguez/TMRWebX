@@ -56,7 +56,35 @@ function actionSituation(req, res, insertOrDelete) {
       vocab:umlsCode   "` + code.trim() + `"^^xsd:string ;`
 
     });
+     //this removes the last semicolon
+    situationDef = situationDef.substring(0, situationDef.length - 1);
+  }
 
+  if ( req.body.atcCodes ) {
+
+    situationDef += `;`;
+
+    req.body.atcCodes.split(",").forEach(function(code) {
+
+      situationDef += `
+      vocab:atcCode   "` + code.trim() + `"^^xsd:string ;`
+
+    });
+    //this removes the last semicolon
+    situationDef = situationDef.substring(0, situationDef.length - 1);
+  }
+
+  if ( req.body.icd10Codes ) {
+
+    situationDef += `;`;
+
+    req.body.icd10Codes.split(",").forEach(function(code) {
+
+      situationDef += `
+      vocab:icd10Code   "` + code.trim() + `"^^xsd:string ;`
+
+    });
+    //this removes the last semicolon
     situationDef = situationDef.substring(0, situationDef.length - 1);
   }
 
@@ -78,12 +106,29 @@ router.post('/situation/delete', function(req, res, next) {
 
 });
 
-///////
+//////////////
+//////////////
 
 function actionProperty(req, res, insertOrDelete) {
 
   const property = `data:Prop` + req.body.property_id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
-                    rdfs:label "` + req.body.property_label + `"@en .`
+                    rdfs:label "` + req.body.property_label + `"@en `;
+
+  if ( req.body.icd10Codes ) {
+      property += `;`;
+                  
+      req.body.icd10Codes.split(",").forEach(function(code) {
+                  
+        property += `
+          vocab:icd10Code   "` + code.trim() + `"^^xsd:string ;`
+                  
+      });
+        //this removes the last semicolon
+      property = property.substring(0, property.length - 1);
+  }
+  
+  //add final dot on RDF          
+    property += `.`
 
   postTransition(property, res, insertOrDelete);
 
