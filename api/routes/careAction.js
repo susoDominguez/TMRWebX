@@ -208,7 +208,32 @@ function insertCodes(req){
     });
       //this removes the last semicolon
       careAction = careAction.substring(0, careAction.length - 1);
-}
+  }
+ if ( req.body.snomedCodes ) {
+  careAction += `;`;
+              
+  req.body.snomedCodes.split(",").forEach(function(code) {
+              
+    careAction += `
+      vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
+              
+  });
+    //this removes the last semicolon
+    careAction = careAction.substring(0, careAction.length - 1);
+ } 
+
+ if ( req.body.umlsCodes ) {
+  careAction += `;`;
+              
+  req.body.umlsCodes.split(",").forEach(function(code) {
+              
+    careAction += `
+      vocab:umlsCode   "` + code.trim() + `"^^xsd:string ;`
+              
+  });
+    //this removes the last semicolon
+    careAction = careAction.substring(0, careAction.length - 1);
+ }
 
   return careAction;
 }

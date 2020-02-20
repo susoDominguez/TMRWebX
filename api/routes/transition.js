@@ -88,6 +88,20 @@ function actionSituation(req, res, insertOrDelete) {
     situationDef = situationDef.substring(0, situationDef.length - 1);
   }
 
+  if ( req.body.snomedCodes ) {
+
+    situationDef += `;`;
+
+    req.body.snomedCodes.split(",").forEach(function(code) {
+
+      situationDef += `
+      vocab:snomedCodes   "` + code.trim() + `"^^xsd:string ;`
+
+    });
+    //this removes the last semicolon
+    situationDef = situationDef.substring(0, situationDef.length - 1);
+  }
+
   situationDef += `.`
 
   postTransition(situationDef, res, insertOrDelete);
@@ -126,6 +140,19 @@ function actionProperty(req, res, insertOrDelete) {
         //this removes the last semicolon
       property = property.substring(0, property.length - 1);
   }
+
+  if ( req.body.snomedCodes ) {
+    property += `;`;
+                
+    req.body.snomedCodes.split(",").forEach(function(code) {
+                
+      property += `
+        vocab:snomedCodes   "` + code.trim() + `"^^xsd:string ;`
+                
+    });
+      //this removes the last semicolon
+    property = property.substring(0, property.length - 1);
+}
   
   //add final dot on RDF          
     property += `.`
