@@ -95,7 +95,7 @@ function actionSituation(req, res, insertOrDelete) {
     req.body.snomedCodes.split(",").forEach(function(code) {
 
       situationDef += `
-      vocab:snomedCodes   "` + code.trim() + `"^^xsd:string ;`
+      vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
 
     });
     //this removes the last semicolon
@@ -125,7 +125,7 @@ router.post('/situation/delete', function(req, res, next) {
 
 function actionProperty(req, res, insertOrDelete) {
 
-  const property = `data:Prop` + req.body.property_id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
+  var property = `data:Prop` + req.body.property_id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
                     rdfs:label "` + req.body.property_label + `"@en `;
 
   if ( req.body.icd10Codes ) {
@@ -147,7 +147,7 @@ function actionProperty(req, res, insertOrDelete) {
     req.body.snomedCodes.split(",").forEach(function(code) {
                 
       property += `
-        vocab:snomedCodes   "` + code.trim() + `"^^xsd:string ;`
+        vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
                 
     });
       //this removes the last semicolon

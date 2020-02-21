@@ -28,7 +28,7 @@ router.post('/create', function(req, res, next) {
 
       //console.log(response);
       console.log(body);
-      res.sendStatus(200); //status could also be the URI of the created guideline
+      res.sendStatus(200);
 
     });
 
@@ -69,7 +69,7 @@ function action(req, res, insertOrDelete) {
 
   const provenance = id + `_provenance {
     ` + id + `
-            prov:wasDerivedFrom  <http://hdl.handle.net/10222/43703> .
+            prov:wasDerivedFrom  <` + (req.body.source? req.body.source : "unknown")+`> .
 
     ` + id + `_provenance
             a             oa:Annotation ;
@@ -79,7 +79,7 @@ function action(req, res, insertOrDelete) {
 
   const publication = id + `_publicationinfo {
       ` + id + `_nanopub
-            prov:generatedAtTime  "1922-12-28"^^xsd:dateTime ;
+            prov:generatedAtTime  "2020-03-01"^^xsd:dateTime ;
             prov:wasAttributedTo  data:` + req.body.author + ` .
   }`;
 
@@ -107,7 +107,15 @@ router.post('/add', function(req, res, next) {
 
 router.post('/delete', function(req, res, next) {
 
-  action(req, res, config.DELETE);
+  //action(req, res, config.DELETE);
+  const guideline_URI = "CIG-" + req.body.guideline_id;
+  const rec_URI = "Rec" + req.body.guideline_id + "-" + req.body.rec_id;
+
+  utils.sparqlDropGraphs( guideline_URI, rec_URI, function(status) {
+    
+      res.sendStatus(status);
+    
+ });
 
 });
 

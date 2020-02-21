@@ -13,48 +13,8 @@ class Util {
 	static sparqlUpdate(dataset_id, content, insertOrDelete, callback) {
 
     var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
-    ` + content + `}`;
-/*
-    // Parsing allows us to express the guidelines in TRIG (as per the original work), and then convert them into triples for the SPARQL update. TODO: look at adding the TRIG directly to Jena.
-    parser.parse(
+	` + content + `}`;
 
-      guidelines.PREFIXES + content,
-
-      (error, quad, prefixes) => {
-
-        if (quad) {
-
-          // We need angular brackets around named nodes (URIs).
-
-          if ( quad.graph.id ) {
-
-            sparqlUpdate += `
-            GRAPH ` + (quad.graph.termType == "NamedNode" ? `<` : ``) + quad.graph.id + (quad.graph.termType == "NamedNode" ? `>` : ``) + ` {
-            `;
-
-          } else {
-
-            sparqlUpdate += `
-             {
-            `;
-
-          }
-
-		  sparqlUpdate += (quad.subject.termType == "NamedNode" ? `<` : ``) +
-			   quad.subject.id + (quad.subject.termType == "NamedNode" ? `> ` : ` `) +
-				(quad.predicate.termType == "NamedNode" ? `<` : ``) +
-				 quad.predicate.id + (quad.predicate.termType == "NamedNode" ? `> ` : ` `) +
-				  (quad.object.id.indexOf('http') > -1 ? quad.object.id.replace('http', '<http') : quad.object.id) +
-				   (quad.object.id.indexOf('http') > -1 ? `>` : ``)
-          + `
-          }
-          `;
-
-        } else {
-
-            sparqlUpdate += `
-            }`;
-*/
             var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		    const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
 
@@ -84,13 +44,52 @@ class Util {
 
           );
 
-        }
+	}
 
-     // }
+	/**
+	 * 
+	 * @param {identifier of Jenna dataset} dataset_id 
+	 * @param {URI of recommendation assertion to be deleted} rec_uri 
+	 * @param {status of response/error} callback 
+	 */
+	static sparqlDropGraphs(dataset_id, graph_uri, callback){
 
-   // );
+		var sparqlUpdate = ` DROP silent GRAPH data:` + graph_uri + `_head;
+		 DROP silent GRAPH data:` + graph_uri +  `;
+		 DROP silent GRAPH data:` + graph_uri + `_provenance; 
+		 DROP silent GRAPH data:` + graph_uri + `_publicationinfo;
+		 DELETE  { data:`+ graph_uri +` vocab:isPartOf ?subguideline } WHERE { data:`+ graph_uri +` vocab:isPartOf ?subguideline }`;
+		
+					var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+					const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
+		
+					request.post(
+		
+					URL, {
+									headers: {
+										"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+									},
+									body: prefixAndSparqlUpdate
+								},
+		
+					function (error, response, body) {
+		
+									if ( !error && response && response.statusCode < 400 ) {
+		
+										callback(200);
+		
+									} else {
+		
+										console.log("SPARQL update failed at: " + URL + "  Query: " + prefixAndSparqlUpdate + ". Error: " + ( error ? error : "None" ) + ". Body: " + ( body ? body : "None" ) + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
+										callback(400);
+		
+									}
+		
+					}
+		
+				  );
 
-//  }
+	}
 
 	static sparqlQuery(dataset_id, query, callback) {
 

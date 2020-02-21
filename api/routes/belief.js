@@ -59,7 +59,15 @@ router.post('/add', function(req, res) {
 
 router.post('/delete', function(req, res) {
 
-  action(req, res, config.DELETE);
+  //action(req, res, config.DELETE);
+  const belief_URI = "CB" + req.body.belief_id;
+  const dataset_id = "beliefs"
+
+  utils.sparqlDropGraphs( dataset_id, belief_URI, function(status) {
+    
+      res.sendStatus(status);
+    
+ });
 
 });
 
