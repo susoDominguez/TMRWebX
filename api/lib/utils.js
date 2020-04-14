@@ -10,6 +10,13 @@ const logger = require('../config/winston');
 
 class Util {
 
+	/**
+	 * 
+	 * @param {CIG identifier} dataset_id 
+	 * @param {SPARQL query content} content 
+	 * @param {insert | delete} insertOrDelete 
+	 * @param {callback} callback 
+	 */
 	static sparqlUpdate(dataset_id, content, insertOrDelete, callback) {
 
     var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
@@ -105,13 +112,14 @@ class Util {
 		request.post(url, {
 			
 				headers: {				
-					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")			
+					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
+					"Accept": 'application/sparql-results+json'				
 				},
 			
 				form: { query: prefixAndSparqlQuery }
 			},
 			function (error, response, body) {
-console.log("body:\n" + body)
+				console.log("body:\n" + body)
 				if ( !error && response && response.statusCode == 200 ) {
 
 					var data = [];
@@ -168,6 +176,130 @@ console.log("body:\n" + body)
 
 	}
 
+	/**
+	 * 
+	 * @param {identifier of CIG} dataset_id 
+	 * @param {SPARQL query} query 
+	 * @param {callback} callback 
+	 */
+	static sparqlJSONQuery(dataset_id, query, callback) {
+
+		const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query
+		const url = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query";
+
+		request.post(url, {
+			
+				headers: {				
+					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
+					"Accept": 'application/sparql-results+json'		
+				},
+			
+				form: { query: prefixAndSparqlQuery }
+			},
+			function (error, response, body) {
+		   console.log(body)
+				if ( !error && response && response.statusCode == 200 ) {
+
+					callback( JSON.parse(body));
+
+				} else {
+					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
+					callback({});
+				}
+			}
+		);
+	}
+
+	static getRecData(cigId, recAssertUri, callback) {
+
+	   var query = `
+	   SELECT DISTINCT ?id ?text ?motive ?strength ?actUri ?cbUri ?contrib
+	   WHERE {
+		   GRAPH  <`+ recAssertUri +`>  {
+			<`+ recAssertUri +`> a  vocab:ClinicalRecommendation . 
+			<`+ recAssertUri +`> rdfs:label ?text .
+			<`+ recAssertUri +`> vocab:aboutExecutionOf ?actUri .
+			<`+ recAssertUri +`> vocab:basedOn ?cbUri .
+			<`+ recAssertUri +`> vocab:motivation ?motive .
+			<`+ recAssertUri +`> vocab:strength ?strength .
+			?cbUri vocab:contribution ?contrib .
+			}
+	   }
+	   `;
+
+	   this.sparqlJSONQuery(cigId, query, function(data) {
+
+		   callback(data);
+
+	   });
+
+   }
+
+   static getBeliefData(datasetId, beliefUri, callback) {
+
+	var query = `
+	SELECT DISTINCT ?freq ?strength ?actAdmin ?Tr
+	WHERE {
+		GRAPH  <`+ beliefUri +`>  {
+		 <`+ beliefUri +`> a  vocab:CausationBelief . 
+		 <`+ beliefUri +`> vocab:frequency ?freq .
+		 <`+ beliefUri +`> vocab:strength ?strength .
+		  ?actAdmin vocab:causes ?Tr .
+		 }
+	}
+	`;
+
+	this.sparqlJSONQuery(datasetId, query, function(data) {
+
+		callback(data);
+
+	});
+
+}
+
+
+	static getCareActionData(dataset_id, uri, callback) {
+
+		var query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed
+		WHERE {
+			<`+uri+`> a owl:NamedIndividual.
+			<`+uri+`> a ?adminT.
+			<`+uri+`>	?Of ?actId.
+			<`+uri+`> rdfs:label ?adminLabel.
+			?actId a owl:NamedIndividual.
+			?actId a ?actType.
+			?actId rdfs:label ?actLabel.
+			?actId vocab:snomedCode  ?snomed.
+			FILTER (?actType != owl:NamedIndividual &&
+				 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
+				 ?adminT != owl:NamedIndividual).
+		}
+		`;
+
+		this.sparqlJSONQuery(dataset_id, query, callback)
+	}
+
+	static getTransitionData(dataset_id, TrUri, callback) {
+
+		var query = `SELECT DISTINCT  ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?propTxt ?propUri ?deriv
+		WHERE {
+			<`+TrUri+`> a vocab:TransitionType .
+			<`+TrUri+`> vocab:affects ?propUri .
+			<`+TrUri+`> vocab:derivative ?deriv.
+			<`+TrUri+`> vocab:hasTransformableSituation ?sitFromId .
+			<`+TrUri+`> vocab:hasExpectedSituation ?sitToId .
+			?PropUri  a  vocab:TropeType .
+			?PropUri rdfs:label ?propTxt .
+			?sitFromId a vocab:SituationType .
+			?sitToId a vocab:SituationType .
+			?sitFromId rdfs:label ?sitFromLabel .
+			?sitToId rdfs:label ?sitToLabel .
+		}
+		`;
+
+		this.sparqlJSONQuery(dataset_id, query, callback)
+	}
+
 	static sparqlGetSubjectAllNamedGraphs(dataset_id, instance, callback) {
 
 		var query = `
@@ -217,7 +349,28 @@ console.log("body:\n" + body)
 	}
 
 	static sparqlGetResourcesFromNamedGraph(dataset_id, graph, callback) {
-
+		 /*
+  <http://anonymous.org/data/RecCOPD-LabaMCopd.stage1should> {
+    <http://anonymous.org/data/RecCOPD-LabaMCopd.stage1should>
+            a       <http://anonymous.org/vocab/ClinicalRecommendation> ;
+            <http://www.w3.org/2000/01/rdf-schema#label>
+                    "Clinician should continue to recommend administering Laba since treatment was effective to decrease COPD stage"@en ;
+            <http://anonymous.org/vocab/aboutExecutionOf>
+                    <http://anonymous.org/data/ActAdministerLaba> ;
+            <http://anonymous.org/vocab/basedOn>
+                    <http://anonymous.org/data/CBLabaMCopd.stage1> ;
+            <http://anonymous.org/vocab/motivation>
+                    "Clinician should recommend continuing administering Laba on patients where the threatment has been effective on decreasing COPD symptoms."@en ;
+            <http://anonymous.org/vocab/partOf>
+                    <http://anonymous.org/data/CIG-COPD> ;
+            <http://anonymous.org/vocab/strength>
+                    "should" .
+    
+    <http://anonymous.org/data/CBLabaMCopd.stage1>
+            <http://anonymous.org/vocab/contribution>
+                    "positive" .
+} 
+  */
 		var query = `
 		SELECT ?s ?p ?o
 		WHERE {

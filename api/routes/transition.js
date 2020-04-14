@@ -178,7 +178,7 @@ router.post('/property/delete', function(req, res, next) {
 router.post('/all/get/', function(req, res, next) {
 
   if(req.body.transition_URI){
-    utils.sparqlGetPreds_Objcts("transitions", ":"+req.body.transition_URI, function(transitionData) {
+    utils.getTransitionData("transitions", req.body.transition_URI, function(transitionData) {
 
       res.send(transitionData);
   

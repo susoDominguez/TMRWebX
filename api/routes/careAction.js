@@ -4,6 +4,7 @@ const request = require('request');
 
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
+const logger = require('../config/winston');
 const utils = require('../lib/utils');
 
 
@@ -107,6 +108,64 @@ router.post('/effect/get', function(req, res) {
 
 router.post('/all/get/', function(req, res) {
 
+  if(req.body.uri){
+
+    utils.getCareActionData("careActions", req.body.uri, function(actionResults) {
+      var data = {};
+      var vars = actionResults.head.vars;
+      var bindings = actionResults.results.bindings;
+      
+      //format data by looping through results
+      for(let pos in bindings){
+
+        var bind = bindings[pos];
+
+        for(var varPos in vars){
+
+          var value = bind[vars[varPos]].value;
+
+          //for each heading, add a field
+          switch (vars[varPos]) {
+            case "actId":
+              data.id = value;
+              break;
+            case "adminLabel":
+              data.display = value;
+              break;
+            case "actType":
+              //extract code
+              var type = value.slice(27);
+              data.code = type;
+              data.requestType = 0; //for drugT and DrugCat
+              //check for therapy
+              if( type.startsWith("NonDrugT")){
+                data.requestType = 1;
+              } else {
+                //check for vaccine
+                if( type.startsWith("VacT")){
+                  data.requestType = 2;
+                }
+              }
+              break;
+            case "actLabel":
+              data.drugLabel = value;
+              break;
+            case "snomed":
+              data.snomedCode = value;
+              break;
+          }
+        }
+    }
+    res.send(data);
+      });
+  } else {
+    res.send({});
+  } 
+});
+
+/*
+router.post('/all/get/', function(req, res) {
+
   if(req.body.drugCat_id){
 
     utils.sparqlGetPreds_Objcts("careActions", "http://anonymous.org/data/DrugCat"+req.body.drugCat_id, function(drugData) {
@@ -141,7 +200,7 @@ router.post('/all/get/', function(req, res) {
   } 
   
 
-});
+});*/
 
 //////////////////////////////
 

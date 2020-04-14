@@ -79,8 +79,8 @@ router.post('/all/get/', function(req, res) {
     res.send(beliefData);
 
     });
-  } else {
-    utils.sparqlGetResourcesFromNamedGraph("beliefs", ":"+req.body.belief_URI, function(beliefData) {
+  } else {//belief_URI
+    utils.getBeliefData("beliefs", req.body.belief_URI, function(beliefData) {
 
     res.send(beliefData);
 

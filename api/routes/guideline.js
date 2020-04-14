@@ -198,11 +198,11 @@ router.post('/careAction/get', function(req, res, next) {
 
 router.post('/rec/all/get/', function(req, res, next) {
 
-  const guideline = (!req.body.guideline_id) ? req.body.guideline_URI : ("CIG-" + req.body.guideline_id);
+  const cigId = (!req.body.guideline_id) ? req.body.cig_id : ("CIG-" + req.body.cig_label);
  
-  const rec = (!req.body.rec_id) ? req.body.rec_URI : ("data:Rec"+req.body.guideline_id+"-"+req.body.rec_id);
+  const recURI = (!req.body.rec_id) ? req.body.rec_URI : ("data:Rec"+req.body.cig_label+"-"+req.body.rec_id);
 
-  utils.sparqlGetResourcesFromNamedGraph(guideline, rec, function(guidelineData) {
+  utils.getRecData(cigId, recURI, function(guidelineData) {
     res.send(guidelineData);
   });
 });
@@ -242,9 +242,7 @@ function actionSubguideline(req, res, insertOrDelete) {
 
   
     utils.sparqlUpdate("CIG-" + req.body.guideline_id, description + recDeclaration, insertOrDelete, function(status) {
-  
       res.sendStatus(status);
-  
     });
   
   }
