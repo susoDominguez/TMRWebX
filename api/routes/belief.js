@@ -7,7 +7,7 @@ const utils = require('../lib/utils');
 function action(req, res, insertOrDelete) {
 
   //data id for this belief
-  const id = `data:CB` + req.body.belief_id ;
+  const id = `data:CB` + req.body.belief_id;
 
   // Belief format:
   const head = id + `_head {
@@ -18,8 +18,8 @@ function action(req, res, insertOrDelete) {
               nanopub:hasPublicationInfo    `+ id + `_publicationinfo .
   }`;
 
-  
-  const  body = id + ` {
+
+  const body = id + ` {
       data:ActAdminister` + req.body.careAct_cause_id + `
           vocab:causes 									data:Tr` + req.body.transition_effect_id + ` .
           `+ id + `
@@ -43,7 +43,7 @@ function action(req, res, insertOrDelete) {
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;
 
-  utils.sparqlUpdate("beliefs", "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication, insertOrDelete, function(status) {
+  utils.sparqlUpdate("beliefs", "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication, insertOrDelete, function (status) {
 
     res.sendStatus(status);
 
@@ -51,42 +51,85 @@ function action(req, res, insertOrDelete) {
 
 }
 
-router.post('/add', function(req, res) {
+router.post('/add', function (req, res) {
 
   action(req, res, config.INSERT);
 
 });
 
-router.post('/delete', function(req, res) {
+router.post('/delete', function (req, res) {
 
   //action(req, res, config.DELETE);
   const belief_URI = "CB" + req.body.belief_id;
   const dataset_id = "beliefs"
 
-  utils.sparqlDropGraphs( dataset_id, belief_URI, function(status) {
-    
-      res.sendStatus(status);
-    
- });
+  utils.sparqlDropGraphs(dataset_id, belief_URI, function (status) {
+
+    res.sendStatus(status);
+
+  });
 
 });
 
-router.post('/all/get/', function(req, res) {
+router.post('/all/get/', function (req, res) {
 
-  if(req.body.belief_id){
-    utils.sparqlGetResourcesFromNamedGraph("beliefs", "data:CB"+req.body.belief_id, function(beliefData) {
+  if (req.body.belief_id) {
 
-    res.send(beliefData);
+    utils.sparqlGetResourcesFromNamedGraph("beliefs", "data:CB" + req.body.belief_id, function (beliefData) {
 
-    });
-  } else {//belief_URI
-    utils.getBeliefData("beliefs", req.body.belief_URI, function(beliefData) {
-
-    res.send(beliefData);
+      res.send(beliefData);
 
     });
+  } else {
+
+    if (req.body.belief_URI) {
+      //belief_URI
+      utils.getBeliefData("beliefs", req.body.belief_URI, function (beliefData) {
+        //if  data found in Object (we check), begin
+        if (transitionData.constructor === Object && Object.entries(beliefData).length != 0) {
+
+          var data = {
+            id: req.body.belief_URI,
+            author: "JDA"
+          };
+
+          var vars = actionResults.head.vars;
+          var bindings = actionResults.results.bindings;
+
+          //format data by looping through results
+          for (let pos in bindings) {
+
+            var bind = bindings[pos];
+
+            for (var varPos in vars) {
+
+              var value = bind[vars[varPos]].value;
+
+              //for each heading, add a field
+              switch (vars[varPos]) {
+                case "freq":
+                  data.probability = value;
+                  break;
+                case "strength":
+                  data.evidence = value;
+                  break;
+                case "actAdmin":
+                  data.actAdminUri = value;
+                  break;
+                case "Tr":
+                  data.transitionUri = value;
+                  break;
+              }
+            }
+          }
+          res.send(data);
+        } else {
+          res.send({});
+        }
+      });
+    }
   }
-  
+
 
 });
 

@@ -177,18 +177,85 @@ router.post('/property/delete', function(req, res, next) {
 
 router.post('/all/get/', function(req, res, next) {
 
-  if(req.body.transition_URI){
+  if(req.body.transition_URI) {
+
     utils.getTransitionData("transitions", req.body.transition_URI, function(transitionData) {
 
-      res.send(transitionData);
-  
-    });
-  } else{ 
-    utils.sparqlGetPreds_Objcts("transitions", "data:Tr"+req.body.transition_id, function(transitionData) {
+      //if  data found in Object (we check), begin
+      if(transitionData.constructor === Object && Object.entries(transitionData).length != 0) {
 
+      var data = { id: req.body.transition_URI,
+                    situationTypes: [
+                      {
+                        "type": "hasTransformableSituation",
+                        "value": {}
+                      },
+                      {
+                        "type": "hasExpectedSituation",
+                        "value": {}
+                      }
+                    ],
+                    property: {} };
+
+      var vars = actionResults.head.vars;
+      var bindings = actionResults.results.bindings;
+      
+      //format data by looping through results
+      for(let pos in bindings){
+
+        var bind = bindings[pos];
+
+        for(var varPos in vars){
+
+          var value = bind[vars[varPos]].value;
+
+          //for each heading, add a field
+          switch (vars[varPos]) {
+            case "sitFromId":
+              data.situationTypes[0].id = value;
+              //extract code
+              var type = value.slice(27);
+              data.situationTypes[0].value.code= type;
+              break;
+            case "sitToId":
+              data.situationTypes[1].id = value;
+              //extract code
+              var type = value.slice(27);
+              data.situationTypes[1].value.code= type;
+              break;
+            case "propUri":
+              //extract code
+              var type = value.slice(31);
+              data.property.code = type;
+              break;
+            case "sitFromLabel":
+              data.situationTypes[0].value.display =  value;
+              break;
+            case "sitToLabel":
+              data.situationTypes[1].value.display = value;
+              break;
+            case "propTxt":
+              data.property.display = value;
+              break;
+            case "deriv":
+              data.effect = value;
+              break;
+          }
+        }
+    }
+    res.send(data);
+      } else {
+        res.send({});
+      }
+      
+    });
+
+  } else { 
+    utils.sparqlGetPreds_Objcts("transitions", "data:Tr"+req.body.transition_id, function(transitionData) {
       res.send(transitionData);
     });
   }
+
 });
   
 
