@@ -4,6 +4,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const logger = require('./config/winston');
+//const bodyParser = require('body-parser')
 
 // Environment constiables
 require('dotenv').config()

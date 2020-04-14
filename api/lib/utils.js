@@ -91,6 +91,12 @@ class Util {
 
 	}
 
+	/**
+	 * 
+	 * @param {identifier of CIG} dataset_id 
+	 * @param {SPARQL query} query 
+	 * @param {callback} callback 
+	 */
 	static sparqlQuery(dataset_id, query, callback) {
 
 		const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query
@@ -98,15 +104,14 @@ class Util {
 
 		request.post(url, {
 			
-				headers: {
-				
+				headers: {				
 					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")			
 				},
 			
 				form: { query: prefixAndSparqlQuery }
 			},
 			function (error, response, body) {
-
+console.log("body:\n" + body)
 				if ( !error && response && response.statusCode == 200 ) {
 
 					var data = [];

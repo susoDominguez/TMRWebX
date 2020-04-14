@@ -6,7 +6,7 @@ const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
 const utils = require('../lib/utils');
 
-//to be tested
+//get all drug types URIS
 router.post('/drugs/get', function(req, res, next) {
 
   utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType", function(uris) {
@@ -17,10 +17,21 @@ router.post('/drugs/get', function(req, res, next) {
 
 });
 
-//to be tested
+//Get all non drug types URIs
 router.post('/nonDrugs/get', function(req, res, next) {
 
   utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType", function(uris) {
+
+    res.send(uris);
+
+  });
+
+});
+
+//Get all vaccine types URIs
+router.post('/vaccines/get', function(req, res, next) {
+
+  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType", function(uris) {
 
     res.send(uris);
 

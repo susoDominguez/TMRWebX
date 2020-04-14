@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+export NODE_PATH=/Users/k1214757/KCL/TMRWebX/api/neenv/lib/node_modules
+export NPM_CONFIG_PREFIX=/Users/k1214757/KCL/TMRWebX/api/neenv
+export npm_config_prefix=/Users/k1214757/KCL/TMRWebX/api/neenv
+exec neenv/bin/node "$@"

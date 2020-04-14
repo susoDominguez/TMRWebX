@@ -1,21 +1,31 @@
 const express = require('express');
 const router = express.Router();
 const request = require('request');
+const bodyParser = require('body-parser')
 
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
 const utils = require('../lib/utils');
 
-router.post('/create', function(req, res, next) {
+/**
+ * Create a persistent or in-memory CIG
+ */
+router.post('/create', bodyParser.json(), function(req, res, next) {
 
   request.post({
 
-    url: "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/$/datasets?dbType=tdb&dbName=CIG-" + req.body.guideline_id,
+    url: "http://" + config.JENA_HOST + ":" + config.JENA_PORT + 
+          (req.body.IsPersistent ? "/$/datasets?dbType=tdb&dbName=CIG-" : "/$/datasets?dbType=mem&dbName=CIG-")
+           + req.body.guideline_id,
     headers: {
       Authorization: "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
     },
 
   }, function (error, response, body) {
+
+    if(error){
+      console.log(error);
+    }
 
     if(!req.body.description){
       req.body.description = `Guideline CIG-` + req.body.guideline_id
@@ -35,6 +45,41 @@ router.post('/create', function(req, res, next) {
   });
 
 });
+
+/**
+ * Create a persistent or in-memory CIG
+ */
+router.post('/delete', function(req, res, next) {
+
+  request.delete({
+
+    url: "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/$/datasets/CIG-" + req.body.guideline_id,
+    headers: {
+      Authorization: "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+    },
+
+  }, function (error, response, body) {
+
+    if(error){
+      console.log(error);
+    } else {
+      console.log(body);
+      res.sendStatus(200);
+    }
+
+    /*
+    utils.sparqlUpdate("CIG-" + req.body.guideline_id, "", config.DELETE, function(body) {
+
+      //console.log(response);
+      console.log(body);
+      res.sendStatus(200);
+
+    });*/
+
+  });
+
+});
+
 
 function action(req, res, insertOrDelete) {
 
