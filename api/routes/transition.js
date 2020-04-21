@@ -197,8 +197,8 @@ router.post('/all/get/', function(req, res, next) {
                     ],
                     property: {} };
 
-      var vars = actionResults.head.vars;
-      var bindings = actionResults.results.bindings;
+      var vars = transitionData.head.vars;
+      var bindings = transitionData.results.bindings;
       
       //format data by looping through results
       for(let pos in bindings){
@@ -214,18 +214,18 @@ router.post('/all/get/', function(req, res, next) {
             case "sitFromId":
               data.situationTypes[0].id = value;
               //extract code
-              var type = value.slice(27);
+              var type = value.slice(26);
               data.situationTypes[0].value.code= type;
               break;
             case "sitToId":
               data.situationTypes[1].id = value;
               //extract code
-              var type = value.slice(27);
+              var type = value.slice(26);
               data.situationTypes[1].value.code= type;
               break;
             case "propUri":
               //extract code
-              var type = value.slice(31);
+              var type = value.slice(30);
               data.property.code = type;
               break;
             case "sitFromLabel":

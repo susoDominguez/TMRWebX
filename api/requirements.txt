@@ -11,3 +11,4 @@ xml-reader
 xml-query
 debug
 winston
+nearley 

@@ -8,11 +8,11 @@ const logger = require('../config/winston');
 router.post('/interactions', function(req, res, next) {
 
   //guideline is now not strict to prefix CIG-
-  const guidelineId = (req.body.guideline_id)? (`CIG-` + req.body.guideline_id) : req.body.dataset_id; 
+  const cigId = (req.body.guideline_id)? (`CIG-` + req.body.guideline_id) : req.body.dataset_id; 
   
   var postData = require('querystring').stringify({
     //Jena dataset name
-      'guideline_id' : guidelineId,
+      'guideline_id' : cigId,
   });
 
   logger.info("Determining interactions with data: " + JSON.stringify(postData));

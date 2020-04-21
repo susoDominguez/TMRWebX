@@ -19,37 +19,37 @@ class Util {
 	 */
 	static sparqlUpdate(dataset_id, content, insertOrDelete, callback) {
 
-    var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
+		var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
 	` + content + `}`;
 
-            var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
-		    const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
+		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
 
-            request.post(
+		request.post(
 
-            URL, {
-							headers: {
-								"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
-							},
-							body: prefixAndSparqlUpdate
-						},
+			URL, {
+			headers: {
+				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+			},
+			body: prefixAndSparqlUpdate
+		},
 
-            function (error, response, body) {
+			function (error, response, body) {
 
-							if ( !error && response && response.statusCode < 400 ) {
+				if (!error && response && response.statusCode < 400) {
 
-								callback(200);
+					callback(200);
 
-							} else {
+				} else {
 
-								console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + ( error ? error : "None" ) + ". Body: " + ( body ? body : "None" ) + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
-								callback(400);
+					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					callback(400);
 
-							}
+				}
 
-            }
+			}
 
-          );
+		);
 
 	}
 
@@ -59,42 +59,42 @@ class Util {
 	 * @param {URI of recommendation assertion to be deleted} rec_uri 
 	 * @param {status of response/error} callback 
 	 */
-	static sparqlDropGraphs(dataset_id, graph_uri, callback){
+	static sparqlDropGraphs(dataset_id, graph_uri, callback) {
 
 		var sparqlUpdate = ` DROP silent GRAPH data:` + graph_uri + `_head;
-		 DROP silent GRAPH data:` + graph_uri +  `;
+		 DROP silent GRAPH data:` + graph_uri + `;
 		 DROP silent GRAPH data:` + graph_uri + `_provenance; 
 		 DROP silent GRAPH data:` + graph_uri + `_publicationinfo;
-		 DELETE  { data:`+ graph_uri +` vocab:isPartOf ?subguideline } WHERE { data:`+ graph_uri +` vocab:isPartOf ?subguideline }`;
-		
-					var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
-					const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
-		
-					request.post(
-		
-					URL, {
-									headers: {
-										"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
-									},
-									body: prefixAndSparqlUpdate
-								},
-		
-					function (error, response, body) {
-		
-									if ( !error && response && response.statusCode < 400 ) {
-		
-										callback(200);
-		
-									} else {
-		
-										console.log("SPARQL update failed at: " + URL + "  Query: " + prefixAndSparqlUpdate + ". Error: " + ( error ? error : "None" ) + ". Body: " + ( body ? body : "None" ) + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
-										callback(400);
-		
-									}
-		
-					}
-		
-				  );
+		 DELETE  { data:`+ graph_uri + ` vocab:isPartOf ?subguideline } WHERE { data:` + graph_uri + ` vocab:isPartOf ?subguideline }`;
+
+		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
+
+		request.post(
+
+			URL, {
+			headers: {
+				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+			},
+			body: prefixAndSparqlUpdate
+		},
+
+			function (error, response, body) {
+
+				if (!error && response && response.statusCode < 400) {
+
+					callback(200);
+
+				} else {
+
+					console.log("SPARQL update failed at: " + URL + "  Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					callback(400);
+
+				}
+
+			}
+
+		);
 
 	}
 
@@ -110,23 +110,23 @@ class Util {
 		const url = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query";
 
 		request.post(url, {
-			
-				headers: {				
-					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
-					"Accept": 'application/sparql-results+json'				
-				},
-			
-				form: { query: prefixAndSparqlQuery }
+
+			headers: {
+				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
+				//"Accept": 'application/sparql-results+json'				
 			},
+
+			form: { query: prefixAndSparqlQuery }
+		},
 			function (error, response, body) {
 				console.log("body:\n" + body)
-				if ( !error && response && response.statusCode == 200 ) {
+				if (!error && response && response.statusCode == 200) {
 
 					var data = [];
 
 					var queryContainer = xmlQuery(xmlReader.parseSync(body));
 
-					queryContainer.find('binding').each(function(binding) {
+					queryContainer.find('binding').each(function (binding) {
 
 						data.push(binding.children[0].children[0].value);
 
@@ -136,7 +136,7 @@ class Util {
 
 				} else {
 
-					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
+					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
 					callback(null);
 
 				}
@@ -188,84 +188,156 @@ class Util {
 		const url = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query";
 
 		request.post(url, {
-			
-				headers: {				
-					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
-					"Accept": 'application/sparql-results+json'		
-				},
-			
-				form: { query: prefixAndSparqlQuery }
-			},
-			function (error, response, body) {
-		   console.log(body)
-				if ( !error && response && response.statusCode == 200 ) {
 
-					callback( JSON.parse(body));
+			headers: {
+				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
+				"Accept": 'application/sparql-results+json'
+			},
+
+			form: { query: prefixAndSparqlQuery }
+		},
+			function (error, response, body) {
+				console.log(body)
+				if (!error && response && response.statusCode == 200) {
+
+					callback(JSON.parse(body));
 
 				} else {
-					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
+					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
 					callback({});
 				}
 			}
 		);
 	}
 
-	static getRecData(cigId, recAssertUri, callback) {
+	static getRecData(cigId, recAssertUri, beliefDsId, TrDsId, actDsId, callback) {
 
-	   var query = `
-	   SELECT DISTINCT ?id ?text ?motive ?strength ?actUri ?cbUri ?contrib
-	   WHERE {
-		   GRAPH  <`+ recAssertUri +`>  {
-			<`+ recAssertUri +`> a  vocab:ClinicalRecommendation . 
-			<`+ recAssertUri +`> rdfs:label ?text .
-			<`+ recAssertUri +`> vocab:aboutExecutionOf ?actUri .
-			<`+ recAssertUri +`> vocab:basedOn ?cbUri .
-			<`+ recAssertUri +`> vocab:motivation ?motive .
-			<`+ recAssertUri +`> vocab:strength ?strength .
+		const cbUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + beliefDsId + "/query";
+		const TrUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrDsId + "/query";
+		const actUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actDsId + "/query";
+
+		var query = `
+	    SELECT DISTINCT ?text ?motive ?strength ?contrib ?cbUri
+	   			?freq ?evidence ?TrUri
+				?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
+				?actId ?adminLabel ?actType ?actLabel ?snomed 
+	    WHERE {
+		   GRAPH   <`+ recAssertUri +`>  {
+			<`+ recAssertUri + `> a  vocab:ClinicalRecommendation . 
+			<`+ recAssertUri + `> rdfs:label ?text .
+			<`+ recAssertUri + `> vocab:aboutExecutionOf ?actAdmin .
+			<`+ recAssertUri + `> vocab:basedOn ?cbUri .
+			<`+ recAssertUri + `> vocab:motivation ?motive .
+			<`+ recAssertUri + `> vocab:strength ?strength .
 			?cbUri vocab:contribution ?contrib .
 			}
+			SERVICE <`+ cbUrl + `> {
+				GRAPH  ?cbUri {
+					?cbUri a  vocab:CausationBelief . 
+					?cbUri vocab:frequency ?freq .
+					?cbUri vocab:strength ?evidence .
+				  ?actAdmin vocab:causes ?TrUri .
+				}
+			}
+				SERVICE <`+ TrUrl + `> { 
+					?TrUri a vocab:TransitionType .
+					?TrUri vocab:affects ?propUri .
+					?TrUri vocab:derivative ?deriv .
+					?TrUri vocab:hasTransformableSituation ?sitFromId .
+					?TrUri vocab:hasExpectedSituation ?sitToId .
+					?PropUri  a  vocab:TropeType .
+					?PropUri rdfs:label ?propTxt .
+					?sitFromId a vocab:SituationType .
+					?sitToId a vocab:SituationType .
+					?sitFromId rdfs:label ?sitFromLabel .
+					?sitToId rdfs:label ?sitToLabel .
+				}
+				SERVICE <`+ actUrl + `> {
+					?actAdmin a owl:NamedIndividual .
+					?actAdmin a ?adminT .
+					?actAdmin	?Of ?actId .
+					?actAdmin rdfs:label ?adminLabel .
+					?actId a owl:NamedIndividual .
+					?actId a ?actType .
+					?actId rdfs:label ?actLabel .
+					?actId vocab:snomedCode  ?snomed .
+					FILTER (?actType != owl:NamedIndividual &&
+						 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
+						 ?adminT != owl:NamedIndividual) .
+				}
 	   }
 	   `;
 
-	   this.sparqlJSONQuery(cigId, query, function(data) {
+		this.sparqlJSONQuery(cigId, query, function (data) {
 
-		   callback(data);
+			callback(data);
 
-	   });
+		});
 
-   }
+	}
 
-   static getBeliefData(datasetId, beliefUri, callback) {
+	static getBeliefData(datasetId, beliefUri, TrId, actId, callback) {
 
-	var query = `
-	SELECT DISTINCT ?freq ?strength ?actAdmin ?Tr
+		const TrUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrId + "/query";
+		const actUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actId + "/query";
+
+		var query = `
+	SELECT DISTINCT 
+	?freq ?strength ?TrUri
+	?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
+	?actId ?adminLabel ?actType ?actLabel ?snomed 
 	WHERE {
-		GRAPH  <`+ beliefUri +`>  {
-		 <`+ beliefUri +`> a  vocab:CausationBelief . 
-		 <`+ beliefUri +`> vocab:frequency ?freq .
-		 <`+ beliefUri +`> vocab:strength ?strength .
-		  ?actAdmin vocab:causes ?Tr .
+		GRAPH  <`+ beliefUri + `>  {
+		 <`+ beliefUri + `> a  vocab:CausationBelief . 
+		 <`+ beliefUri + `> vocab:frequency ?freq .
+		 <`+ beliefUri + `> vocab:strength ?strength .
+		  ?actAdmin vocab:causes ?TrUri .
 		 }
+		SERVICE <`+ TrUrl + `> { 
+			?TrUri a vocab:TransitionType .
+			?TrUri vocab:affects ?propUri .
+			?TrUri vocab:derivative ?deriv .
+			?TrUri vocab:hasTransformableSituation ?sitFromId .
+			?TrUri vocab:hasExpectedSituation ?sitToId .
+			?PropUri  a  vocab:TropeType .
+			?PropUri rdfs:label ?propTxt .
+			?sitFromId a vocab:SituationType .
+			?sitToId a vocab:SituationType .
+			?sitFromId rdfs:label ?sitFromLabel .
+			?sitToId rdfs:label ?sitToLabel .
+		}
+		SERVICE <`+ actUrl + `> {
+			?actAdmin a owl:NamedIndividual .
+			?actAdmin a ?adminT .
+			?actAdmin	?Of ?actId .
+			?actAdmin rdfs:label ?adminLabel .
+			?actId a owl:NamedIndividual .
+			?actId a ?actType .
+			?actId rdfs:label ?actLabel .
+			?actId vocab:snomedCode  ?snomed .
+			FILTER (?actType != owl:NamedIndividual &&
+				 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
+				 ?adminT != owl:NamedIndividual) .
+		}
 	}
 	`;
 
-	this.sparqlJSONQuery(datasetId, query, function(data) {
+		this.sparqlJSONQuery(datasetId, query, function (data) {
 
-		callback(data);
+			callback(data);
 
-	});
+		});
 
-}
-
+	}
 
 	static getCareActionData(dataset_id, uri, callback) {
 
 		var query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed
 		WHERE {
-			<`+uri+`> a owl:NamedIndividual.
-			<`+uri+`> a ?adminT.
-			<`+uri+`>	?Of ?actId.
-			<`+uri+`> rdfs:label ?adminLabel.
+			<`+ uri + `> a owl:NamedIndividual.
+			<`+ uri + `> a ?adminT.
+			<`+ uri + `>	?Of ?actId.
+			<`+ uri + `> rdfs:label ?adminLabel.
 			?actId a owl:NamedIndividual.
 			?actId a ?actType.
 			?actId rdfs:label ?actLabel.
@@ -283,11 +355,11 @@ class Util {
 
 		var query = `SELECT DISTINCT  ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?propTxt ?propUri ?deriv
 		WHERE {
-			<`+TrUri+`> a vocab:TransitionType .
-			<`+TrUri+`> vocab:affects ?propUri .
-			<`+TrUri+`> vocab:derivative ?deriv.
-			<`+TrUri+`> vocab:hasTransformableSituation ?sitFromId .
-			<`+TrUri+`> vocab:hasExpectedSituation ?sitToId .
+			<`+ TrUri + `> a vocab:TransitionType .
+			<`+ TrUri + `> vocab:affects ?propUri .
+			<`+ TrUri + `> vocab:derivative ?deriv.
+			<`+ TrUri + `> vocab:hasTransformableSituation ?sitFromId .
+			<`+ TrUri + `> vocab:hasExpectedSituation ?sitToId .
 			?PropUri  a  vocab:TropeType .
 			?PropUri rdfs:label ?propTxt .
 			?sitFromId a vocab:SituationType .
@@ -330,11 +402,11 @@ class Util {
 
 		var pairedPredicateObject = [];
 
-		for ( var i = 0; i < list.length; i+= n) {
+		for (var i = 0; i < list.length; i += n) {
 
 			var nTuple = [];
 
-			for ( var j = i; j < i + n; j++ ) {
+			for (var j = i; j < i + n; j++) {
 
 				nTuple.push(list[j]);
 
@@ -349,36 +421,14 @@ class Util {
 	}
 
 	static sparqlGetResourcesFromNamedGraph(dataset_id, graph, callback) {
-		 /*
-  <http://anonymous.org/data/RecCOPD-LabaMCopd.stage1should> {
-    <http://anonymous.org/data/RecCOPD-LabaMCopd.stage1should>
-            a       <http://anonymous.org/vocab/ClinicalRecommendation> ;
-            <http://www.w3.org/2000/01/rdf-schema#label>
-                    "Clinician should continue to recommend administering Laba since treatment was effective to decrease COPD stage"@en ;
-            <http://anonymous.org/vocab/aboutExecutionOf>
-                    <http://anonymous.org/data/ActAdministerLaba> ;
-            <http://anonymous.org/vocab/basedOn>
-                    <http://anonymous.org/data/CBLabaMCopd.stage1> ;
-            <http://anonymous.org/vocab/motivation>
-                    "Clinician should recommend continuing administering Laba on patients where the threatment has been effective on decreasing COPD symptoms."@en ;
-            <http://anonymous.org/vocab/partOf>
-                    <http://anonymous.org/data/CIG-COPD> ;
-            <http://anonymous.org/vocab/strength>
-                    "should" .
-    
-    <http://anonymous.org/data/CBLabaMCopd.stage1>
-            <http://anonymous.org/vocab/contribution>
-                    "positive" .
-} 
-  */
 		var query = `
 		SELECT ?s ?p ?o
 		WHERE {
-			GRAPH  `+ graph +`  { ?s ?p ?o }
+			GRAPH  `+ graph + `  { ?s ?p ?o }
 		}
 		`;
 
-		this.sparqlQuery(dataset_id, query, function(data) {
+		this.sparqlQuery(dataset_id, query, function (data) {
 
 			callback(Util.nList(data, 3));
 
@@ -391,13 +441,13 @@ class Util {
 		var query = `
 		SELECT ?p ?o
 		WHERE {
-		  GRAPH ?g { `+ subject  +` ?p ?o }
+		  GRAPH ?g { `+ subject + ` ?p ?o }
 		}
 		`;
 
-		this.sparqlQuery(dataset_id, query, function(data) {
+		this.sparqlQuery(dataset_id, query, function (data) {
 
-	    callback(Util.nList(data, 2));
+			callback(Util.nList(data, 2));
 
 		});
 
@@ -422,31 +472,32 @@ class Util {
 		//path to swi-prolog server
 		const URL = "http://" + config.PROLOG_HOST + ":" + config.PROLOG_PORT + "/" + path;
 
-	  request.post(
+		request.post(
 
-      	URL, {
-				headers: {
-					"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
-          			"Content-Type": "application/x-www-form-urlencoded"
-        		},
-        		body: data },
+			URL, {
+			headers: {
+				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
+				"Content-Type": "application/x-www-form-urlencoded"
+			},
+			body: data
+		},
 
-      function (error, response, body) {
+			function (error, response, body) {
 
-				if ( !error && response && response.statusCode < 400 && body ) {
+				if (!error && response && response.statusCode < 400 && body) {
 
 					callback(body);
 
 				} else {
 
-					logger.error("Failed to call prolog server with path: " + path + ". Data: " + data + ". Error: " + error + ". Body: " + ( body ? body : "None" ) + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
+					logger.error("Failed to call prolog server with path: " + path + ". Data: " + data + ". Error: " + error + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
 					callback(null);
 
 				}
 
-      }
+			}
 
-	  );
+		);
 
 	}
 
