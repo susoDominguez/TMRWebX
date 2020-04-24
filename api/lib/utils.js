@@ -53,19 +53,56 @@ class Util {
 
 	}
 
+	static sparqlCopyGraphs(dataset_id, filterContent, callback) {
+
+		var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
+	` + content + `}`;
+
+		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
+
+		request.post(
+
+			URL, {
+			headers: {
+				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+			},
+			body: prefixAndSparqlUpdate
+		},
+
+			function (error, response, body) {
+
+				if (!error && response && response.statusCode < 400) {
+
+					callback(200);
+
+				} else {
+
+					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					callback(400);
+
+				}
+
+			}
+
+		);
+
+	}
+
 	/**
 	 * 
 	 * @param {identifier of Jenna dataset} dataset_id 
 	 * @param {URI of recommendation assertion to be deleted} rec_uri 
-	 * @param {status of response/error} callback 
+	 * @param {callback function to deliver response} callback 
 	 */
 	static sparqlDropGraphs(dataset_id, graph_uri, callback) {
 
-		var sparqlUpdate = ` DROP silent GRAPH data:` + graph_uri + `_head;
-		 DROP silent GRAPH data:` + graph_uri + `;
-		 DROP silent GRAPH data:` + graph_uri + `_provenance; 
-		 DROP silent GRAPH data:` + graph_uri + `_publicationinfo;
-		 DELETE  { data:`+ graph_uri + ` vocab:isPartOf ?subguideline } WHERE { data:` + graph_uri + ` vocab:isPartOf ?subguideline }`;
+		var sparqlUpdate = ` DROP SILENT GRAPH data:` + graph_uri + `_head ;
+		 DROP SILENT GRAPH data:` + graph_uri + ` ;
+		 DROP SILENT GRAPH data:` + graph_uri + `_provenance ; 
+		 DROP SILENT GRAPH data:` + graph_uri + `_publicationinfo ;
+		 DELETE  { data:`+ graph_uri + ` vocab:isPartOf ?subguideline } WHERE 
+		 { data:`+ graph_uri + ` vocab:isPartOf ?subguideline } `
 
 		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
@@ -141,36 +178,7 @@ class Util {
 
 				}
 
-			}/*
-		request.get(
-		
-
-			"http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query?sparql=" +guidelines.PREFIXES + "\n" + query,
-
-			function (error, response, body) {
-
-				if ( !error && response && response.statusCode == 200 ) {
-
-					var data = [];
-
-					var queryContainer = xmlQuery(xmlReader.parseSync(body));
-
-					queryContainer.find('binding').each(function(binding) {
-
-						data.push(binding.children[0].children[0].value);
-
-					});
-
-					callback(data);
-
-				} else {
-
-					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ( ( response && response.statusCode ) ? response.statusCode : "No response." ) + ".");
-					callback(null);
-
-				}
-
-			}*/
+			}
 
 		);
 
@@ -208,6 +216,26 @@ class Util {
 				}
 			}
 		);
+	}
+
+	static getSubguidelineData (cigFrom, cigTo, subguidelines) {
+
+		var filterString = ``;
+
+		subguidelines.split(",").forEach(function( subguidelineId ){
+
+			filterString += (`data:` + subguidelineId.trim() + ` || `);
+		
+		});
+
+		  //remove last operator and whitespace
+		  filterString = filterString.substring(0, filterString.length - 4);
+
+		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
+
+		var content = `INSERT { GRAPH ?g { ?s ?p ?o } } WHERE { SERVICE <`+ cigFromUrl +`> { ?g vocab:isPartOf  GRAPH ?g { ?s ?p ?o } FILTER (?actType != owl:NamedIndividual &&
+			(?Of = vocab:administrationOf || ?Of = vocab:applicationOf) && ?adminT != owl:NamedIndividual) . } }`
+
 	}
 
 	static getRecData(cigId, recAssertUri, beliefDsId, TrDsId, actDsId, callback) {
@@ -467,7 +495,7 @@ class Util {
 	}
 
 	//path: interactions,drugeffects etc.., data=parameters for querying
-	static callPrologServer(path, data, res, callback) {
+	static callPrologServer(path, data, callback) {
 
 		//path to swi-prolog server
 		const URL = "http://" + config.PROLOG_HOST + ":" + config.PROLOG_PORT + "/" + path;

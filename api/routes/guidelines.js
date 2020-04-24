@@ -8,47 +8,80 @@ const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar));
 const utils = require('../lib/utils');
 const logger = require('../config/winston');
 
-router.post('/interactions', function (req, res, next) {
+router.post('/interactions', function (req, res) {
 
-  //guideline is now not strict to prefix CIG-
-  const cigId = (req.body.guideline_id) ? (`CIG-` + req.body.guideline_id) : req.body.dataset_id;
+  if (req.body.cig_id) {
 
-  var postData = require('querystring').stringify({
-    //Jena dataset name
-    'guideline_id': cigId,
-  });
+    var cigId = JSON.stringify(req.body.cig_id);
+    cigId = (cigId.startsWith(`CIG-`)) ? cigId : (`CIG-` + cigId);
 
-  logger.info("Determining interactions with data: " + JSON.stringify(postData));
+    var postData = require('querystring').stringify({
+      //Jena dataset name
+      'guideline_id': cigId,
+    });
 
-  utils.callPrologServer("interactions", postData, res, function (data) {
+    logger.info("Determining interactions with data: " + JSON.stringify(postData));
 
-    if (!data) {
-      res.sendStatus(400);
-    } else {
-      //use grammar to parse response into a JSON object
-      try {
-        parser.feed(data);
-      } catch (err) {
-        console.log("Error at character " + parseError.offset);
+    //Call prolog server and convert response to JSON object
+    utils.callPrologServer("interactions", postData, function (data) {
+
+      if (!data) {
+        res.sendStatus(400);
+      } else {
+        //use grammar to parse response into a JSON object
+        try {
+          parser.feed(data);
+        } catch (err) {
+          console.log("Error at character " + parseError.offset);
+        }
+        parser.results[0];
+        res.send(JSON.parse(data));
       }
-      parser.results[0];
-      res.send(JSON.parse(data));
-    }
 
-  });
+    });
+  }
+  //not found as it has not been provided with a CIG id
+  res.sendStatus(404);
+});
+
+/**
+ * get URIs of all Recommendations in a given CIG
+ */
+router.post('/rec/get', function (req, res) {
+
+  if (req.body.cig_id) {
+
+    var cigId = JSON.stringify(req.body.cig_id);
+    cigId = (cigId.startsWith(`CIG-`)) ? cigId : (`CIG-` + cigId);
+
+    utils.sparqlGetSubjectAllNamedGraphs(cigId, "vocab:ClinicalRecommendation", function (RecUris) {
+
+      (recUris) ? res.send(RecUris) : res.sendStatus(400);
+
+    });
+  } else {
+    res.sendStatus(400);
+  }
 
 });
 
-router.post('/rec/get', function (req, res, next) {
+/**
+ * Copy data from one existing CIG to another
+ */
+router.post('/copy', function (req, res) {
 
-  const guideline_id = (req.body.guideline_id) ? ("CIG-" + req.body.guideline_id) : req.body.dataset_id;
+  if(req.body.cig_from && req.body.cig_to && req.body.subguidelines){
 
-  utils.sparqlGetSubjectAllNamedGraphs(guideline_id, "vocab:ClinicalRecommendation", function (uris) {
+    if(!req.body.cig_from.startsWith(`CIG-`)){
+      req.body.cig_from = `CIG-` + req.body.cig_from;
+    }
+    if(!req.body.cig_to.startsWith(`CIG-`)){
+      req.body.cig_to = `CIG-` + req.body.cig_to;
+    }
 
-    res.send(uris);
-
-  });
-
+  } else {
+    res.sendStatus(400);
+  }
 });
 
 module.exports = router;

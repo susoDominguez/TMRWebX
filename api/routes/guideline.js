@@ -12,11 +12,15 @@ const utils = require('../lib/utils');
  */
 router.post('/create', bodyParser.json(), function (req, res, next) {
 
+  var id = req.body.cig_id;
+  cigId = (id.startsWith(`CIG-`)) ? id : (`CIG-` + id);
+
+  const dbType = (req.body.IsPersistent) ? `tdb` : `mem`;
+
   request.post({
 
     url: "http://" + config.JENA_HOST + ":" + config.JENA_PORT +
-      (req.body.IsPersistent ? "/$/datasets?dbType=tdb&dbName=CIG-" : "/$/datasets?dbType=mem&dbName=CIG-")
-      + req.body.guideline_id,
+      "/$/datasets?dbType=" + dbType + "&dbName=" + cigId,
     headers: {
       Authorization: "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
     },
@@ -28,13 +32,13 @@ router.post('/create', bodyParser.json(), function (req, res, next) {
     }
 
     if (!req.body.description) {
-      req.body.description = `Guideline CIG-` + req.body.guideline_id
+      req.body.description = `Guideline ` + cigId
     }
 
-    const description = `data:CIG-` + req.body.guideline_id + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
+    const description = `data:` + cigId + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
                      rdfs:label "` + req.body.description + `"@en .`;
 
-    utils.sparqlUpdate("CIG-" + req.body.guideline_id, description, config.INSERT, function (body) {
+    utils.sparqlUpdate(cigId, description, config.INSERT, function (body) {
 
       //console.log(response);
       console.log(body);
@@ -47,36 +51,34 @@ router.post('/create', bodyParser.json(), function (req, res, next) {
 });
 
 /**
- * Create a persistent or in-memory CIG
+ * Delete a persistent or in-memory CIG
  */
 router.post('/delete', function (req, res, next) {
 
-  request.delete({
+  var id = req.body.cig_id;
 
-    url: "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/$/datasets/CIG-" + req.body.guideline_id,
-    headers: {
-      Authorization: "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
-    },
+  if (id) {
+    const cigId = (id.startsWith(`CIG-`)) ? id : (`CIG-` + id);
 
-  }, function (error, response, body) {
+    request.delete({
+      url: "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/$/datasets/" + cigId,
+      headers: {
+        Authorization: "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+      },
+    }, function (error, response, body) {
 
-    if (error) {
-      console.log(error);
-    } else {
-      console.log(body);
-      res.sendStatus(200);
-    }
+      if (error) {
+        console.log(error);
+      } else {
+        console.log(body);
+        res.sendStatus(200);
+      }
 
-    /*
-    utils.sparqlUpdate("CIG-" + req.body.guideline_id, "", config.DELETE, function(body) {
+    });
+  } else {
 
-      //console.log(response);
-      console.log(body);
-      res.sendStatus(200);
-
-    });*/
-
-  });
+    res.sendStatus(404);
+  }
 
 });
 
@@ -84,10 +86,10 @@ router.post('/delete', function (req, res, next) {
 function action(req, res, insertOrDelete) {
 
   //data id for this rec
-  const id = `data:Rec` + req.body.guideline_id + `-` + req.body.rec_id;
+  const id = `data:Rec` + req.body.cig_id + `-` + req.body.rec_id;
 
   //this nanopublication is included in the main  guideline (to be added to default graph)
-  const id2CIG = id + ` vocab:isPartOf data:CIG-` + req.body.guideline_id + ` .`;
+  const id2CIG = id + ` vocab:isPartOf data:CIG-` + req.body.cig_id + ` .`;
 
   // Guideline format:
   const head = id + `_head { 
@@ -105,9 +107,9 @@ function action(req, res, insertOrDelete) {
             rdfs:label              "` + req.body.label + `"@en ;
             vocab:aboutExecutionOf  data:ActAdminister` + req.body.careAction_id + ` ;
             vocab:basedOn           data:CB` + req.body.belief_id + ` ;
-            vocab:partOf            data:CIG-` + req.body.guideline_id + ` ;
-            vocab:strength          "` + req.body.should_or_shouldnot + `" ;
-            vocab:motivation        "` + ((!req.body.motivation) ? "" : req.body.motivation) + `"@en .
+            vocab:partOf            data:CIG-` + req.body.cig_id + ` ;
+            vocab:strength          "` + (req.body.isRecommended ? `should` : `should-not`) + `" ;
+            vocab:motivation        "` + ((req.body.motivation) ? req.body.motivation : "") + `"@en .
             data:CB` + req.body.belief_id +
     ` vocab:contribution     "` + req.body.contribution + `" .
   }`;
@@ -128,11 +130,11 @@ function action(req, res, insertOrDelete) {
             prov:wasAttributedTo  data:` + req.body.author + ` .
   }`;
 
-  utils.sparqlUpdate("CIG-" + req.body.guideline_id, "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication,
+  utils.sparqlUpdate("CIG-" + req.body.cig_id, "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication,
     insertOrDelete, function (status) {
       if (status === 200) {
         //add assertion id to default graph as part of CIG
-        utils.sparqlUpdate("CIG-" + req.body.guideline_id, id2CIG,
+        utils.sparqlUpdate("CIG-" + req.body.cig_id, id2CIG,
           insertOrDelete, function (status2) {
             res.sendStatus(status2);
           });
@@ -144,19 +146,27 @@ function action(req, res, insertOrDelete) {
 
 }
 
-router.post('/add', function (req, res, next) {
+router.post('/rec/add', function (req, res, next) {
 
   action(req, res, config.INSERT);
 
 });
 
-router.post('/delete', function (req, res, next) {
+router.post('/rec/delete', function (req, res, next) {
 
-  //action(req, res, config.DELETE);
-  const guideline_URI = "CIG-" + req.body.guideline_id;
-  const rec_URI = "Rec" + req.body.guideline_id + "-" + req.body.rec_id;
+  var id = req.body.cig_id;
+  var idCig;
 
-  utils.sparqlDropGraphs(guideline_URI, rec_URI, function (status) {
+  if(id.startsWith(`CIG-`)){
+    idCig = id;
+    id = id.substring(`CIG-`.length - 1);
+  } else {
+    idCig = `CIG-` + id;
+  }
+
+  const recUri = (req.body.rec_id) ? "Rec" + id + "-" + req.body.rec_id : req.body.rec_uri;
+
+  utils.sparqlDropGraphs(idCig, recUri, function (status) {
 
     res.sendStatus(status);
 
@@ -244,7 +254,7 @@ router.post('/rec/all/get/', function (req, res, next) {
               recData.motivation = value;
               break;
             case "strength":
-              recData.suggestion = value == "should" ? "recommend" : "nonRecommend" ;
+              recData.suggestion = value == "should" ? "recommend" : "nonRecommend";
               break;
             case "contrib":
               cbData.contribution = value;
@@ -258,7 +268,7 @@ router.post('/rec/all/get/', function (req, res, next) {
             case "evidence":
               cbData.evidence = value;
               break;
-            case "TrUri": 
+            case "TrUri":
               TrData.id = value;
               break;
             case "sitFromId":
