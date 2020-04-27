@@ -53,42 +53,6 @@ class Util {
 
 	}
 
-	static sparqlCopyGraphs(dataset_id, filterContent, callback) {
-
-		var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
-	` + content + `}`;
-
-		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
-		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
-
-		request.post(
-
-			URL, {
-			headers: {
-				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
-			},
-			body: prefixAndSparqlUpdate
-		},
-
-			function (error, response, body) {
-
-				if (!error && response && response.statusCode < 400) {
-
-					callback(200);
-
-				} else {
-
-					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(400);
-
-				}
-
-			}
-
-		);
-
-	}
-
 	/**
 	 * 
 	 * @param {identifier of Jenna dataset} dataset_id 
@@ -218,23 +182,57 @@ class Util {
 		);
 	}
 
-	static getSubguidelineData (cigFrom, cigTo, subguidelines) {
+	/**
+	 * 
+	 * @param {CIG Recommendations are inserted into} cigTo 
+	 * @param {array of graphs labels} graphIdList 
+	 */
+	static addGraphsDataFromToCig(cigFrom, cigTo, graphIdList, callback) {
 
-		var filterString = ``;
-
-		subguidelines.split(",").forEach(function( subguidelineId ){
-
-			filterString += (`data:` + subguidelineId.trim() + ` || `);
-		
-		});
-
-		  //remove last operator and whitespace
-		  filterString = filterString.substring(0, filterString.length - 4);
+		var createGraphs = ``;
+		var insertGraphData = ``; 
 
 		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
 
-		var content = `INSERT { GRAPH ?g { ?s ?p ?o } } WHERE { SERVICE <`+ cigFromUrl +`> { ?g vocab:isPartOf  GRAPH ?g { ?s ?p ?o } FILTER (?actType != owl:NamedIndividual &&
-			(?Of = vocab:administrationOf || ?Of = vocab:applicationOf) && ?adminT != owl:NamedIndividual) . } }`
+	
+		for( var index in graphIdList ) {
+			//createGraphs += `CREATE  GRAPH <`+ graphIdList[index] +`> ; `
+			insertGraphData += `INSERT { GRAPH <`+ graphIdList[index] +`> { ?s ?p ?o } } WHERE { SERVICE <` + cigFromUrl + `> { GRAPH <`+ graphIdList[index] +`> { ?s ?p ?o } } } ; `
+		}
+		insertGraphData = insertGraphData.substring(0, insertGraphData.length - 2);
+		console.log(`insertGraphData: `+ insertGraphData)
+		//////UPDATE GRAPH STORE//////
+//TODO
+		var sparqlUpdate = insertGraphData;//createGraphs + insertGraphData;
+		
+				var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+				const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
+		
+				request.post(
+		
+					URL, {
+					headers: {
+						"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+					},
+					body: prefixAndSparqlUpdate
+				},
+		
+					function (error, response, body) {
+		
+						if (!error && response && response.statusCode < 400) {
+		
+							callback(200);
+		
+						} else {
+		
+							console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+							callback(400);
+		
+						}
+		
+					}
+		
+				);
 
 	}
 
@@ -250,7 +248,7 @@ class Util {
 				?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
 				?actId ?adminLabel ?actType ?actLabel ?snomed 
 	    WHERE {
-		   GRAPH   <`+ recAssertUri +`>  {
+		   GRAPH   <`+ recAssertUri + `>  {
 			<`+ recAssertUri + `> a  vocab:ClinicalRecommendation . 
 			<`+ recAssertUri + `> rdfs:label ?text .
 			<`+ recAssertUri + `> vocab:aboutExecutionOf ?actAdmin .
@@ -487,6 +485,21 @@ class Util {
 		SELECT ?g
 		WHERE {
 		  GRAPH ?g { ?s a ` + instance + ` }
+		}
+		`;
+
+		this.sparqlQuery(dataset_id, query, callback)
+
+	}
+
+	static sparqlGetNamedGraphsFromSubguidelines(dataset_id, instance, callback) {
+
+
+		var query = `
+		SELECT DISTINCT ?g
+		WHERE {
+			?g vocab:isPartOf ?sg
+			`+ instance +`
 		}
 		`;
 

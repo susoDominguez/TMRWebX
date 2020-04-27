@@ -66,20 +66,43 @@ router.post('/rec/get', function (req, res) {
 });
 
 /**
- * Copy data from one existing CIG to another
+ * add data from one existing CIG to another
  */
-router.post('/copy', function (req, res) {
+router.post('/add', function (req, res) {
 
-  if(req.body.cig_from && req.body.cig_to && req.body.subguidelines){
+  if(req.body.cig_from && req.body.cig_to){ //&& req.body.subguidelines){
 
     if(!req.body.cig_from.startsWith(`CIG-`)){
       req.body.cig_from = `CIG-` + req.body.cig_from;
     }
-    if(!req.body.cig_to.startsWith(`CIG-`)){
+    if(!req.body.cig_to.startsWith(`CIG-`)) {
       req.body.cig_to = `CIG-` + req.body.cig_to;
     }
 
-  } else {
+    var filterString = ``;
+		if(req.body.subguidelines) {
+			req.body.subguidelines.split(",").forEach(function (SubId) {
+
+				filterString += (`?sg = data:` + SubId.trim() + ` || `);
+		});
+			
+			//remove last operator and whitespace
+			filterString = filterString.substring(0, filterString.length - 4);
+			filterString = `FILTER(`+ filterString +`)`;
+    }
+    
+    //select graph labels from subguidelines
+    utils.sparqlGetNamedGraphsFromSubguidelines(req.body.cig_from,filterString, function(dataList){
+      
+      if(dataList){
+        utils.addGraphsDataFromToCig(req.body.cig_from, req.body.cig_to, dataList, function(status){
+          res.sendStatus(status);
+        });
+      } else {
+        res.sendStatus(400);
+      }
+    });
+    } else {
     res.sendStatus(400);
   }
 });
