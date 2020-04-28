@@ -189,50 +189,51 @@ class Util {
 	 */
 	static addGraphsDataFromToCig(cigFrom, cigTo, graphIdList, callback) {
 
-		var createGraphs = ``;
-		var insertGraphData = ``; 
+		//var createGraphs = ``;
+		var insertGraphData = ``;
+		var renameCig = ``;
 
 		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
 
-	
-		for( var index in graphIdList ) {
+
+		for (var index in graphIdList) {
 			//createGraphs += `CREATE  GRAPH <`+ graphIdList[index] +`> ; `
-			insertGraphData += `INSERT { GRAPH <`+ graphIdList[index] +`> { ?s ?p ?o } } WHERE { SERVICE <` + cigFromUrl + `> { GRAPH <`+ graphIdList[index] +`> { ?s ?p ?o } } } ; `
+			insertGraphData += `INSERT { GRAPH <` + graphIdList[index] + `> { ?s ?p ?o } } WHERE { SERVICE <` + cigFromUrl + `> { GRAPH <` + graphIdList[index] + `> { ?s ?p ?o } } } ; `;
+			renameCig += `DELETE DATA { GRAPH <` + graphIdList[index] + `> { <`+ graphIdList[index] +`> vocab:partOf data:`+ cigFrom +` } } ; INSERT DATA { GRAPH <` + graphIdList[index] + `> { <`+ graphIdList[index] +`> vocab:partOf data:`+ cigTo +` } } ; `;
 		}
-		insertGraphData = insertGraphData.substring(0, insertGraphData.length - 2);
-		console.log(`insertGraphData: `+ insertGraphData)
+		renameCig = renameCig.substring(0, renameCig.length - 2);
+
 		//////UPDATE GRAPH STORE//////
-//TODO
-		var sparqlUpdate = insertGraphData;//createGraphs + insertGraphData;
-		
-				var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
-				const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
-		
-				request.post(
-		
-					URL, {
-					headers: {
-						"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
-					},
-					body: prefixAndSparqlUpdate
-				},
-		
-					function (error, response, body) {
-		
-						if (!error && response && response.statusCode < 400) {
-		
-							callback(200);
-		
-						} else {
-		
-							console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-							callback(400);
-		
-						}
-		
-					}
-		
-				);
+
+		var sparqlUpdate = insertGraphData + renameCig;//createGraphs + insertGraphData;
+		console.log(`insertGraphData: ` + insertGraphData);
+
+		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
+
+		request.post(
+			URL, {
+			headers: {
+				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64")
+			},
+			body: prefixAndSparqlUpdate
+		},
+			function (error, response, body) {
+
+				if (!error && response && response.statusCode < 400) {
+
+					callback(200);
+
+				} else {
+
+					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					callback(400);
+
+				}
+
+			}
+
+		);
 
 	}
 
@@ -499,7 +500,7 @@ class Util {
 		SELECT DISTINCT ?g
 		WHERE {
 			?g vocab:isPartOf ?sg
-			`+ instance +`
+			`+ instance + `
 		}
 		`;
 
