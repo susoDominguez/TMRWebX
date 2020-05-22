@@ -254,10 +254,13 @@ router.post('/rec/all/get/', function (req, res, next) {
               recData.motivation = value;
               break;
             case "strength":
-              recData.suggestion = value == "should" ? "recommend" : "nonRecommend";
+              recData.suggestion = value == "should" ? "recommend" : "nonRecommend" ;
+              break;
+            case "sourceOfRec":
+              recData.derivedFrom = value ;
               break;
             case "contrib":
-              cbData.contribution = value;
+              cbData.contribution = value ;
               break;
             case "cbUri": //data from main contribution
               cbData.id = value;

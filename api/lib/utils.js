@@ -187,26 +187,38 @@ class Util {
 	 * @param {CIG Recommendations are inserted into} cigTo 
 	 * @param {array of graphs labels} graphIdList 
 	 */
-	static addGraphsDataFromToCig(cigFrom, cigTo, graphIdList, callback) {
+	static addGraphsDataFromToCig(cigFrom, cigTo, nanoHead, nanoAssert, nanoProv, nanoPubInfo, callback) {
 
 		//var createGraphs = ``;
-		var insertGraphData = ``;
-		var renameCig = ``;
+		var insertGraphsData = ``;
+		var graphDescrDel = ``;
+		var graphDescrIns = ``;
+		var deleteTriples = `\nDELETE WHERE { `;
+		var insertTriples = `\nINSERT DATA { `;
 
 		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
 
 
-		for (var index in graphIdList) {
-			//createGraphs += `CREATE  GRAPH <`+ graphIdList[index] +`> ; `
-			insertGraphData += `INSERT { GRAPH <` + graphIdList[index] + `> { ?s ?p ?o } } WHERE { SERVICE <` + cigFromUrl + `> { GRAPH <` + graphIdList[index] + `> { ?s ?p ?o } } } ; `;
-			renameCig += `DELETE DATA { GRAPH <` + graphIdList[index] + `> { <`+ graphIdList[index] +`> vocab:partOf data:`+ cigFrom +` } } ; INSERT DATA { GRAPH <` + graphIdList[index] + `> { <`+ graphIdList[index] +`> vocab:partOf data:`+ cigTo +` } } ; `;
+		for (var index in nanoHead) {
+			
+			var graphsDescr = `\nGRAPH <` + nanoHead[index] + `> { ?a ?b ?c } \nGRAPH <` + nanoAssert[index] + `> { ?d ?e ?f } \nGRAPH <` + nanoProv[index] + `> { ?g ?h ?i } \nGRAPH <` + nanoPubInfo[index] + `> { ?j ?k ?l } `;
+
+			insertGraphsData += `\nINSERT { ` + graphsDescr + `} \nWHERE { SERVICE <` + cigFromUrl + `> { `+ graphsDescr +` } } ; `;
+
+			graphDescrDel += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigFrom +` } `;
+			
+			graphDescrIns += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigTo +` } `;
+
 		}
-		renameCig = renameCig.substring(0, renameCig.length - 2);
+
+		deleteTriples += graphDescrDel + ` } ; `;
+		insertTriples += graphDescrIns + ` } ;`
+		//renameCig = renameCig.substring(0, renameCig.length - 2);
 
 		//////UPDATE GRAPH STORE//////
 
-		var sparqlUpdate = insertGraphData + renameCig;//createGraphs + insertGraphData;
-		console.log(`insertGraphData: ` + insertGraphData);
+		var sparqlUpdate =  insertGraphsData + deleteTriples + insertTriples;
+		console.log(`insertGraphData: ` + sparqlUpdate);
 
 		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
@@ -219,7 +231,7 @@ class Util {
 			body: prefixAndSparqlUpdate
 		},
 			function (error, response, body) {
-
+				
 				if (!error && response && response.statusCode < 400) {
 
 					callback(200);
@@ -247,7 +259,7 @@ class Util {
 	    SELECT DISTINCT ?text ?motive ?strength ?contrib ?cbUri
 	   			?freq ?evidence ?TrUri
 				?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
-				?actId ?adminLabel ?actType ?actLabel ?snomed 
+				?actId ?adminLabel ?actType ?actLabel ?snomed ?sourceOfRec
 	    WHERE {
 		   GRAPH   <`+ recAssertUri + `>  {
 			<`+ recAssertUri + `> a  vocab:ClinicalRecommendation . 
@@ -258,6 +270,11 @@ class Util {
 			<`+ recAssertUri + `> vocab:strength ?strength .
 			?cbUri vocab:contribution ?contrib .
 			}
+
+			GRAPH   <`+ recAssertUri + `_provenance>  {
+				<`+ recAssertUri + `_provenance> prov:wasDerivedFrom  ?sourceOfRec .
+			}
+			
 			SERVICE <`+ cbUrl + `> {
 				GRAPH  ?cbUri {
 					?cbUri a  vocab:CausationBelief . 
@@ -493,14 +510,19 @@ class Util {
 
 	}
 
-	static sparqlGetNamedGraphsFromSubguidelines(dataset_id, instance, callback) {
-
+	/**
+	 * 
+	 * @param {clinical guideline} dataset_id 
+	 * @param {nanopub named} filterString 
+	 * @param {callback function} callback 
+	 */
+	static sparqlGetNamedNanopubFromSubguidelines(dataset_id, filterString, callback) {
 
 		var query = `
 		SELECT DISTINCT ?g
 		WHERE {
 			?g vocab:isPartOf ?sg
-			`+ instance + `
+			`+ filterString + `
 		}
 		`;
 

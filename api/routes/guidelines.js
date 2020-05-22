@@ -66,7 +66,7 @@ router.post('/rec/get', function (req, res) {
 });
 
 /**
- * add data from one existing CIG to another
+ * add nanopub graphs from one existing CIG to another
  */
 router.post('/add', function (req, res) {
 
@@ -91,11 +91,24 @@ router.post('/add', function (req, res) {
 			filterString = `FILTER(`+ filterString +`)`;
     }
     
-    //select graph labels from subguidelines
-    utils.sparqlGetNamedGraphsFromSubguidelines(req.body.cig_from,filterString, function(dataList){
+    //select nanopub URIs from subguidelines
+    utils.sparqlGetNamedNanopubFromSubguidelines(req.body.cig_from,filterString, function(assertionList){
       
-      if(dataList){
-        utils.addGraphsDataFromToCig(req.body.cig_from, req.body.cig_to, dataList, function(status){
+    var nanoHeadList = [];
+    var nanoProbList = [];
+    var nanoPubList = [];
+
+    //for each assertion URI, add the rest of the related nano graphs
+		for (var index in assertionList) {
+      var uri = assertionList[index];
+      logger.info(uri);
+      nanoHeadList.push(uri + `_head`);
+      nanoProbList.push(uri + `_provenance`);
+      nanoPubList.push(uri + `_publicationinfo`);
+    }
+
+      if(assertionList){
+        utils.addGraphsDataFromToCig(req.body.cig_from, req.body.cig_to, nanoHeadList, assertionList, nanoProbList, nanoPubList, function(status){
           res.sendStatus(status);
         });
       } else {
