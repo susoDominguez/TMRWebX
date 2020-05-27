@@ -120,7 +120,7 @@ class Util {
 			form: { query: prefixAndSparqlQuery }
 		},
 			function (error, response, body) {
-				console.log("body:\n" + body)
+				//console.log("body:\n" + body)
 				if (!error && response && response.statusCode == 200) {
 
 					var data = [];
@@ -137,7 +137,8 @@ class Util {
 
 				} else {
 
-					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					console.log("SPARQL query failed: " + prefixAndSparqlQuery + ". Error: " + error + ". Body: " + body +
+					 ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
 					callback(null);
 
 				}
@@ -191,33 +192,43 @@ class Util {
 
 		//var createGraphs = ``;
 		var insertGraphsData = ``;
+		var preGraphs = ``;
+		var postGraphs = ``;
+		var nanopubGraphs = ``;
 		var graphDescrDel = ``;
 		var graphDescrIns = ``;
 		var deleteTriples = `\nDELETE WHERE { `;
-		var insertTriples = `\nINSERT DATA { `;
+		//var insertTriples = `\nINSERT DATA { `;
 
 		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
 
 
 		for (var index in nanoHead) {
 			
-			var graphsDescr = `\nGRAPH <` + nanoHead[index] + `> { ?a ?b ?c } \nGRAPH <` + nanoAssert[index] + `> { ?d ?e ?f } \nGRAPH <` + nanoProv[index] + `> { ?g ?h ?i } \nGRAPH <` + nanoPubInfo[index] + `> { ?j ?k ?l } `;
-
-			insertGraphsData += `\nINSERT { ` + graphsDescr + `} \nWHERE { SERVICE <` + cigFromUrl + `> { `+ graphsDescr +` } } ; `;
+			//var graphsDescr = `\nGRAPH <` + nanoHead[index] + `> { ?a ?b ?c } \nGRAPH <` + nanoAssert[index] + `> { ?d ?e ?f } \nGRAPH <` + nanoProv[index] + `> { ?g ?h ?i } \nGRAPH <` + nanoPubInfo[index] + `> { ?j ?k ?l } `;
+			
+			 preGraphs += 
+			 	`\nGRAPH <` + nanoAssert[index] + `> { ?a`+index+` ?b`+index+` ?c`+index+` } `;
+			 nanopubGraphs +=
+			 	 `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> prov:wasDerivedFrom ?d`+index+` ;\n vocab:partOf data:`+ cigTo +` } `;
+			 postGraphs += 
+			 	 `\nGRAPH <` + nanoProv[index] + `> { <` + nanoAssert[index] + `> prov:wasDerivedFrom ?d`+index+` } ` ;
 
 			graphDescrDel += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigFrom +` } `;
 			
-			graphDescrIns += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigTo +` } `;
+			//graphDescrIns += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigTo +` } `;
 
 		}
 
+		insertGraphsData = `\nINSERT {` + nanopubGraphs + preGraphs + `} \nWHERE { SERVICE <` + cigFromUrl + `> { ` + postGraphs + preGraphs + ` } } ; `;
+
 		deleteTriples += graphDescrDel + ` } ; `;
-		insertTriples += graphDescrIns + ` } ;`
+		//insertTriples += graphDescrIns + ` } ;`
 		//renameCig = renameCig.substring(0, renameCig.length - 2);
 
 		//////UPDATE GRAPH STORE//////
 
-		var sparqlUpdate =  insertGraphsData + deleteTriples + insertTriples;
+		var sparqlUpdate =  insertGraphsData + deleteTriples ;//+ insertTriples;
 		console.log(`insertGraphData: ` + sparqlUpdate);
 
 		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
@@ -417,6 +428,8 @@ class Util {
 	}
 
 	static sparqlGetSubjectAllNamedGraphs(dataset_id, instance, callback) {
+
+		logger.info(`dataset_id: ` + dataset_id + ` and instance: ` + instance);
 
 		var query = `
 		SELECT ?s

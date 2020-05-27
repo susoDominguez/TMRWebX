@@ -51,12 +51,15 @@ router.post('/rec/get', function (req, res) {
 
   if (req.body.cig_id) {
 
-    var cigId = JSON.stringify(req.body.cig_id);
-    cigId = (cigId.startsWith(`CIG-`)) ? cigId : (`CIG-` + cigId);
+    var cigId = req.body.cig_id;
 
+    cigId = (cigId.startsWith(`CIG-`)) ? cigId : (`CIG-` + cigId);
+    
+    console.info(`cigId is ` + cigId);
+    
     utils.sparqlGetSubjectAllNamedGraphs(cigId, "vocab:ClinicalRecommendation", function (RecUris) {
 
-      (recUris) ? res.send(RecUris) : res.sendStatus(400);
+      (RecUris) ? res.send(RecUris) : res.sendStatus(400);
 
     });
   } else {
@@ -101,7 +104,7 @@ router.post('/add', function (req, res) {
     //for each assertion URI, add the rest of the related nano graphs
 		for (var index in assertionList) {
       var uri = assertionList[index];
-      logger.info(uri);
+      //logger.info(uri);
       nanoHeadList.push(uri + `_head`);
       nanoProbList.push(uri + `_provenance`);
       nanoPubList.push(uri + `_publicationinfo`);
