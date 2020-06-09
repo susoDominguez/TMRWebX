@@ -61,12 +61,12 @@ class Util {
 	 */
 	static sparqlDropGraphs(dataset_id, graph_uri, callback) {
 
-		var sparqlUpdate = ` DROP SILENT GRAPH data:` + graph_uri + `_head ;
-		 DROP SILENT GRAPH data:` + graph_uri + ` ;
-		 DROP SILENT GRAPH data:` + graph_uri + `_provenance ; 
-		 DROP SILENT GRAPH data:` + graph_uri + `_publicationinfo ;
-		 DELETE  { data:`+ graph_uri + ` vocab:isPartOf ?subguideline } WHERE 
-		 { data:`+ graph_uri + ` vocab:isPartOf ?subguideline } `
+		var sparqlUpdate = ` DROP SILENT GRAPH ` + graph_uri + `_head ;
+		 DROP SILENT GRAPH ` + graph_uri + ` ;
+		 DROP SILENT GRAPH ` + graph_uri + `_provenance ; 
+		 DROP SILENT GRAPH ` + graph_uri + `_publicationinfo ;
+		 DELETE  SILENT { `+ graph_uri + ` vocab:isPartOf ?subguideline } WHERE 
+		 { `+ graph_uri + ` vocab:isPartOf ?subguideline } `
 
 		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
@@ -170,7 +170,7 @@ class Util {
 			form: { query: prefixAndSparqlQuery }
 		},
 			function (error, response, body) {
-				console.log(body)
+				//console.log(body)
 				if (!error && response && response.statusCode == 200) {
 
 					callback(JSON.parse(body));
@@ -229,7 +229,7 @@ class Util {
 		//////UPDATE GRAPH STORE//////
 
 		var sparqlUpdate =  insertGraphsData + deleteTriples ;//+ insertTriples;
-		console.log(`insertGraphData: ` + sparqlUpdate);
+		//console.log(`insertGraphData: ` + sparqlUpdate);
 
 		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
@@ -266,12 +266,13 @@ class Util {
 		const TrUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrDsId + "/query";
 		const actUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actDsId + "/query";
 
-		var query = `
-	    SELECT DISTINCT ?text ?motive ?strength ?contrib ?cbUri
+		var query = 
+		` 
+		SELECT DISTINCT ?text ?motive ?strength ?contrib ?cbUri
 	   			?freq ?evidence ?TrUri
 				?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
 				?actId ?adminLabel ?actType ?actLabel ?snomed ?sourceOfRec
-	    WHERE {
+	    WHERE { 
 		   GRAPH   <`+ recAssertUri + `>  {
 			<`+ recAssertUri + `> a  vocab:ClinicalRecommendation . 
 			<`+ recAssertUri + `> rdfs:label ?text .
@@ -280,10 +281,7 @@ class Util {
 			<`+ recAssertUri + `> vocab:motivation ?motive .
 			<`+ recAssertUri + `> vocab:strength ?strength .
 			?cbUri vocab:contribution ?contrib .
-			}
-
-			GRAPH   <`+ recAssertUri + `_provenance>  {
-				<`+ recAssertUri + `_provenance> prov:wasDerivedFrom  ?sourceOfRec .
+			<`+ recAssertUri + `> prov:wasDerivedFrom  ?sourceOfRec .
 			}
 			
 			SERVICE <`+ cbUrl + `> {
@@ -294,7 +292,8 @@ class Util {
 				  ?actAdmin vocab:causes ?TrUri .
 				}
 			}
-				SERVICE <`+ TrUrl + `> { 
+				
+			SERVICE <`+ TrUrl + `> { 
 					?TrUri a vocab:TransitionType .
 					?TrUri vocab:affects ?propUri .
 					?TrUri vocab:derivative ?deriv .
@@ -307,7 +306,8 @@ class Util {
 					?sitFromId rdfs:label ?sitFromLabel .
 					?sitToId rdfs:label ?sitToLabel .
 				}
-				SERVICE <`+ actUrl + `> {
+
+			SERVICE <`+ actUrl + `> {
 					?actAdmin a owl:NamedIndividual .
 					?actAdmin a ?adminT .
 					?actAdmin	?Of ?actId .
@@ -321,20 +321,18 @@ class Util {
 						 ?adminT != owl:NamedIndividual) .
 				}
 	   }
-	   `;
+	   `; 
 
 		this.sparqlJSONQuery(cigId, query, function (data) {
-
 			callback(data);
-
 		});
 
 	}
 
-	static getBeliefData(datasetId, beliefUri, TrId, actId, callback) {
+	static getBeliefData(datasetId, belief_Uri, TrId, actId, callback) {
 
-		const TrUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrId + "/query";
-		const actUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actId + "/query";
+		const TrUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrId + "/query>";
+		const actUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actId + "/query>";
 
 		var query = `
 	SELECT DISTINCT 
@@ -342,26 +340,31 @@ class Util {
 	?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
 	?actId ?adminLabel ?actType ?actLabel ?snomed 
 	WHERE {
-		GRAPH  <`+ beliefUri + `>  {
-		 <`+ beliefUri + `> a  vocab:CausationBelief . 
-		 <`+ beliefUri + `> vocab:frequency ?freq .
-		 <`+ beliefUri + `> vocab:strength ?strength .
+		GRAPH  `+ belief_Uri + ` {
+		 `+ belief_Uri + ` a  vocab:CausationBelief . 
+		 `+ belief_Uri + ` vocab:frequency ?freq .
+		 `+ belief_Uri + ` vocab:strength ?strength .
 		  ?actAdmin vocab:causes ?TrUri .
 		 }
-		SERVICE <`+ TrUrl + `> { 
-			?TrUri a vocab:TransitionType .
-			?TrUri vocab:affects ?propUri .
-			?TrUri vocab:derivative ?deriv .
-			?TrUri vocab:hasTransformableSituation ?sitFromId .
-			?TrUri vocab:hasExpectedSituation ?sitToId .
-			?PropUri  a  vocab:TropeType .
-			?PropUri rdfs:label ?propTxt .
-			?sitFromId a vocab:SituationType .
-			?sitToId a vocab:SituationType .
-			?sitFromId rdfs:label ?sitFromLabel .
-			?sitToId rdfs:label ?sitToLabel .
+		SERVICE `+ TrUrl + ` { 
+			?TrUri a vocab:TransitionType ;
+					a owl:NamedIndividual ;
+				 vocab:hasTransformableSituation ?sitFromId ;
+				 vocab:hasExpectedSituation ?sitToId ;
+			     vocab:affects ?propUri ;
+				 vocab:derivative ?deriv .
+			?propUri  a  vocab:TropeType ;
+				a owl:NamedIndividual ;
+			 		rdfs:label ?propTxt .			        
+			?sitFromId a vocab:SituationType ;
+				a owl:NamedIndividual ;
+				rdfs:label ?sitFromLabel .
+			?sitToId a vocab:SituationType ;
+				a owl:NamedIndividual ;
+				rdfs:label ?sitToLabel .
+			
 		}
-		SERVICE <`+ actUrl + `> {
+		SERVICE `+ actUrl + ` {
 			?actAdmin a owl:NamedIndividual .
 			?actAdmin a ?adminT .
 			?actAdmin	?Of ?actId .
@@ -376,8 +379,7 @@ class Util {
 		}
 	}
 	`;
-
-		this.sparqlJSONQuery(datasetId, query, function (data) {
+		this.sparqlJSONQuery( datasetId, query, function (data) {
 
 			callback(data);
 
@@ -410,11 +412,11 @@ class Util {
 
 		var query = `SELECT DISTINCT  ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?propTxt ?propUri ?deriv
 		WHERE {
-			<`+ TrUri + `> a vocab:TransitionType .
-			<`+ TrUri + `> vocab:affects ?propUri .
-			<`+ TrUri + `> vocab:derivative ?deriv.
-			<`+ TrUri + `> vocab:hasTransformableSituation ?sitFromId .
-			<`+ TrUri + `> vocab:hasExpectedSituation ?sitToId .
+			`+ TrUri + ` a vocab:TransitionType .
+			`+ TrUri + ` vocab:affects ?propUri .
+			`+ TrUri + ` vocab:derivative ?deriv.
+			`+ TrUri + ` vocab:hasTransformableSituation ?sitFromId .
+			`+ TrUri + ` vocab:hasExpectedSituation ?sitToId .
 			?PropUri  a  vocab:TropeType .
 			?PropUri rdfs:label ?propTxt .
 			?sitFromId a vocab:SituationType .
@@ -498,7 +500,7 @@ class Util {
 		var query = `
 		SELECT ?p ?o
 		WHERE {
-		  GRAPH ?g { `+ subject + ` ?p ?o }
+		 `+ subject + ` ?p ?o .
 		}
 		`;
 

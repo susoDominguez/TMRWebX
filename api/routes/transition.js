@@ -177,9 +177,7 @@ router.post('/property/delete', function(req, res, next) {
 
 router.post('/all/get/', function(req, res, next) {
 
-  if(req.body.transition_URI) {
-
-    utils.getTransitionData("transitions", req.body.transition_URI, function(transitionData) {
+    utils.getTransitionData("transitions", ( req.body.transition_URI ? "<"+req.body.transition_URI+">" : "data:Tr"+req.body.transition_id), function(transitionData) {
 
       //if  data found in Object (we check), begin
       if(transitionData.constructor === Object && Object.entries(transitionData).length != 0) {
@@ -250,51 +248,29 @@ router.post('/all/get/', function(req, res, next) {
       
     });
 
-  } else { 
-    utils.sparqlGetPreds_Objcts("transitions", "data:Tr"+req.body.transition_id, function(transitionData) {
-      res.send(transitionData);
-    });
-  }
-
 });
   
 
 
 
-router.post('/situation/all/get/', function(req, res, next) {
+router.post( '/situation/all/get/', function(req, res, next) {
 
-  if(req.body.situation_URI){
-    utils.sparqlGetPreds_Objcts("transitions", ":"+req.body.situation_URI, function(situationData) {
-
-      res.send(situationData);
-  
-    });
-  } else{
-    utils.sparqlGetPreds_Objcts("transitions", "data:Sit"+req.body.situation_id, function(situationData) {
+    utils.sparqlGetPreds_Objcts("transitions", ( req.body.situation_URI ? "<"+req.body.situation_URI+">" : "data:Sit"+req.body.situation_id), 
+     function(situationData) {
 
       res.send(situationData);
   
     });
-  }
-  
-
 });
 
 router.post('/property/all/get/', function(req, res, next) {
 
-  if(req.body.property_URI){
-    utils.sparqlGetPreds_Objcts("transitions", ":"+req.body.property_URI, function(propertyData) {
+    utils.sparqlGetPreds_Objcts("transitions", ( req.body.property_URI ? "<"+req.body.property_URI+">" : "data:Prop"+req.body.property_id ), 
+      function(propertyData) {
 
       res.send(propertyData);
   
     });
-  } else{
-    utils.sparqlGetPreds_Objcts("transitions", "data:Sit"+req.body.property_id, function(propertyData) {
-
-      res.send(propertyData);
-  
-    });
-  }
   
 
 });

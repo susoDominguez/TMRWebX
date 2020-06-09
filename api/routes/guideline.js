@@ -164,7 +164,7 @@ router.post('/rec/delete', function (req, res, next) {
     idCig = `CIG-` + id;
   }
 
-  const recUri = (req.body.rec_id) ? "Rec" + id + "-" + req.body.rec_id : req.body.rec_uri;
+  const recUri = (req.body.rec_uri) ? req.body.rec_uri : "data:Rec" + id + "-" + req.body.rec_id ;
 
   utils.sparqlDropGraphs(idCig, recUri, function (status) {
 
@@ -206,14 +206,23 @@ router.post('/careAction/get', function (req, res, next) {
 
 router.post('/rec/all/get/', function (req, res, next) {
 
-  const cigId = (!req.body.cig_label) ? req.body.cig_id : ("CIG-" + req.body.cig_label);
+  var id = req.body.cig_id;
+  var idCig;
 
-  const recURI = (!req.body.rec_id) ? req.body.rec_URI : ("data:Rec" + req.body.cig_label + "-" + req.body.rec_id);
+  if(id.startsWith(`CIG-`)){
+    idCig = id;
+    id = id.substring(`CIG-`.length - 1);
+  } else {
+    idCig = `CIG-` + id;
+  }
 
-  utils.getRecData(cigId, recURI, "beliefs", "transitions", "careActions", function (guidelineData) {
+  const recURI = ( req.body.rec_URI ? "<"+req.body.rec_URI+">" : "data:Rec" + id + "-" + req.body.rec_id );
+
+  utils.getRecData(idCig, recURI, "beliefs", "transitions", "careActions", function (guidelineData) {
+
     //if  data found in Object (we check), begin
     if (guidelineData.constructor === Object && Object.entries(guidelineData).length != 0) {
-
+      console.info(guidelineData);
       var recData = { id: recURI, causationBeliefs: [] };
       var cbData = {
         author: "JDA"
@@ -235,10 +244,10 @@ router.post('/rec/all/get/', function (req, res, next) {
 
       var vars = guidelineData.head.vars;
       var bindings = guidelineData.results.bindings;
-
+      
       //format data by looping through results
       for (let pos in bindings) {
-
+       
         var bind = bindings[pos];
 
         for (var varPos in vars) {

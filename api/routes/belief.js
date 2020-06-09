@@ -60,7 +60,7 @@ router.post('/add', function (req, res) {
 router.post('/delete', function (req, res) {
 
   //action(req, res, config.DELETE);
-  const belief_URI = "CB" + req.body.belief_id;
+  const belief_URI = (req.body.belief_id ? req.body.belief_id : "data:CB" + req.body.belief_id);
   const dataset_id = "beliefs"
 
   utils.sparqlDropGraphs(dataset_id, belief_URI, function (status) {
@@ -73,136 +73,122 @@ router.post('/delete', function (req, res) {
 
 router.post('/all/get/', function (req, res) {
 
-  if (req.body.belief_id) {
+  //belief_URI
+  utils.getBeliefData("beliefs", ( req.body.belief_URI ? "<" + req.body.belief_URI + ">" : "data:CB" + req.body.belief_id), "transitions", "careActions", function (beliefData) {
+    //if  data found in Object (we check), begin
+    if (beliefData.constructor === Object && Object.entries(beliefData).length != 0) {
 
-    utils.sparqlGetResourcesFromNamedGraph("beliefs", "data:CB" + req.body.belief_id, function (beliefData) {
-
-      res.send(beliefData);
-
-    });
-  } else {
-
-    if (req.body.belief_URI) {
-      //belief_URI
-      utils.getBeliefData("beliefs", req.body.belief_URI, "transitions", "careActions", function (beliefData) {
-        //if  data found in Object (we check), begin
-        if (beliefData.constructor === Object && Object.entries(beliefData).length != 0) {
-
-          var cbData = {
-            id: req.body.belief_URI,
-            author: "JDA"
-          };
-          var actData = {};
-          var TrData = {
-            situationTypes: [
-              {
-                "type": "hasTransformableSituation",
-                "value": {}
-              },
-              {
-                "type": "hasExpectedSituation",
-                "value": {}
-              }
-            ],
-            property: {}
-          };
-
-          var vars = beliefData.head.vars;
-          var bindings = beliefData.results.bindings;
-
-          //format data by looping through results
-          for (let pos in bindings) {
-
-            var bind = bindings[pos];
-
-            for (var varPos in vars) {
-
-              var value = bind[vars[varPos]].value;
-
-              //for each heading, add a field
-              switch (vars[varPos]) {
-                case "freq":
-                  cbData.probability = value;
-                  break;
-                case "strength":
-                  cbData.evidence = value;
-                  break;
-                  case "TrUri":
-                    TrData.id = value;
-                    break;
-                case "sitFromId":
-                  TrData.situationTypes[0].id = value;
-                  //extract code
-                  var type = value.slice(26);
-                  TrData.situationTypes[0].value.code = type;
-                  break;
-                case "sitToId":
-                  TrData.situationTypes[1].id = value;
-                  //extract code
-                  var type = value.slice(26);
-                  TrData.situationTypes[1].value.code = type;
-                  break;
-                case "propUri":
-                  //extract code
-                  var type = value.slice(30);
-                  TrData.property.code = type;
-                  break;
-                case "sitFromLabel":
-                  TrData.situationTypes[0].value.display = value;
-                  break;
-                case "sitToLabel":
-                  TrData.situationTypes[1].value.display = value;
-                  break;
-                case "propTxt":
-                  TrData.property.display = value;
-                  break;
-                case "deriv":
-                  TrData.effect = value;
-                  break;
-                case "actId":
-                  actData.id = value;
-                  break;
-                case "adminLabel":
-                  actData.display = value;
-                  break;
-                case "actType":
-                  //extract code
-                  var type = value.slice(27);
-                  actData.code = type;
-                  actData.requestType = 0; //for drugT and DrugCat
-                  //check for therapy
-                  if (type.startsWith("NonDrugT")) {
-                    actData.requestType = 1;
-                  } else {
-                    //check for vaccine
-                    if (type.startsWith("VacT")) {
-                      actData.requestType = 2;
-                    }
-                  }
-                  break;
-                case "actLabel":
-                  actData.drugLabel = value;
-                  break;
-                case "snomed":
-                  actData.snomedCode = value;
-                  break;
-              }
-            }
+      var cbData = {
+        id: req.body.belief_URI,
+        author: "JDA"
+      };
+      var actData = {};
+      var TrData = {
+        situationTypes: [
+          {
+            "type": "hasTransformableSituation",
+            "value": {}
+          },
+          {
+            "type": "hasExpectedSituation",
+            "value": {}
           }
+        ],
+        property: {}
+      };
 
-          //join data together
-          cbData.transition = TrData;
-          cbData.careActionType = actData;
+      var vars = beliefData.head.vars;
+      var bindings = beliefData.results.bindings;
 
-          res.send(cbData);
-        } else {
-          res.send({});
+      //format data by looping through results
+      for (let pos in bindings) {
+
+        var bind = bindings[pos];
+
+        for (var varPos in vars) {
+
+          var value = bind[vars[varPos]].value;
+
+          //for each heading, add a field
+          switch (vars[varPos]) {
+            case "freq":
+              cbData.probability = value;
+              break;
+            case "strength":
+              cbData.evidence = value;
+              break;
+            case "TrUri":
+              TrData.id = value;
+              break;
+            case "sitFromId":
+              TrData.situationTypes[0].id = value;
+              //extract code
+              var type = value.slice(26);
+              TrData.situationTypes[0].value.code = type;
+              break;
+            case "sitToId":
+              TrData.situationTypes[1].id = value;
+              //extract code
+              var type = value.slice(26);
+              TrData.situationTypes[1].value.code = type;
+              break;
+            case "propUri":
+              //extract code
+              var type = value.slice(30);
+              TrData.property.code = type;
+              break;
+            case "sitFromLabel":
+              TrData.situationTypes[0].value.display = value;
+              break;
+            case "sitToLabel":
+              TrData.situationTypes[1].value.display = value;
+              break;
+            case "propTxt":
+              TrData.property.display = value;
+              break;
+            case "deriv":
+              TrData.effect = value;
+              break;
+            case "actId":
+              actData.id = value;
+              break;
+            case "adminLabel":
+              actData.display = value;
+              break;
+            case "actType":
+              //extract code
+              var type = value.slice(27);
+              actData.code = type;
+              actData.requestType = 0; //for drugT and DrugCat
+              //check for therapy
+              if (type.startsWith("NonDrugT")) {
+                actData.requestType = 1;
+              } else {
+                //check for vaccine
+                if (type.startsWith("VacT")) {
+                  actData.requestType = 2;
+                }
+              }
+              break;
+            case "actLabel":
+              actData.drugLabel = value;
+              break;
+            case "snomed":
+              actData.snomedCode = value;
+              break;
+          }
         }
-      });
+      }
+
+      //join data together
+      cbData.transition = TrData;
+      cbData.careActionType = actData;
+
+      res.send(cbData);
+    } else {
+      res.send({});
     }
-  }
-
-
+  });
 });
 
 module.exports = router;
