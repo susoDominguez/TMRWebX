@@ -210,7 +210,7 @@ class Util {
 			 preGraphs += 
 			 	`\nGRAPH <` + nanoAssert[index] + `> { ?a`+index+` ?b`+index+` ?c`+index+` } `;
 			 nanopubGraphs +=
-			 	 `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> prov:wasDerivedFrom ?d`+index+` ;\n vocab:partOf data:`+ cigTo +` } `;
+			 	 `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> prov:wasDerivedFrom ?d`+index+` ;\n vocab:partOf data:`+ cigTo + `;\n vocab:extractedFrom data:`+ cig +` } `;
 			 postGraphs += 
 			 	 `\nGRAPH <` + nanoProv[index] + `> { <` + nanoAssert[index] + `> prov:wasDerivedFrom ?d`+index+` } ` ;
 
@@ -268,10 +268,11 @@ class Util {
 
 		var query = 
 		`
-		SELECT DISTINCT ?text ?actAdmin ?cbUri ?motive ?strength ?contrib
+		SELECT DISTINCT ?text ?actAdmin ?cbUri ?motive ?strength ?contrib ?sourceOfRec ?partOf
 						?freq ?evidence ?TrUri ?PropUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
 						?adminT ?actId ?adminLabel ?actType
 	    WHERE { 
+
 		   GRAPH   `+ recAssertUri + `  {
 			`+ recAssertUri + ` a  vocab:ClinicalRecommendation . 
 			`+ recAssertUri + ` rdfs:label ?text .
@@ -280,7 +281,8 @@ class Util {
 			`+ recAssertUri + ` vocab:motivation ?motive .
 			`+ recAssertUri + ` vocab:strength ?strength .
 			?cbUri vocab:contribution ?contrib .
-			OPTIONAL { `+ recAssertUri + ` prov:wasDerivedFrom  ?sourceOfRec .}
+			OPTIONAL { `+ recAssertUri + ` vocab:extractedFrom ?partOf . } .
+			OPTIONAL { `+ recAssertUri + ` prov:wasDerivedFrom  ?sourceOfRec .} .
 			}
 
 			SERVICE `+ cbUrl + ` {

@@ -72,8 +72,8 @@ router.post('/rec/get', function (req, res) {
  * add nanopub graphs from one existing CIG to another
  */
 router.post('/add', function (req, res) {
-
-  if (req.body.cig_from && req.body.cig_to & req.body.subguidelines) {
+  
+  if (req.body.cig_from && req.body.cig_to) {
 
     if (!req.body.cig_from.startsWith(`CIG-`)) {
       req.body.cig_from = `CIG-` + req.body.cig_from;
@@ -82,14 +82,20 @@ router.post('/add', function (req, res) {
     if (!req.body.cig_to.startsWith(`CIG-`)) {
       req.body.cig_to = `CIG-` + req.body.cig_to;
     }
-
+  
     var filterString = ``;
-    req.body.subguidelines.split(",").forEach(function (SubId) {
-      filterString += (`?sg = data:` + SubId.trim() + ` || `);
-    });
-    //remove last operator and whitespace
+    if(req.body.subguidelines) {
+      req.body.subguidelines.split(",").forEach(function (SubId) {
+        filterString += (`?sg = data:` + SubId.trim() + ` || `);
+      });
+       //remove last operator and whitespace
     filterString = filterString.substring(0, filterString.length - 4);
+    } else {
+      filterString = (` ?sg = data:` + req.body.cig_from);
+    }
+
     filterString = `FILTER(` + filterString + `)`;
+    console.info(filterString)
 
     //select nanopub URIs from subguidelines
     utils.sparqlGetNamedNanopubFromSubguidelines(req.body.cig_from, filterString, function (assertionList) {

@@ -223,7 +223,8 @@ router.post('/rec/all/get/', function (req, res, next) {
 
     //if  data found in Object (we check), begin
     if (guidelineData.constructor === Object && Object.entries(guidelineData).length != 0) {
-      console.info(guidelineData);
+
+      //console.info(guidelineData);
       var recData = { id: (req.body.rec_URI? req.body.rec_URI : recURI), causationBeliefs: [] };
       var cbData = {
         author: "JDA"
@@ -251,13 +252,18 @@ router.post('/rec/all/get/', function (req, res, next) {
       for (let pos in bindings) {
        
         var bind = bindings[pos];
+        //console.info(bind);
 
         for (var varPos in vars) {
 
-          var value = bind[vars[varPos]].value;
+          var value = (vars[varPos] in bind ? bind[vars[varPos]].value : "");
 
           //for each heading, add a field
           switch (vars[varPos]) {
+            case "partOf":
+              var extractedFrom = value.slice(30);
+              recData.partOf = extractedFrom; 
+              break;
             case "text":
               recData.text = value;
               break;
