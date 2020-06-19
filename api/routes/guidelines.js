@@ -54,9 +54,9 @@ router.post('/rec/get', function (req, res) {
     var cigId = req.body.cig_id;
 
     cigId = (cigId.startsWith(`CIG-`)) ? cigId : (`CIG-` + cigId);
-    
+
     console.info(`cigId is ` + cigId);
-    
+
     utils.sparqlGetSubjectAllNamedGraphs(cigId, "vocab:ClinicalRecommendation", function (RecUris) {
 
       (RecUris) ? res.send(RecUris) : res.sendStatus(400);
@@ -73,52 +73,52 @@ router.post('/rec/get', function (req, res) {
  */
 router.post('/add', function (req, res) {
 
-  if(req.body.cig_from && req.body.cig_to){ //&& req.body.subguidelines){
+  if (req.body.cig_from && req.body.cig_to & req.body.subguidelines) {
 
-    if(!req.body.cig_from.startsWith(`CIG-`)){
+    if (!req.body.cig_from.startsWith(`CIG-`)) {
       req.body.cig_from = `CIG-` + req.body.cig_from;
     }
-    if(!req.body.cig_to.startsWith(`CIG-`)) {
+
+    if (!req.body.cig_to.startsWith(`CIG-`)) {
       req.body.cig_to = `CIG-` + req.body.cig_to;
     }
 
     var filterString = ``;
-		if(req.body.subguidelines) {
-			req.body.subguidelines.split(",").forEach(function (SubId) {
+    req.body.subguidelines.split(",").forEach(function (SubId) {
+      filterString += (`?sg = data:` + SubId.trim() + ` || `);
+    });
+    //remove last operator and whitespace
+    filterString = filterString.substring(0, filterString.length - 4);
+    filterString = `FILTER(` + filterString + `)`;
 
-				filterString += (`?sg = data:` + SubId.trim() + ` || `);
-		});
-			
-			//remove last operator and whitespace
-			filterString = filterString.substring(0, filterString.length - 4);
-			filterString = `FILTER(`+ filterString +`)`;
-    }
-    
     //select nanopub URIs from subguidelines
-    utils.sparqlGetNamedNanopubFromSubguidelines(req.body.cig_from,filterString, function(assertionList){
-      
-    var nanoHeadList = [];
-    var nanoProbList = [];
-    var nanoPubList = [];
+    utils.sparqlGetNamedNanopubFromSubguidelines(req.body.cig_from, filterString, function (assertionList) {
 
-    //for each assertion URI, add the rest of the related nano graphs
-		for (var index in assertionList) {
-      var uri = assertionList[index];
-      //logger.info(uri);
-      nanoHeadList.push(uri + `_head`);
-      nanoProbList.push(uri + `_provenance`);
-      nanoPubList.push(uri + `_publicationinfo`);
-    }
+      var nanoHeadList = [];
+      var nanoProbList = [];
+      var nanoPubList = [];
 
-      if(assertionList){
-        utils.addGraphsDataFromToCig(req.body.cig_from, req.body.cig_to, nanoHeadList, assertionList, nanoProbList, nanoPubList, function(status){
+      //for each assertion URI, add the rest of the related nano graphs
+      for (var index in assertionList) {
+        var uri = assertionList[index];
+        //logger.info(uri);
+        nanoHeadList.push(uri + `_head`);
+        nanoProbList.push(uri + `_provenance`);
+        nanoPubList.push(uri + `_publicationinfo`);
+      }
+
+      if (assertionList) {
+        utils.addGraphsDataFromToCig(req.body.cig_from, req.body.cig_to, nanoHeadList, assertionList, nanoProbList, nanoPubList, function (status) {
           res.sendStatus(status);
         });
       } else {
         res.sendStatus(400);
       }
     });
-    } else {
+
+
+
+  } else {
     res.sendStatus(400);
   }
 });

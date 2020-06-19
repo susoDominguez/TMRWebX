@@ -209,6 +209,7 @@ router.post('/rec/all/get/', function (req, res, next) {
   var id = req.body.cig_id;
   var idCig;
 
+  //separate lable id from dataset id
   if(id.startsWith(`CIG-`)){
     idCig = id;
     id = id.substring(`CIG-`.length - 1);
@@ -216,14 +217,14 @@ router.post('/rec/all/get/', function (req, res, next) {
     idCig = `CIG-` + id;
   }
 
-  const recURI = ( req.body.rec_URI ? "<"+req.body.rec_URI+">" : "data:Rec" + id + "-" + req.body.rec_id );
+  const recURI = ( req.body.rec_URI ? "<"+req.body.rec_URI+">" : ( "data:Rec" + id + "-" + req.body.rec_id ) );
 
   utils.getRecData(idCig, recURI, "beliefs", "transitions", "careActions", function (guidelineData) {
 
     //if  data found in Object (we check), begin
     if (guidelineData.constructor === Object && Object.entries(guidelineData).length != 0) {
       console.info(guidelineData);
-      var recData = { id: recURI, causationBeliefs: [] };
+      var recData = { id: (req.body.rec_URI? req.body.rec_URI : recURI), causationBeliefs: [] };
       var cbData = {
         author: "JDA"
       };
@@ -245,7 +246,8 @@ router.post('/rec/all/get/', function (req, res, next) {
       var vars = guidelineData.head.vars;
       var bindings = guidelineData.results.bindings;
       
-      //format data by looping through results
+      if(bindings.length != 0){
+         //format data by looping through results
       for (let pos in bindings) {
        
         var bind = bindings[pos];
@@ -349,6 +351,10 @@ router.post('/rec/all/get/', function (req, res, next) {
       recData.causationBeliefs[0] = cbData;
 
       res.send(recData);
+      } else {
+        res.send({});
+      }
+     
     } else {
       res.send({});
     }

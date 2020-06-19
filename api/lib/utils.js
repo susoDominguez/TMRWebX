@@ -262,29 +262,28 @@ class Util {
 
 	static getRecData(cigId, recAssertUri, beliefDsId, TrDsId, actDsId, callback) {
 
-		const cbUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + beliefDsId + "/query";
-		const TrUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrDsId + "/query";
-		const actUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actDsId + "/query";
+		const cbUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + beliefDsId + "/query>";
+		const TrUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrDsId + "/query>";
+		const actUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actDsId + "/query>";
 
 		var query = 
-		` 
-		SELECT DISTINCT ?text ?motive ?strength ?contrib ?cbUri
-	   			?freq ?evidence ?TrUri
-				?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
-				?actId ?adminLabel ?actType ?actLabel ?snomed ?sourceOfRec
+		`
+		SELECT DISTINCT ?text ?actAdmin ?cbUri ?motive ?strength ?contrib
+						?freq ?evidence ?TrUri ?PropUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
+						?adminT ?actId ?adminLabel ?actType
 	    WHERE { 
-		   GRAPH   <`+ recAssertUri + `>  {
-			<`+ recAssertUri + `> a  vocab:ClinicalRecommendation . 
-			<`+ recAssertUri + `> rdfs:label ?text .
-			<`+ recAssertUri + `> vocab:aboutExecutionOf ?actAdmin .
-			<`+ recAssertUri + `> vocab:basedOn ?cbUri .
-			<`+ recAssertUri + `> vocab:motivation ?motive .
-			<`+ recAssertUri + `> vocab:strength ?strength .
+		   GRAPH   `+ recAssertUri + `  {
+			`+ recAssertUri + ` a  vocab:ClinicalRecommendation . 
+			`+ recAssertUri + ` rdfs:label ?text .
+			`+ recAssertUri + ` vocab:aboutExecutionOf ?actAdmin .
+			`+ recAssertUri + ` vocab:basedOn ?cbUri .
+			`+ recAssertUri + ` vocab:motivation ?motive .
+			`+ recAssertUri + ` vocab:strength ?strength .
 			?cbUri vocab:contribution ?contrib .
-			<`+ recAssertUri + `> prov:wasDerivedFrom  ?sourceOfRec .
+			OPTIONAL { `+ recAssertUri + ` prov:wasDerivedFrom  ?sourceOfRec .}
 			}
-			
-			SERVICE <`+ cbUrl + `> {
+
+			SERVICE `+ cbUrl + ` {
 				GRAPH  ?cbUri {
 					?cbUri a  vocab:CausationBelief . 
 					?cbUri vocab:frequency ?freq .
@@ -292,34 +291,34 @@ class Util {
 				  ?actAdmin vocab:causes ?TrUri .
 				}
 			}
-				
-			SERVICE <`+ TrUrl + `> { 
-					?TrUri a vocab:TransitionType .
-					?TrUri vocab:affects ?propUri .
-					?TrUri vocab:derivative ?deriv .
-					?TrUri vocab:hasTransformableSituation ?sitFromId .
-					?TrUri vocab:hasExpectedSituation ?sitToId .
-					?PropUri  a  vocab:TropeType .
-					?PropUri rdfs:label ?propTxt .
-					?sitFromId a vocab:SituationType .
-					?sitToId a vocab:SituationType .
-					?sitFromId rdfs:label ?sitFromLabel .
-					?sitToId rdfs:label ?sitToLabel .
-				}
 
-			SERVICE <`+ actUrl + `> {
-					?actAdmin a owl:NamedIndividual .
-					?actAdmin a ?adminT .
-					?actAdmin	?Of ?actId .
-					?actAdmin rdfs:label ?adminLabel .
-					?actId a owl:NamedIndividual .
-					?actId a ?actType .
-					?actId rdfs:label ?actLabel .
-					?actId vocab:snomedCode  ?snomed .
-					FILTER (?actType != owl:NamedIndividual &&
-						 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
-						 ?adminT != owl:NamedIndividual) .
-				}
+			SERVICE `+ TrUrl + ` { 
+				?TrUri a vocab:TransitionType .
+				?TrUri vocab:affects ?PropUri .
+				?TrUri vocab:derivative ?deriv .
+				?TrUri vocab:hasTransformableSituation ?sitFromId .
+				?TrUri vocab:hasExpectedSituation ?sitToId .
+				?PropUri  a  vocab:TropeType .
+				?PropUri rdfs:label ?propTxt .
+				?sitFromId a vocab:SituationType .
+				?sitToId a vocab:SituationType .
+				?sitFromId rdfs:label ?sitFromLabel .
+				?sitToId rdfs:label ?sitToLabel .
+			}
+
+			SERVICE `+ actUrl + ` {
+				?actAdmin a owl:NamedIndividual .
+				?actAdmin a ?adminT .
+				?actAdmin	?Of ?actId .
+				?actAdmin rdfs:label ?adminLabel .
+				?actId a owl:NamedIndividual .
+				?actId a ?actType .
+				?actId rdfs:label ?actLabel .
+				?actId vocab:snomedCode  ?snomed .
+				FILTER (?actType != owl:NamedIndividual &&
+					 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
+					 ?adminT != owl:NamedIndividual) .
+			}
 	   }
 	   `; 
 
