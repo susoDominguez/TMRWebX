@@ -12,8 +12,7 @@ router.post('/interactions', function (req, res) {
 
   if (req.body.cig_id) {
 
-    var cigId = JSON.stringify(req.body.cig_id);
-    cigId = (cigId.startsWith(`CIG-`)) ? cigId : (`CIG-` + cigId);
+    var cigId = (req.body.cig_id.startsWith(`CIG-`)) ? req.body.cig_id : (`CIG-` + req.body.cig_id);
 
     var postData = require('querystring').stringify({
       //Jena dataset name
@@ -28,6 +27,7 @@ router.post('/interactions', function (req, res) {
       if (!data) {
         res.sendStatus(400);
       } else {
+        console.info(data)
         //use grammar to parse response into a JSON object
         try {
           parser.feed(data);
@@ -39,9 +39,64 @@ router.post('/interactions', function (req, res) {
       }
 
     });
-  }
-  //not found as it has not been provided with a CIG id
+  } else {
+     //not found as it has not been provided with a CIG id
   res.sendStatus(404);
+  }
+});
+
+router.post('/drug', function (req, res) {
+
+  if (req.body.cig_id && req.body.rec_URI) {
+
+    var cigId = (req.body.cig_id.startsWith(`CIG-`)) ? req.body.cig_id : (`CIG-` + req.body.cig_id);
+
+    var postData = require('querystring').stringify({
+      //Jena dataset name
+      'guideline_id': cigId, 'recommendation_uri': req.body.rec_URI
+    });
+
+    logger.info("Determining care action part of recommendation with data: " + JSON.stringify(postData));
+
+    //Call prolog server and convert response to JSON object
+    utils.callPrologServer("drug", postData, function (data) {
+
+      if (!data) {
+        res.sendStatus(400);
+      } else {
+        console.info(data)
+        res.send(data);
+      }
+    });
+  } else {
+     //not found as it has not been provided with a CIG id
+  res.sendStatus(404);
+  }
+});
+
+router.post('/drugeffects', function (req, res) {
+
+  if (req.body.careAction_URI) {
+
+    var postData = require('querystring').stringify({
+      'drug_URI': req.body.careAction_URI,
+    });
+
+    logger.info("Determining effects of care action application with care action: " + JSON.stringify(postData));
+
+    //Call prolog server and convert response to JSON object
+    utils.callPrologServer("drugeffects", postData, function (data) {
+
+      if (!data) {
+        res.sendStatus(400);
+      } else {
+        console.info(data)
+        res.send(data);
+      }
+    });
+  } else {
+  res.sendStatus(404);
+  }
 });
 
 /**

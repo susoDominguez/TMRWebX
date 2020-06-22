@@ -563,7 +563,7 @@ class Util {
 		},
 
 			function (error, response, body) {
-
+				console.info(error + ", " + response.statusCode )
 				if (!error && response && response.statusCode < 400 && body) {
 
 					callback(body);
