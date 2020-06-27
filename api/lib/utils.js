@@ -563,9 +563,9 @@ class Util {
 		},
 
 			function (error, response, body) {
-				console.info(error + ", " + response.statusCode )
+				//console.info(error + ", " + response.statusCode )
 				if (!error && response && response.statusCode < 400 && body) {
-
+					//console.info(body);
 					callback(body);
 
 				} else {

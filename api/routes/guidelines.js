@@ -27,15 +27,35 @@ router.post('/interactions', function (req, res) {
       if (!data) {
         res.sendStatus(400);
       } else {
-        console.info(data)
         //use grammar to parse response into a JSON object
         try {
-          parser.feed(data);
+          console.info("data sent to grammar parser is \n" + data);
+          parser.feed( data.toString());
+          //console.info("\ninteractions data is:\n" + data);
+          if(parser.results.length <= 1){  
+            data = parser.results[0];
+            //convert type of first recommendation to secondary when type of interaction is repairable
+            for(let val of data){
+              if(val.type === 'repairable'){
+                val.interactionNorms[0].type = 'secondary';
+              }
+            }
+          } else {
+            console.info("parsed data has " + parser.results.length + " result(s):\n" + parser.results);
+            data = null;
+          }
+          
         } catch (err) {
-          console.log("Error at character " + parseError.offset);
+          console.log("Error at character " + err.offset);
+          data = null; //this should not happen
         }
-        parser.results[0];
-        res.send(JSON.parse(data));
+
+        if(data) {
+          res.send(data);
+        } else {
+          res.sendStatus(500);
+        }
+        
       }
 
     });
