@@ -2,49 +2,42 @@
 // http://github.com/Hardmath123/nearley
 (function () {
 function id(x) { return x[0]; }
+ const moo = require('moo')
+
+    let lexer = moo.compile({
+	  comma: ',',
+      lbracket:  '[',
+      rbracket:  ']',
+	  lparenthesis: '(',
+	  rparenthesis: ')',
+      keyword: ["http://anonymous.org/data/RepeatedActionRec", 'http://anonymous.org/data/AlternativeActionsRec', 'http://anonymous.org/data/ReparableTransitionRec', 'http://anonymous.org/data/ContradictionRec'],
+	  repeated: {match: 'Repeated Action', value: _ => 'repeated'},
+	  alternative: {match: 'Alternative Actions', value: _ => 'alternative'},
+	  repairable: {match: 'Repairable Transition', value: _ => 'repairable'},
+	  contradictory: {match: 'Contradictory Norms', value: _ => 'contradiction'},
+	  recURI: 'http://anonymous.org/data/Rec',
+	  startStr: 'interaction',
+      stringPlus: /[A-Z]?[a-zA-Z0-9-]+/
+    });
 var grammar = {
-    Lexer: undefined,
+    Lexer: lexer,
     ParserRules: [
-    {"name": "main", "symbols": ["_", "AS", "_"], "postprocess": d => (Array.isArray(d)? {type:'main', d:d, v:d[1].v} : null)},
-    {"name": "P", "symbols": [{"literal":"("}, "_", "AS", "_", {"literal":")"}], "postprocess": function(d) {return {type:'P', d:d, v:d[2].v}}},
-    {"name": "P", "symbols": ["N"], "postprocess": id},
-    {"name": "E", "symbols": ["P", "_", {"literal":"^"}, "_", "E"], "postprocess": function(d) {return {type:'E', d:d, v:Math.pow(d[0].v, d[4].v)}}},
-    {"name": "E", "symbols": ["P"], "postprocess": id},
-    {"name": "MD", "symbols": ["MD", "_", {"literal":"*"}, "_", "E"], "postprocess": function(d) {return {type: 'M', d:d, v:d[0].v*d[4].v}}},
-    {"name": "MD", "symbols": ["MD", "_", {"literal":"/"}, "_", "E"], "postprocess": function(d) {return {type: 'D', d:d, v:d[0].v/d[4].v}}},
-    {"name": "MD", "symbols": ["E"], "postprocess": id},
-    {"name": "AS", "symbols": ["AS", "_", {"literal":"+"}, "_", "MD"], "postprocess": function(d) {return {type:'A', d:d, v:d[0].v+d[4].v}}},
-    {"name": "AS", "symbols": ["AS", "_", {"literal":"-"}, "_", "MD"], "postprocess": function(d) {return {type:'S', d:d, v:d[0].v-d[4].v}}},
-    {"name": "AS", "symbols": ["MD"], "postprocess": id},
-    {"name": "AS", "symbols": []},
-    {"name": "N", "symbols": ["float"], "postprocess": id},
-    {"name": "N$string$1", "symbols": [{"literal":"s"}, {"literal":"i"}, {"literal":"n"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$1", "_", "P"], "postprocess": function(d) {return {type:'sin', d:d, v:Math.sin(d[2].v)}}},
-    {"name": "N$string$2", "symbols": [{"literal":"c"}, {"literal":"o"}, {"literal":"s"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$2", "_", "P"], "postprocess": function(d) {return {type:'cos', d:d, v:Math.cos(d[2].v)}}},
-    {"name": "N$string$3", "symbols": [{"literal":"t"}, {"literal":"a"}, {"literal":"n"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$3", "_", "P"], "postprocess": function(d) {return {type:'tan', d:d, v:Math.tan(d[2].v)}}},
-    {"name": "N$string$4", "symbols": [{"literal":"a"}, {"literal":"s"}, {"literal":"i"}, {"literal":"n"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$4", "_", "P"], "postprocess": function(d) {return {type:'asin', d:d, v:Math.asin(d[2].v)}}},
-    {"name": "N$string$5", "symbols": [{"literal":"a"}, {"literal":"c"}, {"literal":"o"}, {"literal":"s"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$5", "_", "P"], "postprocess": function(d) {return {type:'acos', d:d, v:Math.acos(d[2].v)}}},
-    {"name": "N$string$6", "symbols": [{"literal":"a"}, {"literal":"t"}, {"literal":"a"}, {"literal":"n"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$6", "_", "P"], "postprocess": function(d) {return {type:'atan', d:d, v:Math.atan(d[2].v)}}},
-    {"name": "N$string$7", "symbols": [{"literal":"p"}, {"literal":"i"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$7"], "postprocess": function(d) {return {type:'pi', d:d, v:Math.PI}}},
-    {"name": "N", "symbols": [{"literal":"e"}], "postprocess": function(d) {return {type:'e', d:d, v:Math.E}}},
-    {"name": "N$string$8", "symbols": [{"literal":"s"}, {"literal":"q"}, {"literal":"r"}, {"literal":"t"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$8", "_", "P"], "postprocess": function(d) {return {type:'sqrt', d:d, v:Math.sqrt(d[2].v)}}},
-    {"name": "N$string$9", "symbols": [{"literal":"l"}, {"literal":"n"}], "postprocess": function joiner(d) {return d.join('');}},
-    {"name": "N", "symbols": ["N$string$9", "_", "P"], "postprocess": function(d) {return {type:'ln', d:d, v:Math.log(d[2].v)}}},
-    {"name": "float", "symbols": ["int", {"literal":"."}, "int"], "postprocess": function(d) {return {v:parseFloat(d[0].v + d[1] + d[2].v)}}},
-    {"name": "float", "symbols": ["int"], "postprocess": function(d) {return {v:parseInt(d[0].v)}}},
-    {"name": "int$ebnf$1", "symbols": [/[0-9]/]},
-    {"name": "int$ebnf$1", "symbols": ["int$ebnf$1", /[0-9]/], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
-    {"name": "int", "symbols": ["int$ebnf$1"], "postprocess": function(d) {return {v:d[0].join("")}}},
-    {"name": "_$ebnf$1", "symbols": []},
-    {"name": "_$ebnf$1", "symbols": ["_$ebnf$1", /[\s]/], "postprocess": function arrpush(d) {return d[0].concat([d[1]]);}},
-    {"name": "_", "symbols": ["_$ebnf$1"], "postprocess": function(d) {return null }}
+    {"name": "main$ebnf$1", "symbols": [/[\s]/], "postprocess": id},
+    {"name": "main$ebnf$1", "symbols": [], "postprocess": function(d) {return null;}},
+    {"name": "main", "symbols": [(lexer.has("lbracket") ? {type: "lbracket"} : lbracket), "main$ebnf$1", (lexer.has("rbracket") ? {type: "rbracket"} : rbracket)], "postprocess": function(d) { return '[]';  }},
+    {"name": "main", "symbols": [(lexer.has("lbracket") ? {type: "lbracket"} : lbracket), "intResultList", (lexer.has("rbracket") ? {type: "rbracket"} : rbracket)], "postprocess": function(d) { return d[1]; }},
+    {"name": "intResultList", "symbols": ["intResult", (lexer.has("comma") ? {type: "comma"} : comma), "intResultList"], "postprocess": d => { return [].concat(d[0],d[2]);}},
+    {"name": "intResultList", "symbols": ["intResult"]},
+    {"name": "intResult", "symbols": ["begin", (lexer.has("comma") ? {type: "comma"} : comma), "intType", (lexer.has("comma") ? {type: "comma"} : comma), (lexer.has("lbracket") ? {type: "lbracket"} : lbracket), "recList", (lexer.has("rbracket") ? {type: "rbracket"} : rbracket), "end"], "postprocess": d => { return { 'type': d[2], 'interactionNorms': d[5] }; }},
+    {"name": "intType", "symbols": [(lexer.has("repeated") ? {type: "repeated"} : repeated)], "postprocess": _ => { return 'repeated';}},
+    {"name": "intType", "symbols": [(lexer.has("alternative") ? {type: "alternative"} : alternative)], "postprocess": _ => { return 'alternative';}},
+    {"name": "intType", "symbols": [(lexer.has("contradictory") ? {type: "contradictory"} : contradictory)], "postprocess": _ => { return 'repairable';}},
+    {"name": "intType", "symbols": [(lexer.has("repairable") ? {type: "repairable"} : repairable)], "postprocess": _ => { return 'contradiction';}},
+    {"name": "recList", "symbols": ["recURI", (lexer.has("comma") ? {type: "comma"} : comma), "recList"], "postprocess": d => { return [].concat(d[0],d[2]);}},
+    {"name": "recList", "symbols": ["recURI"]},
+    {"name": "recURI", "symbols": [(lexer.has("recURI") ? {type: "recURI"} : recURI), (lexer.has("stringPlus") ? {type: "stringPlus"} : stringPlus)], "postprocess": d => { return { 'recId': d.join('') , 'type': 'primary' }; }},
+    {"name": "begin", "symbols": [(lexer.has("startStr") ? {type: "startStr"} : startStr), (lexer.has("lparenthesis") ? {type: "lparenthesis"} : lparenthesis), (lexer.has("keyword") ? {type: "keyword"} : keyword), (lexer.has("stringPlus") ? {type: "stringPlus"} : stringPlus)], "postprocess": _ => { return null; }},
+    {"name": "end", "symbols": [(lexer.has("comma") ? {type: "comma"} : comma), (lexer.has("lbracket") ? {type: "lbracket"} : lbracket), (lexer.has("rbracket") ? {type: "rbracket"} : rbracket), (lexer.has("rparenthesis") ? {type: "rparenthesis"} : rparenthesis)], "postprocess": _ => { return null; }}
 ]
   , ParserStart: "main"
 }
