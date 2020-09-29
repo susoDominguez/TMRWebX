@@ -48,7 +48,6 @@ function action(req, res, insertOrDelete) {
     res.sendStatus(status);
 
   });
-
 }
 
 router.post('/add', function (req, res) {

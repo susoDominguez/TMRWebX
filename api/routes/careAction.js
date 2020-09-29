@@ -225,7 +225,7 @@ function drugAdminActDef(typeOrCat, id, label) {
 
   var drugAdministration =
     `data:ActAdminister` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
-                               rdfs:label "administer ` + label + `"@en ;
+                               rdfs:label "administration of ` + label + `"@en ;
                                vocab:administrationOf data:Drug` + typeOrCat + id;
 
   return drugAdministration;

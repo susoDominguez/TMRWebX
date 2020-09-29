@@ -225,11 +225,11 @@ router.post('/rec/all/get/', function (req, res, next) {
     if (guidelineData.constructor === Object && Object.entries(guidelineData).length != 0) {
 
       //console.info(guidelineData);
-      var recData = { id: (req.body.rec_URI? req.body.rec_URI : recURI), causationBeliefs: [] };
+      var recData = { id: (req.body.rec_URI? req.body.rec_URI : recURI), causationBeliefs: [] } ;
       var cbData = {
         author: "JDA"
       };
-      var actData = {};
+      var actData = {} ;
       var TrData = {
         situationTypes: [
           {
