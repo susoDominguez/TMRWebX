@@ -9,7 +9,6 @@ class FhirMedication {
      */
     constructor(careActionTypeObject) {
 
-        this._medicationUrlPrefix = 'http://anonymous.org/Medication/';
         this._id = String(careActionTypeObject.code);
         this._codingSystem = String(careActionTypeObject.id);
         this._codingCode = String(careActionTypeObject.drugLabel);
@@ -45,7 +44,7 @@ class FhirMedication {
      * @param {object} careActionTypeObject an intance object of a TMR-based care action type
      */
     showFullUrl(careActionTypeObject) {
-        return this._medicationUrlPrefix + careActionTypeObject.code;
+        return 'http://anonymous.org/Medication/' + careActionTypeObject.code;
     }
 
     /**
@@ -399,7 +398,7 @@ class FhirMedicationRequest {
     }
 }
 
-class FHIRserviceRequest {
+class FhirServiceRequest {
 
      /**
      * 
@@ -523,3 +522,133 @@ class FhirCarePlan {
         } ;
     }
 }
+
+//use case
+const TMRobject = {
+    "id": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+    "text": "clinician should avoid recommending administration of Beta Agonist bronchodilators to patients with cardiovascular disease",
+    "motivation": "none",
+    "derivedFrom": "GOLD COPD 2017",
+    "suggestion": "nonrecommend",
+    "careActionType": {
+        "id": "http://anonymous.org/data/DrugCatBetaAgonist",
+        "code": "DrugCatBetaAgonist",
+        "display": "administration of Beta Agonist bronchodilator",
+        "requestType": 0,
+        "drugLabel": "BetaAgonist"
+    },
+    "causationBeliefs": [
+        {
+            "id": "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr",
+            "contribution": "negative",
+            "probability": "always",
+            "evidence": "High Level",
+            "author": "JDA",
+            "transition": {
+                "id": "http://anonymous.org/data/TrIncLowRiskCdr",
+                "effect": "increase",
+                "property": {
+                    //added on 22/09/20202. TODO: add to all elements PRoperty
+                    "id": "http://anonymous.org/data/PropCrd",
+                    "display": "risk of having cardiac rhythm disturbances",
+                    "code": "Crd"
+                },
+                "situationTypes": [
+                    {
+                        "id": "http://anonymous.org/data/SitLowRiskCrd",
+                        "type": "hasTransformableSituation",
+                        "value": {
+                            "code": "SitLowRiskCrd",
+                            "display": "a low risk of having cardiac rhythm disturbances"
+                        }
+                    },
+                    {
+                        "id": "http://anonymous.org/data/SitMildAls",
+                        "type": "hasExpectedSituation",
+                        "value": {
+                            "code": "SitHighRiskCrd",
+                            "display": "a high risk of having cardiac rhythm disturbances"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+} ;
+
+const TMRobject2 = {
+    "id": "http://anonymous.org/data/RecCOPD-LabaDecLowRiskCdrShouldnot",
+    "text": "clinician should avoid recommending administration of Beta Agonist bronchodilators to patients with cardiovascular disease",
+    "motivation": "none",
+    "derivedFrom": "GOLD COPD 2017",
+    "suggestion": "nonrecommend",
+    "careActionType": {
+        "id": "http://anonymous.org/data/DrugTLaba",
+        "code": "DrugTLaba",
+        "display": "administration of LABA",
+        "requestType": 0,
+        "drugLabel": "LABA"
+    },
+    "causationBeliefs": [
+        {
+            "id": "http://anonymous.org/data/CBBetaAgonistDecLowRiskCdr",
+            "contribution": "negative",
+            "probability": "always",
+            "evidence": "High Level",
+            "author": "JDA",
+            "transition": {
+                "id": "http://anonymous.org/data/TrIncLowRiskCdr",
+                "effect": "increase",
+                "property": {
+                    "id": "http://anonymous.org/data/PropCrd",
+                    "display": "risk of having cardiac rhythm disturbances",
+                    "code": "Crd"
+                },
+                "situationTypes": [
+                    {
+                        "id": "http://anonymous.org/data/SitLowRiskCrd",
+                        "type": "hasTransformableSituation",
+                        "value": {
+                            "code": "SitLowRiskCrd",
+                            "display": "a low risk of having cardiac rhythm disturbances"
+                        }
+                    },
+                    {
+                        "id": "http://anonymous.org/data/SitMildAls",
+                        "type": "hasExpectedSituation",
+                        "value": {
+                            "code": "SitHighRiskCrd",
+                            "display": "a high risk of having cardiac rhythm disturbances"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+} ;
+
+exports.getMedication = careActionType => {
+    return new FhirMedication(careActionType);
+} ;
+exports.getCondition = RecObject => {
+    return new FhirCondition(situationTypes);
+} ;
+exports.getForecastEffect = RecObject => {
+    return new FhirMedication(RecObject.careActionType);
+} ;
+exports.getMedicationRequest = RecObject => {
+    return new FhirMedication(RecObject.careActionType);
+} ;
+exports.getFhirServiceRequest = RecObject => {
+    return new FhirMedication(RecObject.careActionType);
+} ;
+exports.getDetectedIssue = RecObject => {
+    return new FhirMedication(RecObject.careActionType);
+} ;
+exports.getCarePlan = RecObject => {
+    return new FhirMedication(RecObject.careActionType);
+} ;
+
+exports.example = TMRobject ;
+exports.example1 = TMRobject ;
+exports.example2 = TMRobject2 ;
