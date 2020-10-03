@@ -1,19 +1,67 @@
 'use strict';
 
+function Card( uuid, patient, resourcesList) {
+    this.uuid = uuid ;
+    this.patient = patient ;
+    this.patientFhirId = 'Patient/' + patient;
+}
+const cdsCard = {
+	"cards": [
+		{
+			"summary": "mitigated COPD proposed care plan",
+			"indicator": "info",
+			"source": {
+				"label": "GOLD 2017 COPD guideline"
+			},
+			"suggestions": [
+				{
+					"label": "COPD care plan decision support",
+					"uuid": "CIG-2803202017350345",
+					"actions": [
+						{
+							"type": "update",
+							"description": "Update COPD care plan",
+							"resource": {
+								"resourceType": "Bundle",
+								"id": "COPDbundle",
+								"type": "collection",
+								"entry": []
+							}
+						}
+					]
+				}
+			],
+			"selectionBehaviour": "at-most-one"
+		}
+	]
+};
+
+//patient entry on cds cards (action array)
+const patientEntry = {
+    fullUrl: "http://acme.com/Patient/pat1", //TODO: add pat id
+    resource: {
+        resourceType: "Patient",
+        id: "pat1", //TODO: add patient id
+        active: true,
+        birthDate: "1974-12-25" //TODO: add birthdate
+    }
+};
+
 //class to represent Medication FHIR resources
 class FhirMedication {
 
-     /**
+    /**
      * 
+     * @param {string} url 
      * @param {object} careActionTypeObject 
      */
-    constructor(careActionTypeObject) {
+    constructor(url, careActionTypeObject) {
 
         this._id = String(careActionTypeObject.code);
         this._codingSystem = String(careActionTypeObject.id);
         this._codingCode = String(careActionTypeObject.drugLabel);
         this._codingDisplay = String(careActionTypeObject.display);
-        this._fullUrl = this.showFullUrl(careActionTypeObject);
+        this._fullUrl = url;
         this._codeObject = {
             coding:
                 [
@@ -24,27 +72,7 @@ class FhirMedication {
                     }
                 ]
         };
-        
-    }
 
-    /**
-    * 
-    * @param {object} careActionTypeObject the care action type object (potentially a FHIR resource) to be compared with the resource for identical identifiers
-    * 
-    * @returns {boolean}
-    */
-    compareFullUrlWith(careActionTypeObject) {
-        let lhs = this.showFullUrl(careActionTypeObject) ;
-        let rhs = String(this._fullUrl);
-        return lhs === rhs;
-    }
-
-    /**
-     * 
-     * @param {object} careActionTypeObject an intance object of a TMR-based care action type
-     */
-    showFullUrl(careActionTypeObject) {
-        return 'http://anonymous.org/Medication/' + careActionTypeObject.code;
     }
 
     /**
@@ -70,54 +98,27 @@ class FhirMedication {
 class FhirCondition {
 
     /**
-     * 
-     * @param {object} situationTypeList 
+     * @param {string} fullUrl
+     * @param {object} preSit 
      * @param {string} patient 
      */
-    constructor(situationTypeList, patient) {
-
-        this.__conditionUrlPrefix = 'http://anonymous.org/Condition/';
-        const preSitObject = (String(situationTypeList[0].type) === 'hasTransformableSituation') ? situationTypeList[0] : situationTypeList[1];
-        this._id = this._codingCode = String(preSitObject.value.code);
-        this._codingSystem = String(preSitObject.id);
-        this._codingDisplay = String(preSitObject.value.display);
-        this._fullUrl = this.showFullUrl(situationTypeList);
-        this._patient = 'Patient/' + (patient !== undefined) ? String(patient) : 'dummy';
+    constructor(fullUrl, preSit, patient) {
+        this._id = String(preSit.value.code);
+        this._codingSystem = String(preSit.id);
+        this._codingDisplay = String(preSit.value.display);
+        this._fullUrl = fullUrl;
+        this._patient = 'Patient/' + (patient) ? String(patient) : 'dummy';
         this._codeObject = {
             coding:
                 [
                     {
                         system: this._codingSystem,
-                        code: this._codingCode,
+                        code: this.id,
                         display: this._codingDisplay
                     }
                 ]
-        } ;
+        };
     }
-
-    /**
-     * 
-     * @param {string} situationTypeList 
-     * @param {object} conditionObject 
-     * 
-     * @returns {boolean}
-     */
-     compareFullUrlWith(situationTypeList) {
-        return this.showFullUrl(situationTypeList) == String(this._fullUrl);
-    }
-
-    /**
-     * 
-     * @param {object} situationTypeList an intance object of a TMR-based care action type
-     * 
-     * @returns {string}
-     */
-    showFullUrl(situationTypeList) {
-
-        const preSitObject = (String(situationTypeList[0].type) === 'hasTransformableSituation') ? situationTypeList[0] : situationTypeList[1];
-        return this._conditionUrlPrefix + String(preSitObject.value.code) ;
-    }
-
 
     /**
      * Transforms the instance into a JS object
@@ -144,111 +145,43 @@ class FhirCondition {
 //class to represent ForecastEffect FHIR resources
 class FhirForecastEffect {
 
-    /**
-     * 
-     * @param {string} tmrRecId 
-     * @param {number} beliefInstance 
-     * @param {string} patient 
-     *
-     */
-    constructor(tmrRecId, beliefInstance, beliefIndex, patient) {
+    constructor(tmrRecId, fullUrl, fhirID, situations, beliefInstance, beliefIndex, patient) {
 
         //constants of the class forecastEffect
-        let main = 'main-effect' ;
-        let side = 'side-effect' ;
-        let positive = 'adverse-event' ;
-        let negative = 'therapeutic-event' ;
-        this._medRequestPrefix = 'MedicationRequest/' ;
-        this._medicationRequestList = [] ;
-        this._forecastEffectUrlPrefix = 'http://anonymous.org/ForecastEffect/' ;
+        let main = 'main-effect';
+        let side = 'side-effect';
+        let positive = 'adverse-event';
+        let negative = 'therapeutic-event';
 
-        const sitObject = this.getSituations(beliefInstance) ;
+        this._medicationRequestList = [];
+        this.addMedicationRequestUrl(String(tmrRecId));
+
+        const situations = this.getSituations(beliefInstance);
 
         //temp let containing identifier of this ForecastEffect instance
-        this._id = this.getId(sitObject.preSituation.value.code, sitObject.postSituation.value.code, beliefIndex, beliefInstance.contribution);
-        this._fullUrl = this.showFullUrl(beliefInstance, beliefIndex) ;
-        this._effectType = (beliefIndex === 0) ? main : side ;
-        this._eventType = (String(beliefInstance.contribution) == 'positive') ? positive : negative ;
-        this._probability = String(beliefInstance.probability) ;
-        this._evidenceLevel = String(beliefInstance.evidence) ;
-        this._expectedCodingSystem = String(sitObject.postSituation.id) ;
-        this._expectedCodingCode = String(sitObject.postSituation.value.code) ;
-        this._expectedCodingDisplay = String(sitObject.postSituation.value.display) ;
+        this._id = fhirID;
+        this._fullUrl = fullUrl;
+        this._effectType = (beliefIndex === 0) ? main : side;
+        this._eventType = (String(beliefInstance.contribution) == 'positive') ? positive : negative;
+        this._probability = String(beliefInstance.probability);
+        this._evidenceLevel = String(beliefInstance.evidence);
+        this._expectedCodingSystem = String(situations.postSituation.id);
+        this._expectedCodingCode = String(situations.postSituation.value.code);
+        this._expectedCodingDisplay = String(situations.postSituation.value.display);
         this._propCodingSystem = String(beliefInstance.transition.property.id);
         this._propCodingCode = String(beliefInstance.transition.property.code);
         this._propCodingDisplay = String(beliefInstance.transition.property.display);
         this._degree = String(beliefInstance.transition.effect);
-        this._patient = 'Patient/' + (patient !== undefined ? patient : 'dummy');
-        this.medicationRequest(String(tmrRecId)) ;
-        this._condition = 'Condition/' + sitObject.preSituation.value.code;
+        this._patient = 'Patient/' + (patient)?  patient : 'dummy';
+        //convert the recomendation uri into a medication request
+        
+        this._condition = 'Condition/' + situations.preSituation.value.code;
     }
-
-
-    /**
-     * 
-     * @param {string} preSitCode 
-     * @param {string} postSitCode 
-     * @param {number} beliefIndex 
-     * @param {string} contribution 
-     */
-    getId(preSitCode, postSitCode, beliefIndex, contribution){
-        return String(preSitCode) + '2' + String(postSitCode) + ((beliefIndex === 0) ? 'M' : 'S') + String(contribution).charAt(0);
+  
+    addMedicationRequestUrl(recId) {
+        let medReq = 'MedicationRequest/' + recId.slice(26);
+        this._medicationRequestList.push({ reference: medReq });
     }
-    /**
-     * 
-     * @param {object} beliefInstance 
-     * @param {number} beliefIndex 
-     */
-    showFullUrl(beliefInstance, beliefIndex) {
-
-        const sitsObject = this.getSituations(beliefInstance.transition.situationTypes);
-
-        return  'http://anonymous.org/ForecastEffect/' + this.getId(sitsObject.preSituation.value.code, sitsObject.postSituation.value.code, beliefIndex, beliefInstance.contribution) ;
-    }
-
-    /**
-     * 
-     * @param {object} beliefInstance 
-     * 
-     * @returns {boolean} 
-     */
-    compareFullUrlWith(beliefInstance, beliefIndex) {
-        let lhs = this.showFullUrl(beliefInstance, beliefIndex);
-        let rhs = String(this._fullUrl);
-        return lhs == rhs;
-    }
-
-    /**
-     * 
-     * @param {object} situationTypeList 
-     */
-    getSituations(situationTypeList){
-        let preSit, postSit;
-
-        preSit = JSON.parse(situationTypeList[0]) ;
-        postSit = JSON.parse(situationTypeList[1]) ;
-
-        //check assignment is not the other way
-        if (String(postSit.type) === 'hasTransformableSituation') {
-            //copy not shared
-            let temp = JSON.parse(JSON.stringify(postSit)) ;
-            postSit = preSit ;
-            preSit = temp;
-        } 
-
-        return {preSituation: preSit, postSituation: postSit} ;
-    }
-
-
-    /**
-     * 
-     * @param {string} recId add another MedicationRequest resource to this ForecastEffect
-     */
-    set medicationRequest(recId) {
-        this._medicationRequestList.push({ reference: (this._medRequestPrefix + recId.slice(26)) });
-    }
-
-
 
     toJSON() {
         return {
@@ -296,32 +229,87 @@ class FhirForecastEffect {
 
 }
 
-//TODO: IM HERE
 class FhirMedicationRequest {
 
 
     /**
-     * 
+     * @param {string} fullUrl FHIR entry element unique ULR
+     * @param {string} id FHIR resource identifier
      * @param {object} recObject TMR recomendation object
+     * @param {object} interactions TMR interactions object
      * @param {string} patient patient id
      */
-    constructor(recObject, patient) {
-     
+    constructor(fullUrl, id, recObject, interactions, patient) {
+
         this._conditionList = [];
         this._forecastEffectList = [];
-        this.__detectedIssueList = [] ;
-        this._detectedIssuePrefix = 'DetectedIssue/';
-        this._medRequestUrlPrefix = 'http://anonymous.org/MedicationRequest/';
-        this._fullUrl = this.showFullUrl(recObject);
-        this._id = String(recObject.id).slice(26);
+        this._detectedIssueList = [];
+        this._fullUrl = fullUrl;
+        this._id = id;
         this._cigUri = String(recObject.derivedFrom);
-        this._patient = 'Patient/' + (patient !== undefined) ? patient :  'dummy';
+        this._patient = 'Patient/' + (patient !== undefined) ? patient : 'dummy';
         this._medication = 'Medication/' + String(recObject.careActionType.code);
         this._doNotRecommend = String(recObject.suggestion) === 'nonrecomend';
         //create list of Conditions and ForecastEffects -both have the same number of resources
         this.createResourcesList(recObject.causationBeliefs);
+        this.addDetectedIssues(interactions);
     }
 
+    getSituations(situationTypeList) {
+
+        let preSit = JSON.parse(situationTypeList[0]);
+        let postSit = JSON.parse(situationTypeList[1]);
+
+        //check it is not the other way around
+        if (String(postSit.type) === 'hasTransformableSituation') {
+            //copy not shared
+            let temp = JSON.parse(JSON.stringify(postSit));
+            postSit = preSit;
+            preSit = temp;
+        }
+
+        return { preSituation: preSit, postSituation: postSit };
+    }
+
+    //TODO: add method to create detected issue list
+    addDetectedIssues(interactionList){
+        for (let index = 0; index < interactionList.length; index++) {
+            const interaction = interactionList[index];
+            if(interaction){
+                const interType = interaction.type;
+                const norms = interaction.interactionNorms;
+                const prefix = 'DetectedIssue/';
+                let recomId;
+                let recomType;
+                if(Array.isArray(norms)){
+
+                    for (let i = 0, len = norms.length; i < len; i++) {
+
+                         recomId = String(entry.recId) ;
+                         recomType = String(entry.type) ;   
+
+                        //reconstruct TMR URI for recommendation
+                        const id = ('http://anonymous.org/data/' + this.id) ;
+
+                        if(id === recomId){
+
+                            let refId = prefix + interType + i ;
+                            this._detectedIssueList.push({
+                                reference: refId
+                            });
+
+                            //break the loop
+                            break;
+                        }
+                    }
+                }
+                
+            }
+            
+        }
+
+    }
+    
 
     /**
      * 
@@ -332,48 +320,29 @@ class FhirMedicationRequest {
     createResourcesList(causationBeliefList) {
 
         //add a reference to both lists above
-        for (let i = 0; i < causationBeliefList.length; i++) {
+        for (let beliefIndex = 0; beliefIndex < causationBeliefList.length; beliefIndex++) {
+
+             //retrieve causation belief
+             let cb = causationBeliefList[beliefIndex];
 
             //extract pre and post situation objects
-            let preSit, postSit;
-            //retrieve causation belief
-            let cb = causationBeliefList[i];
-
+            const sitObject = this.getSituations(cb.situationTypes);
             //retrieve condition id
-            let preSituation = String(cb.situationTypes[0].value.code);
+            let preSituation = sitObject.preSituation;;
             const condition = 'Condition/' + preSituation;
             //retrieve forecastEffectId
-            let postSituation = cb.situationTypes[1].value.code;
-            let forecastEffectId = preSituation + '2' + postSituation + ((i === 0) ? 'M' : 'S') + cb.contribution.charAt(0);
+            let postSituation = sitObject.postSituation;
+            let isMainEffect = beliefIndex === 0;
+            let forecastEffectId = preSituation + '2' + postSituation + ( isMainEffect? 'M' : 'S') + cb.contribution.charAt(0);
             const forecastEffect = 'ForecastEffect/' + forecastEffectId;
-            //add condition id
-            this._conditionList.push({ reference: condition });
+            //add condition id if this is the main effect (side effects conditions can be fetched via forecast effects)
+            if(isMainEffect) this._conditionList.push({ reference: condition });
             //add forecastEffect id
             this._forecastEffectList.push({ reference: forecastEffect });
         }
     }
 
-    /**
-    * 
-    * @param {object} tmrRecObject 
-    * 
-    * @returns {boolean} 
-    */
-    compareFullUrlWith(tmrRecObject) {
-        let lhs = this.showFullUrl(tmrRecObject);
-        let rhs = String(this._fullUrl);
-        return lhs == rhs;
-    }
 
-    /**
-     * 
-     * @param {object} tmrRecObject TMR-based recomendation in JSON notation
-     */
-    showFullUrl(tmrRecObject) {
-        return this._medRequestUrlPrefix + String(tmrRecObject.id).slice(26);
-    }
-
-    
     toJSON() {
         return {
             fullUrl: this._fullUrl,
@@ -400,13 +369,13 @@ class FhirMedicationRequest {
 
 class FhirServiceRequest {
 
-     /**
-     * 
-     * @param {object} recObject TMR recomendation object
-     * @param {string} patient patient id
-     */
-    constructor(recObject, patient) {
-     
+    /**
+    * 
+    * @param {object} recObject TMR recomendation object
+    * @param {string} patient patient id
+    */
+    constructor(fullUrl, id, recObject, patient) {
+
         this._conditionList = [];
         this._forecastEffectList = [];
 
@@ -414,15 +383,15 @@ class FhirServiceRequest {
         this._serviceSystem = String(careActionTypeObject.id);
         this._serviceCode = String(careActionTypeObject.drugLabel);
         this._serviceDisplay = String(careActionTypeObject.display);
-        this._medRequestUrlPrefix = 'http://anonymous.org/MedicationRequest/';
-        this._fullUrl = this.showFullUrl(recObject);
-        this._id = String(recObject.id).slice(26);
+        //this._medRequestUrlPrefix = 'http://anonymous.org/MedicationRequest/';
+        this._fullUrl = fullUrl;
+        this._id = id;
         this._cigUri = String(recObject.derivedFrom);
-        this._patient = 'Patient/' + (patient !== undefined) ? patient :  'dummy';
+        this._patient = 'Patient/' + (patient) ? patient : 'dummy';
         this._medication = 'Medication/' + String(recObject.careActionType.code);
         this._doNotRecommend = String(recObject.suggestion) === 'nonrecomend';
         //create list of Conditions and ForecastEffects -both have the same number of resources
-        this.createResourcesList(recObject.causationBeliefs);
+        this.createResourcesLists(recObject.causationBeliefs);
     }
 
     /**
@@ -430,7 +399,7 @@ class FhirServiceRequest {
      * @param {object} tmrRecObject TMR-based recomendation in JSON notation
      */
     showFullUrl(tmrRecObject) {
-        return this._medRequestUrlPrefix + String(tmrRecObject.id).slice(26);
+        return 'http://anonymous.org/MedicationRequest/' + String(tmrRecObject.id).slice(26);
     }
 
     /**
@@ -461,7 +430,7 @@ class FhirServiceRequest {
                     reference: this._patient
                 }
             }
-        } ;
+        };
     }
 }
 
@@ -493,7 +462,7 @@ class FhirDetectedIssue {
                 },
                 implicated: this._implicatedList
             }
-        } ;
+        };
     }
 }
 
@@ -519,7 +488,233 @@ class FhirCarePlan {
                 reference: this._patient
             },
             activity: this._activityList
-        } ;
+        };
+    }
+}
+
+/////////////////////// Classes holding resources
+
+class MedicationResources {
+
+    /**
+     * 
+     * @param {Map<string, FhirMedication>} map Create a Map of medication resources
+     */
+    constructor(map) {
+        //Map containing medication resources
+        this.map = map;
+    }
+
+    /**
+     * 
+     * @param {object} careAction an intance object of a TMR-based care action type
+     */
+    showFullUrl(careAction) {
+        return 'http://anonymous.org/Medication/' + careAction.code;
+    }
+
+    /**
+     * Given a TMR Recommendation, converts a tmr care action type into a FHIR medication and adds it to a Map object, if the care action has not been converted before.
+     */
+    add() {
+        //obtain argument from the calling function
+        return (tmrRec) => {
+            //TODO: add error checker for objects that do not have careActionType properties
+            let careAction = tmrRec["careActionType"];
+            //if not undefined, act on it
+            if (careAction) {
+                //create Fhir URL
+                const url = this.showFullUrl(careAction);
+                //if it does find key, add new medication using the care action type
+                if (!this.map.has(url)) {
+                    this.map.set(url, new FhirMedication(url, careAction));
+                }
+            }
+        };
+    }
+
+    get resourcesList() {
+        //map values to array
+        return Array.from(this.map.values());
+    }
+}
+class ConditionResources {
+
+    /**
+     * 
+     * @param {Map<string, FhirCondition>} map Create a Map of condition resources
+     */
+    constructor(map) {
+        //Map containing  resources
+        this.map = map;
+    }
+
+    showFullUrl(preSitObject) {
+
+        return 'http://anonymous.org/Condition/' + String(preSitObject.value.code);
+    }
+
+    getPreSitObject(situationTypeList){
+        return (String(situationTypeList[0].type) === 'hasTransformableSituation') ? situationTypeList[0] : situationTypeList[1];
+    }
+
+    add() {
+        //obtain argument from the calling function
+        return (cb, patient) => {
+
+            //if not undefined, act on it
+            if (cb) {
+                let preSit = this.getPreSitObject(cb.situationTypes);
+                //create Fhir URL
+                const url = this.showFullUrl(preSit);
+                //if it does find key, add new medication using the care action type
+                if (!this.map.has(url)) {
+                    this.map.set(url, new FhirCondition(url, preSit, patient));
+                }
+            }
+        };
+    }
+
+    /**
+     * create a JSON object containing all  resources.
+     */
+    get ResourceList() {
+        //map values to array
+        return Array.from(this.map.values());
+    }
+}
+class FhirForecastEffectResources {
+
+    /**
+     * 
+     * @param {Map<string, FhirForecastEffect>} map Create a Map of  resources
+     */
+    constructor(map) {
+        //Map containing medication resources
+        this.map = map;
+    }
+
+    getId(preSituation, postSituation, beliefIndex, contribution) {
+        return String(preSituation) + '2' + String(postSituation) + ((beliefIndex === 0) ? 'M' : 'S') + contribution.charAt(0);
+    }
+
+    getSituations(situationTypeList) {
+
+        let preSit = JSON.parse(situationTypeList[0]);
+        let postSit = JSON.parse(situationTypeList[1]);
+
+        //check it is not the other way around
+        if (String(postSit.type) === 'hasTransformableSituation') {
+            //copy not shared
+            let temp = JSON.parse(JSON.stringify(postSit));
+            postSit = preSit;
+            preSit = temp;
+        }
+
+        return { preSituation: preSit, postSituation: postSit };
+    }
+
+     showFullUrl(fhirId) {
+        return 'http://anonymous.org/ForecastEffect/' + fhirId;
+    }
+
+    /**
+     * Given a TMR Recommendation, converts a tmr care action type into a FHIR medication and adds it to a Map object, if the care action has not been converted before.
+     */
+    add() {
+        //obtain argument from the calling function
+        return ({recId, beliefInstance, index, patient}) => {
+            //if not of type undefined, act on it
+            if (beliefInstance) {
+                const sitObject = this.getSituations(beliefInstance.situationTypes);
+                const fhirId = this.getId(sitObject.preSituation, sitObject.postSituation, index, beliefInstance.contribution);
+                //create Fhir URL
+                const url = this.showFullUrl(fhirId);
+                //if it does find key, add new medication using the care action type
+                if (!this.map.has(url)) {
+                    this.map.set(url, new FhirForecastEffect(recId, url, fhirId, sitObject, beliefInstance, index, patient));
+                } else {
+                    //if it already exits, add the MedicationRequest url to the instance
+                    this.map.get(url).addMedicationRequestUrl(recId);
+                }
+            }
+        };
+    }
+
+    getResourcesList() {
+        //map values to array
+        return Array.from(this.map.values());
+    }
+}
+class FhirMedicationRequestResources {
+
+    /**
+     * 
+     * @param {Map<string, FhirForecastEffect>} map Create a Map of  resources
+     */
+    constructor(map) {
+        //Map containing medication resources
+        this.map = map;
+    }
+
+        /**
+     * 
+     * @param {object} tmrRecObject TMR-based recomendation in JSON notation
+     */
+    showFullUrl(tmrRecObject) {
+        return 'http://anonymous.org/MedicationRequest/' + String(tmrRecObject.id).slice(26);
+    }
+
+    getId(preSituation, postSituation, beliefIndex, contribution) {
+        return String(preSituation) + '2' + String(postSituation) + ((beliefIndex === 0) ? 'M' : 'S') + contribution.charAt(0);
+    }
+
+    getSituations(situationTypeList) {
+
+        let preSit = JSON.parse(situationTypeList[0]);
+        let postSit = JSON.parse(situationTypeList[1]);
+
+        //check it is not the other way around
+        if (String(postSit.type) === 'hasTransformableSituation') {
+            //copy not shared
+            let temp = JSON.parse(JSON.stringify(postSit));
+            postSit = preSit;
+            preSit = temp;
+        }
+
+        return { preSituation: preSit, postSituation: postSit };
+    }
+
+     showFullUrl(fhirId) {
+        return 'http://anonymous.org/ForecastEffect/' + fhirId;
+    }
+
+    /**
+     * Given a TMR Recommendation, converts a tmr care action type into a FHIR medication and adds it to a Map object, if the care action has not been converted before.
+     */
+    add() {
+        //obtain argument from the calling function
+        return ({recId, beliefInstance, index, patient}) => {
+            //if not of type undefined, act on it
+            if (beliefInstance) {
+                const sitObject = this.getSituations(beliefInstance.situationTypes);
+                const fhirId = this.getId(sitObject.preSituation, sitObject.postSituation, index, beliefInstance.contribution);
+                //create Fhir URL
+                const url = this.showFullUrl(fhirId);
+                //if it does find key, add new medication using the care action type
+                if (!this.map.has(url)) {
+                    this.map.set(url, new FhirForecastEffect(recId, url, fhirId, sitObject, beliefInstance, index, patient));
+                } else {
+                    //if it already exits, add the MedicationRequest url to the instance
+                    this.map.get(url).addMedicationRequestUrl(recId);
+                }
+            }
+        };
+    }
+
+    getResourcesList() {
+        //map values to array
+        return Array.from(this.map.values());
     }
 }
 
@@ -574,7 +769,7 @@ const TMRobject = {
             }
         }
     ]
-} ;
+};
 
 const TMRobject2 = {
     "id": "http://anonymous.org/data/RecCOPD-LabaDecLowRiskCdrShouldnot",
@@ -625,30 +820,25 @@ const TMRobject2 = {
             }
         }
     ]
-} ;
+};
 
-exports.getMedication = careActionType => {
-    return new FhirMedication(careActionType);
-} ;
-exports.getCondition = RecObject => {
-    return new FhirCondition(situationTypes);
-} ;
-exports.getForecastEffect = RecObject => {
-    return new FhirMedication(RecObject.careActionType);
-} ;
+exports.getMedication = tmrRec => new FhirMedication(tmrRec.careActionType);
+
+exports.getCondition = (tmrRec, index) => new FhirCondition(tmrRec.situationTypes);
+exports.getForecastEffect = (tmrRecId, beliefInstance, beliefIndex, patient) => new FhirMedication(tmrRecId, beliefInstance, beliefIndex, patient);
 exports.getMedicationRequest = RecObject => {
     return new FhirMedication(RecObject.careActionType);
-} ;
+};
 exports.getFhirServiceRequest = RecObject => {
     return new FhirMedication(RecObject.careActionType);
-} ;
+};
 exports.getDetectedIssue = RecObject => {
     return new FhirMedication(RecObject.careActionType);
-} ;
+};
 exports.getCarePlan = RecObject => {
     return new FhirMedication(RecObject.careActionType);
-} ;
+};
 
-exports.example = TMRobject ;
-exports.example1 = TMRobject ;
-exports.example2 = TMRobject2 ;
+exports.example = TMRobject;
+exports.example1 = TMRobject;
+exports.example2 = TMRobject2;
