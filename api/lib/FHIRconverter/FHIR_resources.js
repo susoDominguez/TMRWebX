@@ -94,7 +94,7 @@ function getResourceList() {
 }
 
 function getId(preSituation, postSituation, beliefIndex, contribution) {
-    return String(preSituation) + '2' + String(postSituation) + ((beliefIndex === 0) ? 'M' : 'S') + contribution.charAt(0);
+    return String(preSituation.value.code + '2' + postSituation.value.code + ((beliefIndex === 0) ? 'M' : 'S') + contribution.charAt(0));
 }
 
 function add_MainCond_and_EffectList(causationBeliefs) {
@@ -102,16 +102,21 @@ function add_MainCond_and_EffectList(causationBeliefs) {
    let condition, forecastEffect;
 
    if(Array.isArray(causationBeliefs)) {
-           causationBeliefs.map( function( {id, contribution, probability, evidence, author, transition, situationTypes}, index){
+           causationBeliefs.map( function( {id, contribution, probability, evidence, author, transition}, index){
              //extract pre and post situation objects
-             let {preSituation, postSituation} = this.getSituations(situationTypes);
-                condition = 'Condition/' + preSituation;
+             if(Array.isArray(transition.situationTypes)){
+
+             let {preSituation, postSituation} = this.getSituations(transition.situationTypes);
+                condition = 'Condition/' + preSituation.value.code;
                 //add condition id if this is the main effect (side effects conditions can be fetched via forecast effects)
                 if(index === 0) this._conditionList.push({ reference: condition });
 
-                forecastEffect = 'ForecastEffect/' + this.getId(preSituation, postSituation, index);
+                forecastEffect = 'ForecastEffect/' + this.getId(preSituation, postSituation, index, contribution);
                 //add forecastEffect id
                 this._forecastEffectList.push({ reference: forecastEffect });
+             } else {
+                 //TODO: error
+             }
             }, this);
     } else {
         //TODO: ERROR handling
@@ -119,7 +124,7 @@ function add_MainCond_and_EffectList(causationBeliefs) {
 }
 
 function toString() {
-    JSON.stringify(this.toJSON());
+    return JSON.stringify(this.toJSON());
 }
 
 //////RESOURCE CLASSES
@@ -235,8 +240,8 @@ class FhirForecastEffect {
         //constants of the class forecastEffect
         let main = 'main-effect';
         let side = 'side-effect';
-        let positive = 'adverse-event';
-        let negative = 'therapeutic-event';
+        let  negative = 'adverse-event';
+        let positive = 'therapeutic-event';
 
         
         this.addRequestUrl(recId, request);
@@ -340,19 +345,19 @@ class FhirMedicationRequest {
 
     /**
      *  
-     * @param {Array} interactionList 
+     * @param {Array} interactionList           TODO: check algorithm
      */
     addDetectedIssues(interactionList) {
 
         if(Array.isArray(interactionList)) {
 
-            const prefix = 'DetectedIssue/';
+            let prefix = 'DetectedIssue/';
             //reconstruct TMR URI for recommendation
-            const tmrId = ('http://anonymous.org/data/' + this.id) ;
-            let refId;
+            let tmrId = ('http://anonymous.org/data/' + this.id) ;
+            let refId ;
 
             interactionList.map( ({type, interactionNorms}, index) => {
-                 refId = prefix + type + index ;
+                 refId = String(prefix + type + index);
 
                 if(Array.isArray(interactionNorms)) {
 
@@ -363,12 +368,15 @@ class FhirMedicationRequest {
                             this._detectedIssueList.push({
                                 reference: refId
                             });
+                        } else {
+                            console.log(normObject.recId + ' not equal to ' + tmrId + '\n');
                         }
 
                     }, this);
 
                 } else {
                     //TODO: throw error
+                    console.log('not array');
                 }
             }, this);       
         }
@@ -538,9 +546,11 @@ class MedicationResources {
 
     /**
      * 
-     * @param {object} careAction an intance object of a TMR-based care action type
+     * @param {string} code
      */
-    showFullUrl = ({id, code, display, requestType , drugLabel}) => 'http://anonymous.org/Medication/' + code;
+    showFullUrl(code) {
+         return 'http://anonymous.org/Medication/' + code ;
+    }
 
     /**
      * Given a TMR Recommendation, converts a tmr care action type into a FHIR medication and adds it to a Map object, if the care action has not been converted before.
@@ -551,12 +561,13 @@ class MedicationResources {
             
             if (careActionType) {
                 //create Fhir URL
-                const url = this.showFullUrl(careActionType);
+                const url = this.showFullUrl(careActionType.code);
                 //if it does not find key, add new medication using the care action type
                 if (!this.map.has(url)) {
                     this.map.set(url, new FhirMedication(url, careActionType));
                 }
             }
+            return this;
         };
     }
 }
@@ -577,33 +588,41 @@ class ConditionResources {
         this.map = map;
     }
 
-    showFullUrl({id, type, value : {code, display}}) {
-
-        return 'http://anonymous.org/Condition/' + String(code);
+    showFullUrl(code) {
+        return 'http://anonymous.org/Condition/' + code;
     }
 
     add() {
         //obtain argument from the calling function
-        return ({id, contribution, probability, evidence, author, transition, situationTypes}, patient) => {
+        return ({id, contribution, probability, evidence, author, transition}, patient) => {
+            
+            const situationTypes = transition.situationTypes;
 
             //if not undefined, act on it
-            if (situationTypes) {
+            if (Array.isArray(situationTypes)) {
                 let preSit = this.getSituations(situationTypes).preSituation;
+             console.log(JSON.stringify(preSit));
                 //create Fhir URL
-                const url = this.showFullUrl(preSit);
+                const url = this.showFullUrl(preSit.value.code);
+           
                 //if it doesnt find key, add new Condition using the care action type
                 if (!this.map.has(url)) {
+                   
                     this.map.set(url, new FhirCondition(url, preSit, patient));
                 }
+                
             }
+           
+            return this;
         };
     }
 }
+
 //add getSituations to prototype of ConditionResources
 ConditionResources.prototype.getSituations = getSituations;
 ConditionResources.prototype.getResourceList = getResourceList;
 
-class FhirForecastEffectResources {
+class ForecastEffectResources {
 
     /**
      * 
@@ -623,10 +642,10 @@ class FhirForecastEffectResources {
      */
     add() {
         //obtain argument from the calling function
-        return (recId, request, {id, contribution, probability, evidence, author, transition, situationTypes}, index, patient) => {
+        return (recId, request, {id, contribution, probability, evidence, author, transition}, index, patient) => {
             //if not of type undefined, act on it
-            if ( id && contribution && probability && evidence && transition && situationTypes) {
-                const {preSituation, postSituation} = this.getSituations(situationTypes);
+            if ( id && contribution && probability && evidence && transition) {
+                const {preSituation, postSituation} = this.getSituations(transition.situationTypes);
                 const fhirId = this.getId(preSituation, postSituation, index, contribution);
                 //create Fhir URL
                 const url = this.showFullUrl(fhirId);
@@ -640,20 +659,21 @@ class FhirForecastEffectResources {
             } else {
                 //TODO: error checking
             }
+            return this;
         };
     }
 }
 //adding function getSituations to class FhirForecastEffect
-FhirForecastEffectResources.prototype.getSituations = getSituations;  
-FhirForecastEffectResources.prototype.getResourceList = getResourceList;
-FhirForecastEffectResources.prototype.getId = getId;
+ForecastEffectResources.prototype.getSituations = getSituations;  
+ForecastEffectResources.prototype.getResourceList = getResourceList;
+ForecastEffectResources.prototype.getId = getId;
 
 
-class FhirMedicationRequestResources {
+class MedicationRequestResources {
 
     /**
      * 
-     * @param {Map<string, FhirForecastEffect>} map Create a Map of  resources
+     * @param {Map<string, FhirMedicationRequest>} map Create a Map of  resources
      */
     constructor(map) {
         //Map containing medication resources
@@ -684,21 +704,21 @@ class FhirMedicationRequestResources {
                     this.map.set(url, new FhirMedicationRequest(url, fhirId, {id, text, motivation, derivedFrom, suggestion, careActionType, causationBeliefs}, interactions, patient));
                 } 
             }
-        
+            return this;
         };
     }
 }
 
 //adding function getSituations to class FhirForecastEffect
-FhirMedicationRequestResources.prototype.getSituations = getSituations;  
-FhirMedicationRequestResources.prototype.getResourceList = getResourceList;
-FhirMedicationRequestResources.prototype.getId = getId;
+MedicationRequestResources.prototype.getSituations = getSituations;  
+MedicationRequestResources.prototype.getResourceList = getResourceList;
+MedicationRequestResources.prototype.getId = getId;
 
-class FhirServiceRequestResources {
+class ServiceRequestResources {
 
     /**
      * 
-     * @param {Map<string, FhirForecastEffect>} map Create a Map of  resources
+     * @param {Map<string, FhirServiceRequest>} map Create a Map of  resources
      */
     constructor(map) {
         //Map containing medication resources
@@ -729,15 +749,16 @@ class FhirServiceRequestResources {
                     this.map.set(url, new FhirServiceRequest(url, fhirId, {id, text, motivation, derivedFrom, suggestion, careActionType, causationBeliefs}, patient));
                 } 
             }
+            return this;
         
         };
     }
 }
 
 //adding function getSituations to class FhirForecastEffect
-FhirServiceRequestResources.prototype.getSituations = getSituations;  
-FhirServiceRequestResources.prototype.getResourceList = getResourceList;
-FhirServiceRequestResources.prototype.getId = getId;
+ServiceRequestResources.prototype.getSituations = getSituations;  
+ServiceRequestResources.prototype.getResourceList = getResourceList;
+ServiceRequestResources.prototype.getId = getId;
 
 //use case
 const TMRobject = {
@@ -764,7 +785,6 @@ const TMRobject = {
                 "id": "http://anonymous.org/data/TrIncLowRiskCdr",
                 "effect": "increase",
                 "property": {
-                    //added on 22/09/20202. TODO: add to all elements PRoperty
                     "id": "http://anonymous.org/data/PropCrd",
                     "display": "risk of having cardiac rhythm disturbances",
                     "code": "Crd"
@@ -788,32 +808,171 @@ const TMRobject = {
                     }
                 ]
             }
+        },
+        {
+            "id": "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr4",
+            "contribution": "negative",
+            "probability": "always",
+            "evidence": "High Level",
+            "author": "JDA",
+            "transition": {
+                "id": "http://anonymous.org/data/TrIncLowRiskCdr4",
+                "effect": "increase",
+                "property": {
+                    "id": "http://anonymous.org/data/PropCrd4",
+                    "display": "risk of having cardiac rhythm disturbances",
+                    "code": "Crd"
+                },
+                "situationTypes": [
+                    {
+                        "id": "http://anonymous.org/data/SitLowRiskCrd4",
+                        "type": "hasTransformableSituation",
+                        "value": {
+                            "code": "SitLowRiskCrd",
+                            "display": "a low risk of having cardiac rhythm disturbances"
+                        }
+                    },
+                    {
+                        "id": "http://anonymous.org/data/SitMildAls4",
+                        "type": "hasExpectedSituation",
+                        "value": {
+                            "code": "SitHighRiskCrd",
+                            "display": "a high risk of having cardiac rhythm disturbances"
+                        }
+                    }
+                ]
+            }
         }
     ]
 };
 
-exports.cardParams =  cardParams;
-exports.createCard = (options) => new Card(options);
-exports.getMedication = (url, {id, text, motivation, derivedFrom, suggestion, careActionType, causationBeliefs}) => new FhirMedication(url, careActionType);
-exports.createMedicationList = 
-exports.getCondition = (url, {id, contribution, probability, evidence, author, transition, situationTypes}, index) => new FhirCondition(url, situationTypes);
-exports.getForecastEffect = (tmrRecId, beliefInstance, beliefIndex, patient) => new FhirMedication(tmrRecId, beliefInstance, beliefIndex, patient);
-/*exports.getMedicationRequest = RecObject => {
-    return new FhirMedication(RecObject.careActionType);
-};*/
+const TMRobject2 = {
+    "id": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+    "text": "clinician should avoid recommending administration of Beta Agonist bronchodilators to patients with cardiovascular disease",
+    "motivation": "none",
+    "derivedFrom": "GOLD COPD 2017",
+    "suggestion": "recommend",
+    "careActionType": {
+        "id": "http://anonymous.org/data/DrugTLaba",
+        "code": "DrugTLaba",
+        "display": "administration of LABA",
+        "requestType": 1,
+        "drugLabel": "LABA"
+    },
+    "causationBeliefs": [
+        {
+            "id": "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr",
+            "contribution": "negative",
+            "probability": "always",
+            "evidence": "High Level",
+            "author": "JDA",
+            "transition": {
+                "id": "http://anonymous.org/data/TrIncLowRiskCdr",
+                "effect": "increase",
+                "property": {
+                    "id": "http://anonymous.org/data/PropCrd",
+                    "display": "risk of having cardiac rhythm disturbances",
+                    "code": "Crd"
+                },
+                "situationTypes": [
+                    {
+                        "id": "http://anonymous.org/data/SitModAls",
+                        "type": "hasTransformableSituation",
+                        "value": {
+                            "code": "SitModAls",
+                            "display": "a low risk of having cardiac rhythm disturbances"
+                        }
+                    },
+                    {
+                        "id": "http://anonymous.org/data/SitMildAls",
+                        "type": "hasExpectedSituation",
+                        "value": {
+                            "code": "SitMildAls",
+                            "display": "a high risk of having cardiac rhythm disturbances"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+};
 
-/*
-exports.getFhirServiceRequest = RecObject => {
-    return new FhirMedication(RecObject.careActionType);
-};
-exports.getDetectedIssue = RecObject => {
-    return new FhirMedication(RecObject.careActionType);
-};
-exports.getCarePlan = RecObject => {
-    return new FhirMedication(RecObject.careActionType);
-};
+const interactions = [
+    {
+        "type": "alternative",
+        "interactionNorms": [
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                "type": "primary"
+            },
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                "type": "primary"
+            },
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                "type": "primary"
+            }
+        ]
+    },
+    {
+        "type": "repetition",
+        "interactionNorms": [
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                "type": "primary"
+            },
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                "type": "primary"
+            },
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                "type": "primary"
+            }
+        ]
+    },
+    {
+        "type": "contradiction",
+        "interactionNorms": [
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShouldShould",
+                "type": "primary"
+            },
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                "type": "primary"
+            }
+        ]
+    },
+    {
+        "type": "contradiction",
+        "interactionNorms": [
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                "type": "primary"
+            },
+            {
+                "recId": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                "type": "primary"
+            }
+        ]
+    }
+];
 
-exports.example = TMRobject;
-exports.example1 = TMRobject;
-exports.example2 = TMRobject2;
-*/
+//const medObj = new MedicationResources(new Map());
+let condObj = new ConditionResources(new Map());
+let medReqObj = new MedicationRequestResources(new Map());
+let  servReq = new ServiceRequestResources(new Map());
+let effectObj = new ForecastEffectResources(new Map());
+
+//exports.cardParams =  cardParams;
+//exports.createCard = (options) => new Card(options);
+//exports.addMedication = medObj.add();
+exports.addCondition = condObj.add();
+exports.addMedicationRequest = medReqObj.add();
+exports.addServiceRequest = servReq.add();
+exports.addForecastEffect = effectObj.add();
+exports.rec1 = TMRobject;
+exports.rec2 = TMRobject2;
+exports.interactions = interactions;
