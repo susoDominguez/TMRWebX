@@ -1,5 +1,7 @@
 "use strict";
 
+const {assert} = require('@sindresorhus/is');
+
 //TODO: entries array to string or JSON
 function Card(options = {}) {
   const {
@@ -84,7 +86,7 @@ const med_ID = "Medication",
   effect_ID = "ForecastEffect",
   medReq_ID = "MedicationRequest",
   servReq_ID = "ServiceRequest",
-  interact_ID = "Interactions",
+  interact_ID = "interactions",
   detecIs_ID = "DetectedIssue",
   carePlan_ID = "CarePlan";
 /**
@@ -100,65 +102,153 @@ const altInter = "alternative",
   contrInter = "contradiction",
   repairInter = "repairable",
   repetInter = "repetition";
+
+  //mitigation codes for contradiction
+const contrMitStopped = '13', contrMitAlt = 'ALTHRPYMIT', contrMitRep = 'INVEFFCTMIT';
+
 //interaction types
 const interactionCodes = new Map(
   [
     altInter,
     {
-      interaction: {
-            system: "http://anonymous.org/Interactions/alternative",
-            code: "alternative",
+      interaction: [{
+            system: "http://anonymous.org/CodeSystem/interactions",
+            code: "ALTHRPY",
             display: "Alternative Therapies With Same Intended Effect" 
-      },
-      mitigation: {
-        system: "",
-        code: "",
-        display: "",
-      }
+      }],
+      mitigation: [
+        { 
+            action: {
+                coding: [
+                    {
+                    system: "http://anonymous.org/CodeSystem/interactions",
+                    code: "NOTREQ",
+                    display: "Mitigation Not Required",
+                    }
+                ]
+            }
+        }
+      ]
     }
   ],
   [
     contrInter,
     {
-      interaction: {
+      interaction: [{
         system: "http://terminology.hl7.org/CodeSystem/v3-ActCode",
         code: "DACT",
         display: "Drug Action Detected Issue",
-      },
-      mitigation: {
-        system: "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-        code: "13",
-        display: "Stopped Concurrent Therapy",
-      }
+      }],
+      mitigation: [
+        { 
+            action: {
+                coding: [
+                            {
+                             system: "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                             code: contrMitStopped,
+                            display: "Stopped Concurrent Therapy",
+                            }
+                        ]
+                    }
+         },
+        {
+            action: {
+                coding: [
+                    {
+                        system: "http://terminology.hl7.org/CodeSystem/interactions",
+                        code: contrMitAlt,
+                        display: "Selected Alternative Therapy With Same Intended Effect",
+                    }
+                ]
+            }
+        },
+        {
+            action: {
+                coding: [
+                    {
+                        system: "http://terminology.hl7.org/CodeSystem/interactions",
+                        code: contrMitRep,
+                        display: "Adverse Effect Repaired By Drug Action with Inverse Effect",
+                    }
+                ]
+            }
+        }
+      ]
     }
   ],
   [
     repetInter,
     {
-      interaction: {
-        system: "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-        code: "DUPTHPY",
-        display: "Duplicate Therapy Alert",
-      },
-      mitigation: {
-        system: "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-        code: "13",
-        display: "Stopped Concurrent Therapy",
-      }
+      interaction: [
+            {
+            system: "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+            code: "DUPTHPY",
+            display: "Duplicate Therapy Alert",
+            }
+        ],
+      mitigation: [
+        { 
+          action: {
+                coding: [
+                    {
+                        system: "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                        code: "13",
+                        display: "Stopped Concurrent Therapy",
+                    }
+                ]
+            }
+        }
+      ]
     }
   ],
-  [repairInter, {
-      interaction:
+  [
+      repairInter, 
+    {
+      interaction: 
+      [
+          {
+            system: "http://anonymous.org/codeSystem/interactions",
+            code: "INVEFFCT",
+            display: "Adverse and therapeutic therapies with inverse effect",
+          }
+      ],
       mitigation:
-  }]
+      [
+        {
+          action: {
+            coding: [
+                {
+                system: "http://anonymous.org/codeSystem/interactions",
+                code: "NOTREQ",
+                display: "Mitigation Not Required",
+                }
+            ]
+          }
+        }
+      ]
+   }
+  ]
 );
+
+//validating parameters
+//this one is when parametr is undefined the default value is an error object
+const required = (name, className) => {
+    throw new Error(`Parameter ${name} is required in class ${className}`);
+};
 //PROTOTYPE FUNCTIONS SHARED BY MORE THAN ONE CLASS
 
 /**
  *
  * @param {Array} param0 array containing pre and post situation in no specific order
  */
-function getSituations([sitA, sitB]) {
+function getSituations([sitA = required('situationA', this.constructor.name), 
+                        sitB = required('situationA', this.constructor.name)]) {
+
+      //assert they are objects
+      assert.plainObject(sitA);
+      assert.plainObject(sitB);
+     if(!('type' in sitA)) throw new Error('propery type is missing in situationType');
+
   return String(sitA.type) === "hasTransformableSituation"
     ? { preSituation: sitA, postSituation: sitB }
     : { preSituation: sitB, postSituation: sitA };
@@ -168,7 +258,11 @@ function getResourceList() {
   return Array.from(this.map.values());
 }
 
-function getId(preSituation, postSituation, beliefIndex, contribution) {
+function getId(
+    preSituation = required('preSituation', this.constructor.name),
+    postSituation = required('postSituation', this.constructor.name),
+    beliefIndex = required('beliefIndex', this.constructor.name),
+    contribution = required('contribution', this.constructor.name)) {
   return String(
     preSituation.value.code +
       "2" +
@@ -202,12 +296,12 @@ function add_MainCond_and_EffectList(causationBeliefs) {
         //add forecastEffect id
         this._forecastEffectList.push({ reference: forecastEffect });
       } else {
-        //TODO: error
+        throw new Error('causatinBeliefs is not an array in funct add_MainCond_and_EffectList');
       }
     },
     this);
   } else {
-    //TODO: ERROR handling
+    throw new Error('transition.situationTypes is not an array in funct add_MainCond_and_EffectList');
   }
 }
 
@@ -581,19 +675,24 @@ FhirServiceRequest.prototype.add_MainCond_and_EffectList = add_MainCond_and_Effe
 FhirServiceRequest.prototype.toString = toString;
 
 class FhirDetectedIssue {
+
   constructor(interactionType, interactionListIndex, normsList) {
-    this._fullUrl =
-      uriPrefix + detecIs_ID + interactionType + interactionListIndex;
-    this._issueSystem = uriPrefix + interact_ID + interactionType;
-    this._issueCode = String(interactionType);
-    this._issueDisplay = this._implicatedList = this._mitigationList; //;
+    this._fullUrl = uriPrefix + detecIs_ID + interactionType + interactionListIndex;
+    this._id = interactionType + interactionListIndex;
+    this._implicatedList = createImplicatedList(normsList);
+
+    let {interaction, mitigation} = interactionCodes.get(interactionType);
+    this._codingList = interaction;
+    this._mitigationList = mitigation;
   }
 
   createImplicatedList(list) {
     let resultList = [];
+
+    //only medicationRequests have detected interactions
     if (Array.isArray(list)) {
       resultList = list.map(
-        (item) => uriPrefix + medReq_ID + String(item).slice(26)
+        (item) => ( { reference: medReq_ID + '/' + String(item).slice(26)} )
       );
     } else {
       //throw error
@@ -601,36 +700,70 @@ class FhirDetectedIssue {
     return resultList;
   }
 
+
+  /**
+   * 
+   */
   toJSON() {
-    return {
+     return {
       fullUrl: this._fullUrl,
       resource: {
         resourceType: detecIs_ID,
         id: this._id,
         status: "preliminary",
         code: {
-          coding: [
-            {
-              system: this._issueSystem,
-              code: this._issueCode,
-              display: this._issueDisplay,
-            },
-          ],
-        },
+          coding: this.codingList 
+         }
+       },
         implicated: this._implicatedList,
-        mitigation: this._mitigationList,
-      },
-    };
-  }
+        mitigation: this._mitigationList
+      } ;
+    }
 }
 
-class FhirCarePlan {
-  _fullUrl;
-  _id;
-  _title;
-  _patient;
-  _activityList;
 
+class FhirCarePlan {
+  
+    constructor(planIndex, title, patient, requestUrlList, fhirEntries){
+        this._fullUrl = uriPrefix + carePlan_ID + '/' + carePlan_ID + planIndex;
+        this._id = carePlan_ID + planIndex;
+        this._title = title;
+        this._patient = patient;
+        this._activityList = addRequestRef(fhirEntries, requestUrlList);
+    }
+
+    /**
+     * Conver TMR URIs into FHIR URLs
+     * @param {Array} entryList list of FHIR entries already added to the instance of the response schema
+     * @param {Array} urlList list of TMR recommendations as given by the resolution engine
+     * 
+     * @returns {string} resource unique URL
+     */
+    addRequestRef(entryList, urlList){
+        let resultArr;
+        if(Array.isArray(entryList) && Array.isArray(urlList)) {
+           
+
+            resultArr = urlList.map( 
+                (urlRef) => {
+
+                    let id = String(urlRef).slice(26);
+                    //find object with same id
+                    let resource = entryList.find( 
+                        (item) => item.resource.id == id
+                        );
+
+                    let identifier = resource.resourceType + id;
+                    //return fullURl
+                    return { ref: identifier };
+                }
+            );
+        } else {
+            //throw error
+        }
+        return resultArr;
+    }
+  
   toJSON() {
     return {
       fullUrl: this._fullUrl,
@@ -970,6 +1103,66 @@ ServiceRequestResources.prototype.getSituations = getSituations;
 ServiceRequestResources.prototype.getResourceList = getResourceList;
 ServiceRequestResources.prototype.getId = getId;
 
+
+class DetectedIssueResources {
+
+    /**
+     *
+     * 
+     */
+    constructor() {
+      //Map containing  FhirDetectedIssue resources
+      this._issueArr = [];
+    }
+  
+    /**
+     * Given a TMR Recommendation, converts a tmr interaction into a FHIR DetectedIssue and adds it to a Map object, if the interaction has not been converted before.
+     */
+    add() {
+      //obtain argument from the calling function
+      return (
+        arrayInt
+      ) => {
+        if( Array.isArray(arrayInt) ) {
+            this._issueArr = arrayInt.map( 
+                (interaction, index) => new FhirDetectedIssue(interaction.type, index, interaction.interactionNorms)
+            );
+        }
+        return this;
+      };
+    }
+  }
+
+  class CarePlanResources {
+
+     constructor(){
+         this._carePlanArr = [];
+     }
+     add() {
+         return ( 
+             extensions,
+             title,
+             patient,
+             fhirReqEntries
+             ) => {
+                 if(Array.isArray(extensions) && Array.isArray(fhirReqEntries)){
+                    this._carePlanArr = extensions.map(
+                        (extenList, index) => {
+                            let requestUrlList = extenList.map( extension => extension.aboutRecommendation.id );
+                            return new FhirCarePlan(index, title, patient, requestUrlList ,fhirReqEntries);
+                        }
+                    );
+                 } else {
+                    throw new Error('One of the parameters is not an array as expected in class CarePlanResource');
+                 }
+
+             return this;
+             };
+        }
+  }
+
+
+
 //use case
 const TMRobject = {
   id: "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
@@ -1148,7 +1341,7 @@ const interactions = [
     type: "contradiction",
     interactionNorms: [
       {
-        recId: "http://anonymous.org/data/RecCOPD-LabaDecModAlsShouldShould",
+        recId: "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
         type: "primary",
       },
       {
