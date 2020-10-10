@@ -107,7 +107,7 @@ const altInter = "alternative",
 const contrMitStopped = '13', contrMitAlt = 'ALTHRPYMIT', contrMitRep = 'INVEFFCTMIT';
 
 //interaction types
-const interactionCodes = new Map(
+const interactionCodes = new Map([
   [
     altInter,
     {
@@ -228,7 +228,7 @@ const interactionCodes = new Map(
       ]
    }
   ]
-);
+]);
 
 //validating parameters
 //this one is when parametr is undefined the default value is an error object
@@ -272,18 +272,29 @@ function getId(
   );
 }
 
-function add_MainCond_and_EffectList(causationBeliefs) {
+function validateCBSchema(causationBelief){
+
+  const cbPropList = ['id', 'contribution', 'probability', 'evidence', 'author', 'transition'],
+    trPropList = ['id', 'effect', 'property', 'situationTypes'],
+    prPropList = ['id', 'display', 'code'], sitPropList = ['id', 'type', 'value', 'value.code', 'value.display'];
+
+  if(!cbPropList.every( prop => prop in causationBelief )) throw new Error(`property ${prop} is missing in causationBelief with id ${causationBelief.id}`);
+  if(!trPropList.every( prop => prop in causationBelief.transition )) throw new Error(`property ${prop} is missing in transition with causationBelief id ${causationBelief.id}.`);
+  if(!prPropList.every( prop => prop in causationBelief.property )) throw new Error(`property ${prop} is missing in property with causationBelief id ${causationBelief.id}.`);
+  let situationTypes = causationBelief.transition.situationTypes;
+  if(!situationTypes || !Array.isArray(situationTypes)) throw new Error(`situationTypes is not an array in causationBelief ${causationBelief.id}.`)
+  if(!situationTypes[0] || !situationTypes[1]) throw new Error(`situation is missing from CausationBelief ${causationBelief.id}.`);
+  if(!sitPropList.every( prop => prop in situationTypes[0])) throw new Error(`property ${prop} is missing in situation with causationBelief id ${causationBelief.id}.`);
+  if(!sitPropList.every( prop => prop in situationTypes[1])) throw new Error(`property ${prop} is missing in situation with causationBelief id ${causationBelief.id}.`);
+}
+
+function add_MainCond_and_EffectList(causationBelief, index) {
+
   let condition, forecastEffect;
 
-  if (Array.isArray(causationBeliefs)) {
-    causationBeliefs.map(function (
-      { id, contribution, probability, evidence, author, transition },
-      index
-    ) {
       //extract pre and post situation objects
-      if (Array.isArray(transition.situationTypes)) {
         let { preSituation, postSituation } = this.getSituations(
-          transition.situationTypes
+          causationBelief.transition.situationTypes
         );
         condition = cond_ID + "/" + preSituation.value.code;
         //add condition id if this is the main effect (side effects conditions can be fetched via forecast effects)
@@ -292,21 +303,13 @@ function add_MainCond_and_EffectList(causationBeliefs) {
         forecastEffect =
           effect_ID +
           "/" +
-          this.getId(preSituation, postSituation, index, contribution);
+          this.getId(preSituation, postSituation, index, causationBelief.contribution);
         //add forecastEffect id
         this._forecastEffectList.push({ reference: forecastEffect });
-      } else {
-        throw new Error('causatinBeliefs is not an array in funct add_MainCond_and_EffectList');
-      }
-    },
-    this);
-  } else {
-    throw new Error('transition.situationTypes is not an array in funct add_MainCond_and_EffectList');
-  }
 }
 
 function toString() {
-  return JSON.stringify(this.toJSON());
+  return JSON.stringify(this.toJSON(), null, '  ');
 }
 
 //////RESOURCE CLASSES
@@ -536,7 +539,12 @@ class FhirMedicationRequest {
     this._medication = med_ID + "/" + String(careActionType.id).slice(26);
     this._doNotRecommend = String(suggestion) === "nonrecommend";
     //create list of Conditions and ForecastEffects -both have the same number of resources
-    this.add_MainCond_and_EffectList(causationBeliefs);
+     //validate schema
+     for (let index = 0; index < causationBeliefs.length; index++) {
+      const causationBelief = causationBeliefs[index];
+      this.validateCBSchema(causationBelief);
+      this.add_MainCond_and_EffectList(causationBelief);
+    }
     this.addDetectedIssues(interactions);
   }
 
@@ -545,34 +553,27 @@ class FhirMedicationRequest {
    * @param {Array} interactionList           TODO: check algorithm
    */
   addDetectedIssues(interactionList) {
-    if (Array.isArray(interactionList)) {
-      //reconstruct TMR URI for recommendation
-      const tmrId = uriPrefix + this._id;
-      let refId;
+    if (!Array.isArray(interactionList)) throw new Error('interaction is not an array');
 
-      interactionList.map(({ type, interactionNorms }, index) => {
-        //console.log('inside first map fun');
-        refId = detecIs_ID + "/" + type + (index + 1);
-        //console.log('ref id is ' + refId);
-        if (Array.isArray(interactionNorms)) {
-          //console.log('interactionNorms is array');
-          //add each norm w/interaction to the detectedIssue List
-          interactionNorms.map((norm) => {
-            if (tmrId === String(norm.recId)) {
-              // console.log('inside conditional where norm recId i s ' + String(norm.recId));
-              this._detectedIssueList.push({
-                reference: refId,
-              });
-            } else {
-              //console.log(norm.recId + ' not equal to ' + tmrId + '\n');
-            }
-          }, this);
-        } else {
-          //TODO: throw error
-          //console.log('not array');
-        }
-      }, this);
-    }
+      //reconstruct TMR URI for recommendation
+      const tmrId = uriPrefix + 'data/' + this._id;
+      let refId;
+      for (let index = 0; index < interactionList.length; index++) {
+        const { type, interactionNorms } = interactionList[index];
+
+        if (!Array.isArray(interactionNorms)) throw new Error('interactionNorms is not an array');
+
+        refId = detecIs_ID + "/" + type + index;
+        //for each norm, check whether they are refering to this MedicationRequest
+        for (let i = 0; i < interactionNorms.length; i++) {
+          const norm = interactionNorms[i];
+          if (tmrId === String(norm.recId)) {
+            this._detectedIssueList.push({
+              reference: refId,
+            });
+          }//end If 
+        }//end For
+      }//end  For
   }
 
   toJSON() {
@@ -602,6 +603,7 @@ FhirMedicationRequest.prototype.toString = toString;
 FhirMedicationRequest.prototype.getSituations = getSituations;
 FhirMedicationRequest.prototype.getId = getId;
 FhirMedicationRequest.prototype.add_MainCond_and_EffectList = add_MainCond_and_EffectList;
+FhirMedicationRequest.prototype.validateCBSchema = validateCBSchema;
 
 class FhirServiceRequest {
   /**
@@ -634,7 +636,12 @@ class FhirServiceRequest {
     this._medication = servReq_ID + "/" + String(careActionType.id).slice(26);
     this._doNotRecommend = String(suggestion) === "nonrecommend";
     //create list of Conditions and ForecastEffects -both have the same number of resources
-    this.add_MainCond_and_EffectList(causationBeliefs);
+    for (let index = 0; index < causationBeliefs.length; index++) {
+      const causationBelief = causationBeliefs[index];
+      this.validateCBSchema(causationBelief);
+      this.add_MainCond_and_EffectList(causationBelief);
+    }
+    
   }
 
   /**
@@ -673,13 +680,14 @@ FhirServiceRequest.prototype.getSituations = getSituations;
 FhirServiceRequest.prototype.getId = getId;
 FhirServiceRequest.prototype.add_MainCond_and_EffectList = add_MainCond_and_EffectList;
 FhirServiceRequest.prototype.toString = toString;
+FhirServiceRequest.prototype.validateCBSchema = validateCBSchema;
 
 class FhirDetectedIssue {
 
-  constructor(interactionType, interactionListIndex, normsList) {
-    this._fullUrl = uriPrefix + detecIs_ID + interactionType + interactionListIndex;
-    this._id = interactionType + interactionListIndex;
-    this._implicatedList = createImplicatedList(normsList);
+  constructor(interactionType, indexInList, normsList) {
+    this._fullUrl = uriPrefix + detecIs_ID + '/' + interactionType + indexInList;
+    this._id = interactionType + indexInList;
+    this._implicatedList = this.createImplicatedList(normsList);
 
     let {interaction, mitigation} = interactionCodes.get(interactionType);
     this._codingList = interaction;
@@ -687,16 +695,12 @@ class FhirDetectedIssue {
   }
 
   createImplicatedList(list) {
-    let resultList = [];
-
     //only medicationRequests have detected interactions
-    if (Array.isArray(list)) {
-      resultList = list.map(
+    if (!Array.isArray(list)) throw new Error('list of Norms in interaction is not an array');
+
+    let  resultList = list.map(
         (item) => ( { reference: medReq_ID + '/' + String(item).slice(26)} )
       );
-    } else {
-      //throw error
-    }
     return resultList;
   }
 
@@ -712,7 +716,7 @@ class FhirDetectedIssue {
         id: this._id,
         status: "preliminary",
         code: {
-          coding: this.codingList 
+          coding: this._codingList 
          }
        },
         implicated: this._implicatedList,
@@ -801,7 +805,7 @@ class MedicationResources {
    * @param {string} code
    */
   showFullUrl(code) {
-    return uriPrefix + med_ID + code;
+    return uriPrefix + med_ID + '/' + code;
   }
 
   /**
@@ -847,21 +851,16 @@ class ConditionResources {
   }
 
   showFullUrl(code) {
-    return uriPrefix + cond_ID + code;
+    return uriPrefix + cond_ID + '/' + code;
   }
 
-  add() {
-    //obtain argument from the calling function
-    return (
-      { id, contribution, probability, evidence, author, transition },
-      patient
-    ) => {
-      const situationTypes = transition.situationTypes;
+  addOneResource(  situationTypes, patient ){
 
       //if not undefined, act on it
-      if (Array.isArray(situationTypes)) {
+      //if(!Array.isArray(situationTypes)) throw new Error('situationTypes is not an array');
+
         let preSit = this.getSituations(situationTypes).preSituation;
-        console.log(JSON.stringify(preSit));
+        //console.log(JSON.stringify(preSit));
         //create Fhir URL
         const url = this.showFullUrl(preSit.value.code);
 
@@ -869,6 +868,22 @@ class ConditionResources {
         if (!this.map.has(url)) {
           this.map.set(url, new FhirCondition(url, preSit, patient));
         }
+      
+  }
+
+  add() {
+    //obtain argument from the calling function
+    return (
+     causationBeliefs,
+      patient
+    ) => {
+      //if(!Array.isArray(causationBeliefs)) throw new Error('causationBeliefs is not an array');
+
+      //for each CB, add a condition
+      for(let i =0; i<causationBeliefs.length; i++){
+        
+        let situationTypes = causationBeliefs[i].situationTypes;
+        this.addOneResource(situationTypes, patient);
       }
 
       return this;
@@ -891,7 +906,59 @@ class ForecastEffectResources {
   }
 
   showFullUrl(fhirId) {
-    return uriPrefix + effect_ID + fhirId;
+    return uriPrefix + effect_ID + '/' + fhirId;
+  }
+
+  addOneResource(
+    recId,
+    request,
+    causationBelief,
+    index,
+     patient
+     ){
+      
+      //validate CB
+      //this.validateCBSchema(causationBelief);
+
+      const { id, contribution, probability, evidence, author, transition } = causationBelief;
+    const { preSituation, postSituation } = this.getSituations( transition.situationTypes);
+      const fhirId = this.getId(
+        preSituation,
+        postSituation,
+        index,
+        contribution
+      );
+      //create Fhir URL
+      const url = this.showFullUrl(fhirId);
+
+      //if it doesnt find key, add new ForecastEffect using the care action type
+      if (!this.map.has(url)) {
+        this.map.set(
+          url,
+          new FhirForecastEffect(
+            recId,
+            url,
+            fhirId,
+            request,
+            {
+              id,
+              contribution,
+              probability,
+              evidence,
+              author,
+              transition,
+              preSituation,
+              postSituation,
+            },
+            index,
+            patient
+          )
+        );
+      } else {
+        //if it already exits, add the MedicationRequest url to the instance
+        this.map.get(url).addRequestUrl(recId, request);
+      }
+    
   }
 
   /**
@@ -900,55 +967,29 @@ class ForecastEffectResources {
   add() {
     //obtain argument from the calling function
     return (
-      recId,
-      request,
-      { id, contribution, probability, evidence, author, transition },
-      index,
+      {
+      id,
+      text,
+      motivation,
+      derivedFrom,
+      suggestion,
+      careActionType,
+      causationBeliefs,
+      },
       patient
     ) => {
-      //if not of type undefined, act on it
-      if (id && contribution && probability && evidence && transition) {
-        const { preSituation, postSituation } = this.getSituations(
-          transition.situationTypes
-        );
-        const fhirId = this.getId(
-          preSituation,
-          postSituation,
-          index,
-          contribution
-        );
-        //create Fhir URL
-        const url = this.showFullUrl(fhirId);
-        //if it doesnt find key, add new ForecastEffect using the care action type
-        if (!this.map.has(url)) {
-          this.map.set(
-            url,
-            new FhirForecastEffect(
-              recId,
-              url,
-              fhirId,
-              request,
-              {
-                id,
-                contribution,
-                probability,
-                evidence,
-                author,
-                transition,
-                preSituation,
-                postSituation,
-              },
-              index,
-              patient
-            )
-          );
-        } else {
-          //if it already exits, add the MedicationRequest url to the instance
-          this.map.get(url).addRequestUrl(recId, request);
-        }
-      } else {
-        //TODO: error checking
+      //validate CBs
+      if(!Array.isArray(causationBeliefs)) throw new Error(`causationBeliefs is not an array in recommendation with id ${id}.`);
+
+      let requestType = careActionType.requestType;
+
+      //loop over CBs
+      for(let i=0; i<causationBeliefs.length; i++) {
+        const cb = causationBeliefs[i];
+        this.validateCBSchema(cb);
+        this.addOneResource(id,requestType, cb,i, patient);
       }
+
       return this;
     };
   }
@@ -958,6 +999,10 @@ ForecastEffectResources.prototype.getSituations = getSituations;
 ForecastEffectResources.prototype.getResourceList = getResourceList;
 ForecastEffectResources.prototype.getId = getId;
 
+/**
+ * class to construct the set of FHIR MedicationRequests taken from the TMR data. 
+ * It is also the first class to be built as it has all the required checks to validate the TMR schema.
+ */
 class MedicationRequestResources {
   /**
    *
@@ -973,7 +1018,7 @@ class MedicationRequestResources {
    * @param {object} tmrRecObject TMR-based recomendation in JSON notation
    */
   showFullUrl(fhirId) {
-    return uriPrefix + medReq_ID + fhirId;
+    return uriPrefix + medReq_ID + '/' + fhirId;
   }
 
   /**
@@ -982,24 +1027,31 @@ class MedicationRequestResources {
   add() {
     //obtain argument from the calling function
     return (
-      {
-        id,
-        text,
-        motivation,
-        derivedFrom,
-        suggestion,
-        careActionType,
-        causationBeliefs,
-      },
+      patient,
       interactions,
-      patient
+      recommendations
     ) => {
-      //check is a medication request
-      if (medReq_ID === requestMap.get(careActionType.requestType)) {
+
+      //validate interactions schema
+      this.validateInteractionsSchema(interactions);
+
+      //apply function to each recommendation
+      for (let i = 0; i < recommendations.length; i++) {
+        
+        const rec  = recommendations[i];
+
+           //validate recommendations. It validates both medication and services
+        this.validateRecschema(rec);
+
+        let request = rec.careActionType.requestType;
+        //check is a medication request
+       if (medReq_ID === requestMap.get(request)) {
+
         const fhirId = String(id).slice(26);
+
         //create Fhir URL
         const url = this.showFullUrl(fhirId);
-        //if it does find key, add new medication using the care action type
+        //if it doesnot find key, add new medication using the care action type
         if (!this.map.has(url)) {
           this.map.set(
             url,
@@ -1020,11 +1072,62 @@ class MedicationRequestResources {
             )
           );
         }
-      }
+
+      } //else skip to the next rec
+
+      }//end of for loop
 
       //return the object
       return this;
     };
+  }
+
+  validateInteractionsSchema(interactions){
+     //check interactions  is array
+    if(!Array.isArray(interactions)) throw new Error('interactions is not an array');
+
+    const interPropList = ['type', 'interactionNorms'], normPropList = ['type', 'recId'];
+
+    for (let index = 0; index < interactions.length; index++) {
+      const normObj = interactions[index];
+      if( interPropList.every( prop => prop in normObj)) throw new Error(`interaction object is missing property ${prop} at index ${index}.`);
+      for (let i = 0; i < normObj.length; i++) {
+        const norm = normObj[i];
+        if( normPropList.every( prop => prop in norm)) throw new Error(`interactionNorms is missing property ${prop} at index ${i}.`);
+      }
+    }
+    
+  }
+
+  /**
+   * Validate one recommendation
+   * @param {object} recommendation 
+   */
+  validateRecschema(recommendation){
+
+      //check recommendation is arrays
+      //if(!Array.isArray(recommendations)) throw new Error('recommendations is not an array');
+      //check arrays have expected properties
+      const recPropList = [
+        'id',
+       // 'text',
+       // 'motivation',
+        'derivedFrom',
+        'suggestion',
+        'careActionType',
+        'causationBeliefs'
+      ], carePropList = ['id', 'code', 'requestType', 'display'];
+
+      if(!recPropList.every( prop => prop in recommendations)) throw new Error(`property '${prop}' is missing in recommendations array.`);
+
+      //NExt, check careActionType, causationBeliefs  are arrays
+      
+      //finally, check for properties on the 3 arrays from above
+      if(!carePropList.every( prop => prop in careActionType)) throw new Error('one or more expected properties are missing in careActionType array.');
+      if(!Array.isArray(careActionType)) throw new Error('interactions is not an array');
+      if(!Array.isArray(causationBeliefs)) throw new Error('recommendations is not an array');
+      //CB checking is done elsewhere
+
   }
 }
 
@@ -1121,13 +1224,16 @@ class DetectedIssueResources {
     add() {
       //obtain argument from the calling function
       return (
-        arrayInt
+        arrayInter
       ) => {
-        if( Array.isArray(arrayInt) ) {
-            this._issueArr = arrayInt.map( 
-                (interaction, index) => new FhirDetectedIssue(interaction.type, index, interaction.interactionNorms)
-            );
-        }
+        if(!Array.isArray(arrayInter) )  throw new Error('interactions object is not an array');
+
+        let interaction;
+          for (let index = 0; index < arrayInter.length; index++) {
+            interaction = arrayInter[index];
+            if(!(interaction.hasOwnProperty('type') && interaction.hasOwnProperty('interactionNorms')) ) throw new Error('missing type or interactionNorms properties on interaction array');
+            this._issueArr.push(new FhirDetectedIssue(interaction.type, index, interaction.interactionNorms));
+          }
         return this;
       };
     }
@@ -1141,17 +1247,22 @@ class DetectedIssueResources {
      add() {
          return ( 
              extensions,
+             fhirReqEntries,
              title,
              patient,
-             fhirReqEntries
              ) => {
+
                  if(Array.isArray(extensions) && Array.isArray(fhirReqEntries)){
-                    this._carePlanArr = extensions.map(
-                        (extenList, index) => {
-                            let requestUrlList = extenList.map( extension => extension.aboutRecommendation.id );
-                            return new FhirCarePlan(index, title, patient, requestUrlList ,fhirReqEntries);
-                        }
-                    );
+
+                   for (let index = 0; index < extensions.length; index++) {
+
+                     const extenList = extensions[index];
+                     let requestUrlList = extenList.map( extension => extension.aboutRecommendation.id );
+                     this._carePlanArr.push(
+                         new FhirCarePlan(index, title, patient, requestUrlList ,fhirReqEntries)
+                     );
+
+                   }
                  } else {
                     throw new Error('One of the parameters is not an array as expected in class CarePlanResource');
                  }
@@ -1164,222 +1275,766 @@ class DetectedIssueResources {
 
 
 //use case
-const TMRobject = {
-  id: "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
-  text:
-    "clinician should avoid recommending administration of Beta Agonist bronchodilators to patients with cardiovascular disease",
-  motivation: "none",
-  derivedFrom: "GOLD COPD 2017",
-  suggestion: "nonrecommend",
-  careActionType: {
-    id: "http://anonymous.org/data/DrugCatBetaAgonist",
-    code: "DrugCatBetaAgonist",
-    display: "administration of Beta Agonist bronchodilator",
-    requestType: 0,
-    drugLabel: "BetaAgonist",
+let req ={
+  "EHR": {
+      "selectedTreatment": {
+          "resource": {
+              "reference": {
+                  "resourceType": "Observation",
+                  "id": "COPD.group",
+                  "text": "COPD GOLD group"
+              },
+              "result": {
+                  "code": "B",
+                  "display": "COPD GOLD group B"
+              },
+              "other": {
+                  "drugTypePreferences": {
+                      "reference": {
+                          "refId": "COPD.group",
+                          "resultCode": "B"
+                      },
+                      "entries": [
+                           {
+                                  "preferred": {
+                                      "administrationOf": "Laba"
+                                  },
+                                  "alternative": [
+                                      {
+                                          "administrationOf": "LabaLama"
+                                      }
+                                  ]
+                              },
+                              {
+                                  "preferred": {
+                                      "administrationOf": "Lama"
+                                  },
+                                  "alternative": [
+                                      {
+                                          "administrationOf": "LabaLama"
+                                      }
+                                  ]
+                              }
+                      ]
+                  }
+              }
+          }
+      }
   },
-  causationBeliefs: [
-    {
-      id: "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr",
-      contribution: "negative",
-      probability: "always",
-      evidence: "High Level",
-      author: "JDA",
-      transition: {
-        id: "http://anonymous.org/data/TrIncLowRiskCdr",
-        effect: "increase",
-        property: {
-          id: "http://anonymous.org/data/PropCrd",
-          display: "risk of having cardiac rhythm disturbances",
-          code: "Crd",
-        },
-        situationTypes: [
-          {
-            id: "http://anonymous.org/data/SitLowRiskCrd",
-            type: "hasTransformableSituation",
-            value: {
-              code: "SitLowRiskCrd",
-              display: "a low risk of having cardiac rhythm disturbances",
-            },
-          },
-          {
-            id: "http://anonymous.org/data/SitMildAls",
-            type: "hasExpectedSituation",
-            value: {
-              code: "SitHighRiskCrd",
-              display: "a high risk of having cardiac rhythm disturbances",
-            },
-          },
-        ],
-      },
-    },
-    {
-      id: "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr4",
-      contribution: "negative",
-      probability: "always",
-      evidence: "High Level",
-      author: "JDA",
-      transition: {
-        id: "http://anonymous.org/data/TrIncLowRiskCdr4",
-        effect: "increase",
-        property: {
-          id: "http://anonymous.org/data/PropCrd4",
-          display: "risk of having cardiac rhythm disturbances",
-          code: "Crd",
-        },
-        situationTypes: [
-          {
-            id: "http://anonymous.org/data/SitLowRiskCrd4",
-            type: "hasTransformableSituation",
-            value: {
-              code: "SitLowRiskCrd",
-              display: "a low risk of having cardiac rhythm disturbances",
-            },
-          },
-          {
-            id: "http://anonymous.org/data/SitMildAls4",
-            type: "hasExpectedSituation",
-            value: {
-              code: "SitHighRiskCrd",
-              display: "a high risk of having cardiac rhythm disturbances",
-            },
-          },
-        ],
-      },
-    },
-  ],
+  "DSS": {
+      "proposedTreatment": {
+          "resource": {
+              "reference": {
+                  "resourceType": "Observation",
+                  "id": "COPD.group",
+                  "text": "COPD GOLD group"
+              },
+              "result": {
+                  "code": "B",
+                  "display": "COPD GOLD group B"
+              },
+              "other": {
+                  "drugTypes": {
+                      "drugTypePreferences": {
+                          "reference": {
+                              "refId": "COPD.group",
+                              "resultCode": "B"
+                          },
+                          "entries": [
+                              {
+                                  "preferred": {
+                                      "administrationOf": "Laba"
+                                  },
+                                  "alternative": [
+                                      {
+                                          "administrationOf": "LabaLama"
+                                      }
+                                  ]
+                              },
+                              {
+                                  "preferred": {
+                                      "administrationOf": "Lama"
+                                  },
+                                  "alternative": [
+                                      {
+                                          "administrationOf": "LabaLama"
+                                      }
+                                  ]
+                              }
+                          ]
+                      }
+                  }
+              }
+          }
+      }
+  },
+  "TMR": {
+      "guidelineGroup": {
+          "id": "CIG-2803202017350345",
+          "interactions": [
+              {
+                  "type": "alternative",
+                  "interactionNorms": [
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "type": "primary"
+                      },
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                          "type": "primary"
+                      },
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                          "type": "primary"
+                      }
+                  ]
+              },
+              {
+                  "type": "repetition",
+                  "interactionNorms": [
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "type": "primary"
+                      },
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                          "type": "primary"
+                      },
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                          "type": "primary"
+                      }
+                  ]
+              },
+              {
+                  "type": "contradiction",
+                  "interactionNorms": [
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "type": "primary"
+                      },
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                          "type": "primary"
+                      }
+                  ]
+              },
+              {
+                  "type": "contradiction",
+                  "interactionNorms": [
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                          "type": "primary"
+                      },
+                      {
+                          "recId": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                          "type": "primary"
+                      }
+                  ]
+              }
+          ],
+          "recommendations": [
+              {
+                  "id": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                  "text": "clinician should avoid recommending administration of Beta Agonist bronchodilators to patients with cardiovascular disease",
+                  "motivation": "none",
+                  "suggestion": "nonrecommend",
+                  "careActionType": {
+                      "id": "http://anonymous.org/data/DrugCatBetaAgonist",
+                      "code": "BetaAgonist",
+                      "display": "administration of Beta Agonist bronchodilator",
+                      "requestType": 0
+                  },
+                  "causationBeliefs": [
+                      {
+                          "id": "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr",
+                          "contribution": "negative",
+                          "probability": "always",
+                          "evidence": "high-level",
+                          "author": "JDA",
+                          "transition": {
+                              "id": "http://anonymous.org/data/TrIncLowRiskCdr",
+                              "effect": "increase",
+                              "property": {
+                                "id": "http://anonymous.org/data/PropCrd",
+                                  "display": "risk of having cardiac rhythm disturbances",
+                                  "code": "Crd"
+                          },
+                          "situationTypes": [
+                                  {
+                                      "id": "http://anonymous.org/data/SitLowRiskCrd",
+                                      "type": "hasTransformableSituation",
+                                      "value": {
+                                          "code": "SitLowRiskCrd",
+                                          "display": "a low risk of having cardiac rhythm disturbances"
+                                      }
+                                  },
+                                  {
+                                      "id": "http://anonymous.org/data/SitHighRiskCrd",
+                                      "type": "hasExpectedSituation",
+                                      "value": {
+                                          "code": "SitHighRiskCrd",
+                                          "display": "a high risk of having cardiac rhythm disturbances"
+                                      }
+                                  }
+                              ]
+                          }
+                      },
+                      {
+                        "id": "http://anonymous.org/data/CBLbLmaDecModAls",
+                        "contribution": "negative",
+                        "probability": "always",
+                        "evidence": "high-level",
+                        "author": "JDA",
+                        "transition": {
+                            "id": "http://anonymous.org/data/TrDecModAls",
+                            "effect": "decrease",
+                            "property": {
+                                "id": "http://anonymous.org/data/PropAls",
+                                "display": "airflow limitation severity",
+                                "code": "Als"
+                            },
+                            "situationTypes": [
+                                {
+                                    "id": "http://anonymous.org/data/SitModAls",
+                                    "type": "hasTransformableSituation",
+                                    "value": {
+                                        "code": "SitModAls",
+                                        "display": "a moderate airflow limitation severity"
+                                    }
+                                },
+                                {
+                                    "id": "http://anonymous.org/data/SitMildAls",
+                                    "type": "hasExpectedSituation",
+                                    "value": {
+                                        "code": "SitMildAls",
+                                        "display": "a mild airflow limitation severity"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                  ]
+              },
+              {
+                  "id": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                  "text": "Clinician should recommend administering LABA bronchodilator",
+                  "motivation": "none",
+                  "suggestion": "recommend",
+                  "careActionType": {
+                      "id": "http://anonymous.org/data/DrugTLaba",
+                      "code": "Laba",
+                      "display": "administration of LABA bronchodilator",
+                      "requestType": 0
+                  },
+                  "causationBeliefs": [
+                      {
+                          "id": "http://anonymous.org/data/CBLabaDecModAls",
+                          "contribution": "positive",
+                          "probability": "always",
+                          "evidence": "high-level",
+                          "author": "Jesus",
+                          "transition": {
+                              "id": "http://anonymous.org/data/TrDecModAls",
+                              "effect": "decrease",
+                              "property": {
+                                  "id": "http://anonymous.org/data/PropAls",
+                                  "display": "airflow limitation severity",
+                                  "code": "Als"
+                              },
+                              "situationTypes": [
+                                  {
+                                      "id": "http://anonymous.org/data/SitModAls",
+                                      "type": "hasTransformableSituation",
+                                      "value": {
+                                          "code": "SitModAls",
+                                          "display": "a moderate airflow limitation severity"
+                                      }
+                                  },
+                                  {
+                                      "id": "http://anonymous.org/data/SitMildAls",
+                                      "type": "hasExpectedSituation",
+                                      "value": {
+                                          "code": "SitMildAls",
+                                          "display": "a mild airflow limitation severity"
+                                      }
+                                  }
+                              ]
+                          }
+                      }
+                  ]
+              },
+              {
+                  "id": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                  "text": "Clinician should recommend administering LAMA bronchodilator",
+                  "motivation": "none",
+                  "suggestion": "recommend",
+                  "careActionType": {
+                      "id": "http://anonymous.org/data/DrugTLama",
+                      "code": "Lama",
+                      "display": "administration of LAMA bronchodilator",
+                      "requestType": 0
+                  },
+                  "causationBeliefs": [
+                      {
+                          "id": "http://anonymous.org/data/CBLamaDecModAls",
+                          "contribution": "positive",
+                          "probability": "always",
+                          "evidence": "high-level",
+                          "author": "JDA",
+                          "transition": {
+                              "id": "http://anonymous.org/data/TrDecModAls",
+                              "effect": "decrease",
+                              "property": {
+                                "id": "http://anonymous.org/data/PropAls",
+                                  "display": "airflow limitation severity",
+                                  "code": "Als"
+                              },
+                              "situationTypes": [
+                                  {
+                                      "id": "http://anonymous.org/data/SitModAls",
+                                      "type": "hasTransformableSituation",
+                                      "value": {
+                                          "code": "SitModAls",
+                                          "display": "a moderate airflow limitation severity"
+                                      }
+                                  },
+                                  {
+                                      "id": "http://anonymous.org/data/SitMildAls",
+                                      "type": "hasExpectedSituation",
+                                      "value": {
+                                          "code": "SitMildAls",
+                                          "display": "a mild airflow limitation severity"
+                                      }
+                                  }
+                              ]
+                          }
+                      }
+                  ]
+              },
+              {
+                  "id": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                  "text": "Clinician should recommend administering LABA+LAMA bronchodilator",
+                  "motivation": "none",
+                  "suggestion": "recommend",
+                  "careActionType": {
+                      "id": "http://anonymous.org/data/DrugTLabaLama",
+                      "code": "LabaLama",
+                      "display": "administration of LABA+LAMA bronchodilator",
+                      "requestType": 0
+                  },
+                  "causationBeliefs": [
+                      {
+                          "id": "http://anonymous.org/data/CBLabaLamaDecModAls",
+                          "contribution": "positive",
+                          "probability": "always",
+                          "evidence": "high-level",
+                          "author": "JDA",
+                          "transition": {
+                              "id": "http://anonymous.org/data/TrDecModAls",
+                              "effect": "decrease",
+                              "property": {
+                                  "display": "airflow limitation severity",
+                                  "code": "Als",
+                                  "id": "http://anonymous.org/data/PropAls"
+                              },
+                              "situationTypes": [
+                                  {
+                                      "id": "http://anonymous.org/data/SitModAls",
+                                      "type": "hasTransformableSituation",
+                                      "value": {
+                                          "code": "SitModAls",
+                                          "display": "a moderate airflow limitation severity"
+                                      }
+                                  },
+                                  {
+                                      "id": "http://anonymous.org/data/SitMildAls",
+                                      "type": "hasExpectedSituation",
+                                      "value": {
+                                          "code": "SitMildAls",
+                                          "display": "a mild airflow limitation severity"
+                                      }
+                                  }
+                              ]
+                          }
+                      }
+                  ]
+              }
+          ]
+      }
+  }
+
 };
 
-const TMRobject2 = {
-  id: "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
-  text:
-    "clinician should avoid recommending administration of Beta Agonist bronchodilators to patients with cardiovascular disease",
-  motivation: "none",
-  derivedFrom: "GOLD COPD 2017",
-  suggestion: "recommend",
-  careActionType: {
-    id: "http://anonymous.org/data/DrugTLaba",
-    code: "DrugTLaba",
-    display: "administration of LABA",
-    requestType: 1,
-    drugLabel: "LABA",
-  },
-  causationBeliefs: [
-    {
-      id: "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr",
-      contribution: "negative",
-      probability: "always",
-      evidence: "High Level",
-      author: "JDA",
-      transition: {
-        id: "http://anonymous.org/data/TrIncLowRiskCdr",
-        effect: "increase",
-        property: {
-          id: "http://anonymous.org/data/PropCrd",
-          display: "risk of having cardiac rhythm disturbances",
-          code: "Crd",
-        },
-        situationTypes: [
-          {
-            id: "http://anonymous.org/data/SitModAls",
-            type: "hasTransformableSituation",
-            value: {
-              code: "SitModAls",
-              display: "a low risk of having cardiac rhythm disturbances",
-            },
-          },
-          {
-            id: "http://anonymous.org/data/SitMildAls",
-            type: "hasExpectedSituation",
-            value: {
-              code: "SitMildAls",
-              display: "a high risk of having cardiac rhythm disturbances",
-            },
-          },
-        ],
+
+let res = {
+  "extensions": [
+      {
+          "extension": [
+              {
+                  "aboutRecommendation": {
+                      "id": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                      "text": "Clinician should recommend administering LABA+LAMA bronchodilator",
+                      "causationBeliefs": [
+                          {
+                              "id": "http://anonymous.org/data/CBLabaLamaDecModAls",
+                              "contribution": "positive",
+                              "transition": {
+                                  "id": "http://anonymous.org/data/TrDecModAls",
+                                  "effect": "decrease",
+                                  "property": {
+                                      "display": "airflow limitation severity",
+                                      "code": "Als"
+                                  },
+                                  "situationTypes": [
+                                      {
+                                          "id": "http://anonymous.org/data/SitModAls",
+                                          "type": "hasTransformableSituation",
+                                          "value": {
+                                              "code": "SitModAls",
+                                              "display": "a moderate airflow limitation severity"
+                                          }
+                                      },
+                                      {
+                                          "id": "http://anonymous.org/data/SitMildAls",
+                                          "type": "hasExpectedSituation",
+                                          "value": {
+                                              "code": "SitMildAls",
+                                              "display": "a mild airflow limitation severity"
+                                          }
+                                      }
+                                  ]
+                              }
+                          }
+                      ],
+                      "reasonsComponents": [
+                          {
+                              "careAction": "LabaLama",
+                              "contribution": "positive",
+                              "contributionON": "Als",
+                              "contributionTO": "decrease",
+                              "from": "SitModAls",
+                              "to": "SitMildAls"
+                          }
+                      ],
+                      "reasons": "administration of LABA+LAMA bronchodilator _HAS_ positive contribution _ON_ airflow limitation severity _TO_ decrease _FROM_ a moderate airflow limitation severity _TO_ a mild airflow limitation severity"
+                  },
+                  "interactionsInformation": {
+                      "interactingRecommendations": [
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                              "interactionTypes": [
+                                  "contradiction"
+                              ],
+                              "preferred": 0
+                          },
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                              "interactionTypes": [
+                                  "alternative",
+                                  "repetition"
+                              ],
+                              "preferred": 0
+                          },
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                              "interactionTypes": [
+                                  "alternative",
+                                  "repetition"
+                              ],
+                              "preferred": 0
+                          }
+                      ],
+                      "text": "Considered alternatives: recommend administration of LABA bronchodilator; recommend administration of LAMA bronchodilator. Considered contradictory recommendations: nonrecommend administration of Beta Agonist bronchodilator. Considered repetitive recommendations: recommend administration of LABA bronchodilator; recommend administration of LAMA bronchodilator. No recommendations in repairable relation considered.",
+                      "alternatives": [
+                          "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould"
+                      ],
+                      "contradictions": [
+                          "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot"
+                      ],
+                      "repetitions": [
+                          "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould"
+                      ],
+                      "repairables": []
+                  }
+              }
+          ]
       },
-    },
-  ],
+      {
+          "extension": [
+              {
+                  "aboutRecommendation": {
+                      "id": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                      "text": "Clinician should recommend administering LABA bronchodilator",
+                      "causationBeliefs": [
+                          {
+                              "id": "http://anonymous.org/data/CBLabaDecModAls",
+                              "contribution": "positive",
+                              "transition": {
+                                  "id": "http://anonymous.org/data/TrDecModAls",
+                                  "effect": "decrease",
+                                  "property": {
+                                      "display": "airflow limitation severity",
+                                      "code": "Als"
+                                  },
+                                  "situationTypes": [
+                                      {
+                                          "id": "http://anonymous.org/data/SitModAls",
+                                          "type": "hasTransformableSituation",
+                                          "value": {
+                                              "code": "SitModAls",
+                                              "display": "a moderate airflow limitation severity"
+                                          }
+                                      },
+                                      {
+                                          "id": "http://anonymous.org/data/SitMildAls",
+                                          "type": "hasExpectedSituation",
+                                          "value": {
+                                              "code": "SitMildAls",
+                                              "display": "a mild airflow limitation severity"
+                                          }
+                                      }
+                                  ]
+                              }
+                          }
+                      ],
+                      "reasonsComponents": [
+                          {
+                              "careAction": "Laba",
+                              "contribution": "positive",
+                              "contributionON": "Als",
+                              "contributionTO": "decrease",
+                              "from": "SitModAls",
+                              "to": "SitMildAls"
+                          }
+                      ],
+                      "reasons": "administration of LABA bronchodilator _HAS_ positive contribution _ON_ airflow limitation severity _TO_ decrease _FROM_ a moderate airflow limitation severity _TO_ a mild airflow limitation severity"
+                  },
+                  "interactionsInformation": {
+                      "interactingRecommendations": [
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                              "interactionTypes": [
+                                  "contradiction"
+                              ],
+                              "preferred": 0
+                          },
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                              "interactionTypes": [
+                                  "alternative",
+                                  "repetition"
+                              ],
+                              "preferred": 0
+                          },
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                              "interactionTypes": [
+                                  "alternative",
+                                  "repetition"
+                              ],
+                              "preferred": 0
+                          }
+                      ],
+                      "text": "Considered alternatives: recommend administration of LAMA bronchodilator; recommend administration of LABA+LAMA bronchodilator. Considered contradictory recommendations: nonrecommend administration of Beta Agonist bronchodilator. Considered repetitive recommendations: recommend administration of LAMA bronchodilator; recommend administration of LABA+LAMA bronchodilator. No recommendations in repairable relation considered.",
+                      "alternatives": [
+                          "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                          "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould"
+                      ],
+                      "contradictions": [
+                          "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot"
+                      ],
+                      "repetitions": [
+                          "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                          "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould"
+                      ],
+                      "repairables": []
+                  }
+              }
+          ]
+      },
+      {
+          "extension": [
+              {
+                  "aboutRecommendation": {
+                      "id": "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
+                      "text": "clinician should avoid recommending administration of Beta Agonist bronchodilators to patients with cardiovascular disease",
+                      "causationBeliefs": [
+                          {
+                              "id": "http://anonymous.org/data/CBBetaAgonistIncLowRiskCdr",
+                              "contribution": "negative",
+                              "transition": {
+                                  "id": "http://anonymous.org/data/TrIncLowRiskCdr",
+                                  "effect": "increase",
+                                  "property": {
+                                      "display": "risk of having cardiac rhythm disturbances",
+                                      "code": "Crd"
+                                  },
+                                  "situationTypes": [
+                                      {
+                                          "id": "http://anonymous.org/data/SitLowRiskCrd",
+                                          "type": "hasTransformableSituation",
+                                          "value": {
+                                              "code": "SitLowRiskCrd",
+                                              "display": "a low risk of having cardiac rhythm disturbances"
+                                          }
+                                      },
+                                      {
+                                          "id": "http://anonymous.org/data/SitMildAls",
+                                          "type": "hasExpectedSituation",
+                                          "value": {
+                                              "code": "SitHighRiskCrd",
+                                              "display": "a high risk of having cardiac rhythm disturbances"
+                                          }
+                                      }
+                                  ]
+                              }
+                          }
+                      ],
+                      "reasonsComponents": [
+                          {
+                              "careAction": "BetaAgonist",
+                              "contribution": "negative",
+                              "contributionON": "Crd",
+                              "contributionTO": "increase",
+                              "from": "SitLowRiskCrd",
+                              "to": "SitHighRiskCrd"
+                          }
+                      ],
+                      "reasons": "administration of Beta Agonist bronchodilator _HAS_ negative contribution _ON_ risk of having cardiac rhythm disturbances _TO_ increase _FROM_ a low risk of having cardiac rhythm disturbances _TO_ a high risk of having cardiac rhythm disturbances"
+                  },
+                  "interactionsInformation": {
+                      "interactingRecommendations": [
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                              "interactionTypes": [
+                                  "contradiction"
+                              ],
+                              "preferred": 0
+                          },
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                              "interactionTypes": [
+                                  "contradiction"
+                              ],
+                              "preferred": 0
+                          }
+                      ],
+                      "text": "No applicable alternatives considered. Considered contradictory recommendations: recommend administration of LABA bronchodilator; recommend administration of LABA+LAMA bronchodilator. No repetitive recommendations considered. No recommendations in repairable relation considered.",
+                      "alternatives": [],
+                      "contradictions": [
+                          "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould"
+                      ],
+                      "repetitions": [],
+                      "repairables": []
+                  }
+              },
+              {
+                  "aboutRecommendation": {
+                      "id": "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
+                      "text": "Clinician should recommend administering LAMA bronchodilator",
+                      "causationBeliefs": [
+                          {
+                              "id": "http://anonymous.org/data/CBLamaDecModAls",
+                              "contribution": "positive",
+                              "transition": {
+                                  "id": "http://anonymous.org/data/TrDecModAls",
+                                  "effect": "decrease",
+                                  "property": {
+                                      "display": "airflow limitation severity",
+                                      "code": "Als"
+                                  },
+                                  "situationTypes": [
+                                      {
+                                          "id": "http://anonymous.org/data/SitModAls",
+                                          "type": "hasTransformableSituation",
+                                          "value": {
+                                              "code": "SitModAls",
+                                              "display": "a moderate airflow limitation severity"
+                                          }
+                                      },
+                                      {
+                                          "id": "http://anonymous.org/data/SitMildAls",
+                                          "type": "hasExpectedSituation",
+                                          "value": {
+                                              "code": "SitMildAls",
+                                              "display": "a mild airflow limitation severity"
+                                          }
+                                      }
+                                  ]
+                              }
+                          }
+                      ],
+                      "reasonsComponents": [
+                          {
+                              "careAction": "Lama",
+                              "contribution": "positive",
+                              "contributionON": "Als",
+                              "contributionTO": "decrease",
+                              "from": "SitModAls",
+                              "to": "SitMildAls"
+                          }
+                      ],
+                      "reasons": "administration of LAMA bronchodilator _HAS_ positive contribution _ON_ airflow limitation severity _TO_ decrease _FROM_ a moderate airflow limitation severity _TO_ a mild airflow limitation severity"
+                  },
+                  "interactionsInformation": {
+                      "interactingRecommendations": [
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                              "interactionTypes": [
+                                  "alternative",
+                                  "repetition"
+                              ],
+                              "preferred": 0
+                          },
+                          {
+                              "interactingRecommendationId": "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
+                              "interactionTypes": [
+                                  "alternative",
+                                  "repetition"
+                              ],
+                              "preferred": 0
+                          }
+                      ],
+                      "text": "Considered alternatives: recommend administration of LABA bronchodilator; recommend administration of LABA+LAMA bronchodilator. No contradicting recommendations considered. Considered repetitive recommendations: recommend administration of LABA bronchodilator; recommend administration of LABA+LAMA bronchodilator. No recommendations in repairable relation considered.",
+                      "alternatives": [
+                          "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould"
+                      ],
+                      "contradictions": [],
+                      "repetitions": [
+                          "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
+                          "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould"
+                      ],
+                      "repairables": []
+                  }
+              }
+          ]
+      }
+  ]
 };
 
-const interactions = [
-  {
-    type: "alternative",
-    interactionNorms: [
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
-        type: "primary",
-      },
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
-        type: "primary",
-      },
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
-        type: "primary",
-      },
-    ],
-  },
-  {
-    type: "repetition",
-    interactionNorms: [
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
-        type: "primary",
-      },
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LamaDecModAlsShould",
-        type: "primary",
-      },
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
-        type: "primary",
-      },
-    ],
-  },
-  {
-    type: "contradiction",
-    interactionNorms: [
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LabaDecModAlsShould",
-        type: "primary",
-      },
-      {
-        recId:
-          "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
-        type: "primary",
-      },
-    ],
-  },
-  {
-    type: "contradiction",
-    interactionNorms: [
-      {
-        recId: "http://anonymous.org/data/RecCOPD-LabaLamaDecModAlsShould",
-        type: "primary",
-      },
-      {
-        recId:
-          "http://anonymous.org/data/RecCOPD-BetaAgonistIncLowRiskCdrShouldnot",
-        type: "primary",
-      },
-    ],
-  },
-];
 
-//const medObj = new MedicationResources(new Map());
 let condObj = new ConditionResources(new Map());
 let medReqObj = new MedicationRequestResources(new Map());
 let servReq = new ServiceRequestResources(new Map());
 let effectObj = new ForecastEffectResources(new Map());
+let medObj = new MedicationResources(new Map());
+let issueObj = new DetectedIssueResources();
+let planObj = new CarePlanResources()
 
 //exports.cardParams =  cardParams;
 //exports.createCard = (options) => new Card(options);
-//exports.addMedication = medObj.add();
+
+exports.args = req;
+exports.mitigation = res;
+exports.addMedication = medObj.add();
 exports.addCondition = condObj.add();
 exports.addMedicationRequest = medReqObj.add();
 exports.addServiceRequest = servReq.add();
 exports.addForecastEffect = effectObj.add();
-exports.rec1 = TMRobject;
-exports.rec2 = TMRobject2;
-exports.interactions = interactions;
+exports.addDetectedIssues = issueObj.add();
+exports.addCarePlans = planObj.add();
