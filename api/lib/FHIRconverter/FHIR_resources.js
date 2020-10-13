@@ -18,7 +18,7 @@ function Card(options = {}) {
   this.patient = patient;
   let patientUrl = "http://acme.com/Patient/" + patient;
   this.birthDate = birthDate;
-  this.entries = [
+  this.entry = [
     {
       fullUrl: patientUrl,
       resource: {
@@ -31,38 +31,40 @@ function Card(options = {}) {
   ];
 
   //only property of Card
-  this.toString = () => `{
-        "cards": [
+  this.toJSON = () => {
+    return {
+      cards: [
+        {
+          summary: summary,
+          indicator: "info",
+          source: {
+            label: labelSource,
+          },
+          suggestions: [
             {
-                "summary": "${summary}",
-                "indicator": "info",
-                "source": {
-                    "label": "${labelSource}"
+              label: labelSuggestions,
+              uuid: uuid,
+              actions: [
+                {
+                  type: "update",
+                  description: actionDescription,
+                  resource: {
+                    resourceType: "Bundle",
+                    id: resourceId,
+                    type: "collection",
+                    entry: this.entry,
+                  },
                 },
-                "suggestions": [
-                    {
-                        "label": "${labelSuggestions}",
-                        "uuid": "${uuid}",
-                        "actions": [
-                            {
-                                "type": "update",
-                                "description": "${actionDescription}",
-                                "resource": {
-                                    "resourceType": "Bundle",
-                                    "id": "${resourceId}",
-                                    "type": "collection",
-                                    "entry": ${this.entries.toJSON}
-                                }
-                            }
-                        ]
-                    }
-                ],
-                "selectionBehaviour": "at-most-one"
-            }
-        ]
-    }`;
+              ],
+            },
+          ],
+          selectionBehaviour: "at-most-one",
+        },
+      ],
+    };
+  };
 
-  this.toJSON = () => this.toString();
+  this.toString = () => JSON.stringify(this.toJSON());
 }
 
 /**
@@ -812,12 +814,13 @@ class FhirDetectedIssue {
  * It takes index of plan to add to ID, a title for the plan, the list of TMR Rec Ids which are part of the plan and the FHIR entries corresponding to the converted TMR components.
  */
 class FhirCarePlan {
+
   constructor(planIndex, title, patient, requestUrlList, fhirEntries) {
     this._fullUrl = uriPrefix + carePlan_ID + "/" + carePlan_ID + planIndex;
     this._id = carePlan_ID + planIndex;
     this._title = title;
     this._patient = patient;
-    this._activityList = addRequestRef(fhirEntries, requestUrlList);
+    this._activityList = this.addRequestRef(fhirEntries, requestUrlList);
   }
 
   /**
@@ -832,12 +835,13 @@ class FhirCarePlan {
 
     if (!Array.isArray(entryFhirList) || !Array.isArray(urlList))
       throw Error("One parameter is not an array as expected in FhirCarePLan.");
+
     resultArr = urlList.map((urlRef) => {
       let id = String(urlRef).slice(26);
       //find entry object with same id
-      let resource = entryFhirList.find((entry) => entry.resource.id == id);
+      let entryObj = entryFhirList.find((entry) => entry.resource.id == id);
 
-      let identifier = resource.resourceType + "/" + id;
+      let identifier = entryObj.resource.resourceType + "/" + id;
 
       //return fullURl
       return { ref: identifier };
@@ -1236,27 +1240,30 @@ class CarePlanResources {
   }
   add() {
     return (title, patient, extensions, fhirReqEntries) => {
-      if (!Array.isArray(extensions) && Array.isArray(fhirReqEntries))
+      if (!Array.isArray(extensions) || !Array.isArray(fhirReqEntries))
         throw new Error(
           "one parameter is not an Array as expected in CarePlanResources."
         );
 
       for (let index = 0; index < extensions.length; index++) {
-        const extenList = extensions[index];
+        const extensionObj = extensions[index];
 
-        let requestUrlList = extenList.map(
-          (extension) => extension.aboutRecommendation.id
-        );
+        if ("extension" in extensionObj && Array.isArray(extensionObj.extension)) {
 
-        this._carePlanArr.push(
-          new FhirCarePlan(
-            index,
-            title,
-            patient,
-            requestUrlList,
-            fhirReqEntries
-          )
-        );
+          let requestUrlList = extensionObj.extension.map(
+            (ext) => ext.aboutRecommendation.id
+          );
+
+          this._carePlanArr.push(
+            new FhirCarePlan(
+              index,
+              title,
+              patient,
+              requestUrlList,
+              fhirReqEntries
+            )
+          );
+        }
       }
       return this;
     };
@@ -2225,12 +2232,12 @@ function translateTmrToFhir(patient, tmrData) {
     );
 
   //flaten the array using the customised toJSON function
-  const result = JSON.parse(JSON.stringify(output, null, "  "));
+  //const result = JSON.parse(JSON.stringify(output, null, "  "));
 
-  return { entry: result, requestList: fhirReqList };
+  return JSON.parse(JSON.stringify({ entry: output, requestList: fhirReqList }));
 }
 
-function createCards({ patientId, birthDate, tmrObject }) {
+function createCards(patient, birthDate, tmrObject) {
   // Object with arguments required to create a new Card object
   const cardParams = {
     uuid: undefined,
@@ -2242,35 +2249,42 @@ function createCards({ patientId, birthDate, tmrObject }) {
     resourceId: undefined,
     birthDate: undefined,
   };
+
   //those not defined have a default value
-  cardParams.patient = patientId;
+  cardParams.patient = patient;
   cardParams.birthDate = birthDate;
 
   //create a new CDS Card object
   const card = new Card(cardParams);
 
   //convert TMR 2 FHIR entries
-  const entries = translateTmrToFhir(patientId, tmrObject);
+  const { entry, requestList } = translateTmrToFhir(
+    "Patient/" + card.patient,
+    tmrObject
+  );
+
   //concatenate entries
-  card.entries.concat(entries);
+  let newEntry = card.entry.concat(entry);
+  card.entry = newEntry;
 
-
-  return card;
+  return { dss_output: card.toJSON(), listOfFhirRequests: requestList};
 }
 
-function createCarePlanList(title, patient, extensions, fhirEntries){
+function createCarePlanList(title, patient, extensions, fhirEntries) {
   let planObj = new CarePlanResources();
   let addCarePlans = planObj.add();
-  addCarePlans(title, patient, extensions, fhirEntries);
-  
-  return JSON.stringify(planObj._carePlanArr);
+  addCarePlans(title, "Patient/" + patient, extensions, fhirEntries);
+
+  return JSON.parse(JSON.stringify(planObj._carePlanArr));
 }
 
+/**
+ * creates a CDS card and add resources from the given TMR data
+ * @returns { dss_output:{}, listOfFhirRequests: []}
+ */
+exports.setCdsCard = createCards;
+/**
+ * Creates the set of CarePlan resources using the data from the resolution engine and the set of FHIR resources
+ */
+exports.getCarePlan = createCarePlanList;
 
-//exports.cardParams =  cardParams;
-//exports.createCard = (options) => new Card(options);
-
-exports.args = req;
-exports.mitigation = res;
-exports.convertTMR2FHIR = translateTmrToFhir;
-//exports.addCarePlans = planObj.add();
