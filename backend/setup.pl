@@ -33,8 +33,8 @@ unloadOntologies() :-
   rdf_unload_graph('http://anonymous.org/Transition&SituationTypes'),
   rdf_unload_graph('http://anonymous.org/CausationBeliefs-Nanopub').
 
-% keep ontologies loaded from the start. then, dont unload it foreach iteration
-%:-loadOntologies.
+% keep ontologies loaded from the start. then, dont unload it at each iteration
+:-loadOntologies.
 
 % Logic libraries
 :- include('tmr/logic/interactionRules').

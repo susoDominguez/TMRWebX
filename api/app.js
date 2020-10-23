@@ -4,6 +4,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const logger = require('./config/winston');
+const { handleError, ErrorHandler } = require('./lib/errorHandler.js');
 //const bodyParser = require('body-parser')
 
 // Environment constiables
@@ -49,9 +50,9 @@ router.use('/transitions', transitionsRouter);
 app.use('/tmrweb', router);
 
 // catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
-});
+//app.use(function(req, res, next) {
+//  next(createError(404));
+//});
 
 // error handler
 app.use(function(err, req, res, next) {
@@ -63,7 +64,9 @@ app.use(function(err, req, res, next) {
   
   // render the error page
   res.status(err.status || 500);
-  res.render('error');
+  //new error handler
+  handleError(err, res);
+  //res.render('error');
 });
 
 module.exports = app; //DEBUG=drug-interaction-middleware:* npm run devstart

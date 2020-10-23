@@ -43,7 +43,7 @@ function action(req, res, insertOrDelete) {
           prov:wasAttributedTo          data:` + req.body.author + `.
   }`;
 
-  utils.sparqlUpdate("beliefs", "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication, insertOrDelete, function (status) {
+  utils.sparqlUpdate("beliefs", "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication, insertOrDelete, function (err, status) {
 
     res.sendStatus(status);
 
@@ -62,7 +62,7 @@ router.post('/delete', function (req, res) {
   const belief_URI = (req.body.belief_id ? req.body.belief_id : "data:CB" + req.body.belief_id);
   const dataset_id = "beliefs"
 
-  utils.sparqlDropGraphs(dataset_id, belief_URI, function (status) {
+  utils.sparqlDropGraphs(dataset_id, belief_URI, function (err, status) {
 
     res.sendStatus(status);
 
@@ -73,10 +73,11 @@ router.post('/delete', function (req, res) {
 router.post('/all/get/', function (req, res) {
 
   //belief_URI
-  utils.getBeliefData("beliefs", ( req.body.belief_URI ? "<" + req.body.belief_URI + ">" : "data:CB" + req.body.belief_id), "transitions", "careActions", function (beliefData) {
+  utils.getBeliefData("beliefs", ( req.body.belief_URI ? "<" + req.body.belief_URI + ">" : "data:CB" + req.body.belief_id), "transitions", "careActions", function (err, beliefData) {
+    
     //if  data found in Object (we check), begin
     if (beliefData.constructor === Object && Object.entries(beliefData).length != 0) {
-
+ 
       var cbData = {
         id: req.body.belief_URI,
         author: "JDA"

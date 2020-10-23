@@ -9,10 +9,13 @@ const utils = require('../lib/utils');
 //get all drug types URIS
 router.post('/drugs/get', function(req, res, next) {
 
-  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType", function(uris) {
+  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType", function(err, list) {
 
-    res.send(uris);
-
+    if(err) {
+      res.sendStatus(404).send(list);
+      return;
+    }
+    res.sendStatus(200).send(list);
   });
 
 });
@@ -20,10 +23,13 @@ router.post('/drugs/get', function(req, res, next) {
 //Get all non drug types URIs
 router.post('/nonDrugs/get', function(req, res, next) {
 
-  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType", function(uris) {
+  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType", function(err, list) {
 
-    res.send(uris);
-
+    if(err) {
+      res.sendStatus(404).send(list);
+      return;
+    }
+    res.sendStatus(200).send(list);
   });
 
 });
@@ -31,10 +37,12 @@ router.post('/nonDrugs/get', function(req, res, next) {
 //Get all vaccine types URIs
 router.post('/vaccines/get', function(req, res, next) {
 
-  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType", function(uris) {
-
-    res.send(uris);
-
+  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType", function(err, list) {
+    if(err) {
+      res.sendStatus(404).send(list);
+      return;
+    }
+    res.sendStatus(200).send(list);
   });
 
 });

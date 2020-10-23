@@ -44,25 +44,17 @@ load_guideline_group(Dataset_id, Dataset_graph_id) :-
   rdf_load(MainGuidelinesPath, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph(Dataset_graph_id)]).
 
 show_interactions(Request) :-
-  %debug(hello),
-  loadOntologies,
-  %debug(hello, 'Ontologies have been loaded', []),
+  %loadOntologies,
   http_parameters(Request, [ guideline_id(Dataset_id, [ string ]) ]),
-  %debug(hello, 'http_parameters ~p', [Dataset_id]),
   load_guideline_group(Dataset_id, Dataset_graph_id),
-  %debug(hello, 'load_guideline_group ~p', [Dataset_graph_id]),
   inferInternalInteractions,
   format('Content-type: text/plain~n~n'),
   atom_concat('http://anonymous.org/data/', Dataset_id, CIG_URI), %TODO: switch to rdf_global_id.
-  %debug(hello, 'inferInternalInteractions ~p', [CIG_URI]),
   guideline_recommendations(CIG_URI, Recommendations),
-  %debug(hello, 'guideline_recommendations ~p', [Recommendations]),
   maplist(recommendation_term, Recommendations, _Terms),
-  %debug(hello, 'recommendation_term ~p', _Terms),
   findall(interaction(Interaction,Label,Elems,External), interaction(Recommendations, Interaction, Label, Elems, External), Interactions),
-  %debug(hello, 'findall interactions ~p', [Interactions]),
   print_list(Interactions),
-  unloadOntologies,
+  %unloadOntologies,
   rdf_unload_graph(Dataset_graph_id).
 
 /*

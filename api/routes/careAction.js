@@ -10,67 +10,43 @@ const utils = require('../lib/utils');
 
 function postDrugs(careActData, insertOrDelete, callback) {
 
-  utils.sparqlUpdate('careActions', careActData, insertOrDelete, function (status) {
-
-    callback(status);
-
-  });
+  utils.sparqlUpdate('careActions', careActData, insertOrDelete, callback);
 
 }
 
 router.post('/drug/individual/add', function (req, res) {
 
-  careActDef(req, config.INSERT, function (status) {
-
-    res.sendStatus(status);
-
-  });
+  careActDef(req, config.INSERT, (err, status) => res.sendStatus(status).end());
 
 });
 
 router.post('/nondrug/individual/add', function (req, res) {
 
-  careActDef(req, config.INSERT, function (status) {
-
-    res.sendStatus(status);
-
-  });
+  careActDef(req, config.INSERT, (err, status) => res.sendStatus(status).end());
 
 });
 
 router.post('/individual/delete', function (req, res) {
 
-  careActDef(req, config.DELETE, function (status) {
-
-    res.sendStatus(status);
-
-  });
+  careActDef(req, config.DELETE, (err, status) => res.sendStatus(status).end());
 
 });
 
 router.post('/drug/category/add', function (req, res) {
 
-  drugCatCareAction(req, config.INSERT, function (status) {
-
-    res.sendStatus(status);
-
-  });
+  drugCatCareAction(req, config.INSERT, (err, status) => res.sendStatus(status).end());
 
 });
 
 router.post('/drug/category/delete', function (req, res) {
 
-  drugCatCareAction(req, config.DELETE, function (status) {
-
-    res.sendStatus(status);
-
-  });
+  drugCatCareAction(req, config.DELETE, (err, status) => res.sendStatus(status).end());
 
 });
 
 router.post('/effect/get', function (req, res) {
 
-  var postData = ""
+  let postData = ""
 
   if (req.body.drugCat_id) {
     postData = require('querystring').stringify({
@@ -97,31 +73,43 @@ router.post('/effect/get', function (req, res) {
 
   }
 
-  utils.callPrologServer("drugeffects", postData, res, function (data) {
+  utils.callPrologServer("drugeffects", postData, res, function (err, data) {
 
-    res.send(data);
+    if(err){
+      res.sendStatus(404);
+      return;
+    }
+
+    res.sendStatus(200).send(data);
 
   });
 
 });
 
+//TODO: revise
 router.post('/all/get/', function (req, res) {
 
   if (req.body.uri) {
 
-    utils.getCareActionData("careActions", req.body.uri, function (actionResults) {
-      var data = {};
-      var vars = actionResults.head.vars;
-      var bindings = actionResults.results.bindings;
+    utils.getCareActionData("careActions", req.body.uri, function (err, actionResults) {
+
+      if(err) {
+        res.sendStatus(404).send({}).end();
+        return;
+      }
+
+      let data = {};
+      let vars = actionResults.head.vars;
+      let bindings = actionResults.results.bindings;
 
       //format data by looping through results
       for (let pos in bindings) {
 
-        var bind = bindings[pos];
+        let bind = bindings[pos];
 
-        for (var varPos in vars) {
+        for (let varPos in vars) {
 
-          var value = bind[vars[varPos]].value;
+          let value = bind[vars[varPos]].value;
 
           //for each heading, add a field
           switch (vars[varPos]) {
@@ -133,7 +121,7 @@ router.post('/all/get/', function (req, res) {
               break;
             case "actType":
               //extract code
-              var type = value.slice(27);
+              let type = value.slice(27);
               data.code = type;
               data.requestType = 0; //for drugT and DrugCat
               //check for therapy
@@ -157,8 +145,9 @@ router.post('/all/get/', function (req, res) {
       }
       res.send(data);
     });
+
   } else {
-    res.send({});
+    res.sendStatus(406).send({}).end();
   }
 });
 
@@ -223,9 +212,9 @@ function nonDrugDef(typeOrCat, id, label) {
 //Administration action care general to both drug type and category
 function drugAdminActDef(typeOrCat, id, label) {
 
-  var drugAdministration =
+  let drugAdministration =
     `data:ActAdminister` + id + ` a vocab:DrugAdministrationType, owl:NamedIndividual ;
-                               rdfs:label "administration of ` + label + `"@en ;
+                               rdfs:label "administer ` + label + `"@en ;
                                vocab:administrationOf data:Drug` + typeOrCat + id;
 
   return drugAdministration;
@@ -234,7 +223,7 @@ function drugAdminActDef(typeOrCat, id, label) {
 //Administration non drug action care 
 function nonDrugAdminActDef(typeOrCat, id, actLabel) {
 
-  var nonDrugAdmin =
+  let nonDrugAdmin =
     `data:ActAdminister` + id + ` a vocab:NonDrugAdministrationType, owl:NamedIndividual ;
                                rdfs:label "` + actLabel + `"@en ;
                                vocab:applicationOf data:NonDrug` + typeOrCat + id;
@@ -250,6 +239,7 @@ function adminActSub(id) {
 
 //defines the insertion of clinical codes both in drugT and nonDrugT. Also in drug categories
 function insertCodes(req) {
+ 
   careAction = "";
 
   if (req.body.icd10Codes) {
@@ -295,8 +285,8 @@ function insertCodes(req) {
 
 //defines ALL DrugT and also DrugT Admin. Also non drug careActT and careActT Admin
 function careActDef(req, insertOrDelete, callback) {
-  var action = "";
-  var careAdmin = "";
+  let action = "";
+  let careAdmin = "";
   //if not  drug
   if (req.body.nonDrugAct_label) {
     //it is not a drug
@@ -340,7 +330,7 @@ function careActDef(req, insertOrDelete, callback) {
 //add one or more drugTypes as part of the grouping criteria of a drug category
 function addGroupingCriteria(groupingCriteriaIds) {
 
-  var groupingCriteria = ` ;
+  let groupingCriteria = ` ;
                             vocab:hasGroupingCriteria  `;
 
   groupingCriteriaIds.split(",").forEach(function (criteriaId) {
@@ -357,7 +347,7 @@ function addGroupingCriteria(groupingCriteriaIds) {
 //Specify multiple drug subsumptions via the administrationOf triple.
 function adminActSubs(drugIds) {
 
-  var adminSubs = ` ;
+  let adminSubs = ` ;
                       vocab:subsumes  `;
 
   drugIds.split(",").forEach(function (elem) {
@@ -373,11 +363,11 @@ function adminActSubs(drugIds) {
 function drugCatCareAction(req, insertOrDelete, callback) {
 
     // Drug category format:
-   var drugCat = drugDef("Cat", req.body.drugCat_id, 
+   let drugCat = drugDef("Cat", req.body.drugCat_id, 
       ( req.body.drugCat_label ? req.body.drugCat_label : req.body.drugCat_id ) ) +
        insertCodes(req);
 
-    var adminActDrugCat = drugAdminActDef("Cat", req.body.drugCat_id, 
+    let adminActDrugCat = drugAdminActDef("Cat", req.body.drugCat_id, 
       ( req.body.action_label ? req.body.action_label : ( req.body.drugCat_label ? req.body.drugCat_label : req.body.drugCat_id ) ) ) ;
 
   //add grouping criteria

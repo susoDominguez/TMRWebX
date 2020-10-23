@@ -8,7 +8,7 @@ const utils = require('../lib/utils');
 
 function postTransition(transitionData, res, insertOrDelete) {
 
-  utils.sparqlUpdate('transitions', transitionData, insertOrDelete, function(status) {
+  utils.sparqlUpdate('transitions', transitionData, insertOrDelete, function(err, status) {
 
     res.sendStatus(status);
 
@@ -43,7 +43,7 @@ router.post('/delete', function(req, res, next) {
 function actionSituation(req, res, insertOrDelete) {
 
   var situationDef = `data:Sit` + req.body.situation_id + ` rdf:type vocab:SituationType, owl:NamedIndividual;
-              rdfs:label "` + req.body.situation_label + `"@en ; 
+               rdfs:label "` + req.body.situation_label + `"@en ; 
                vocab:stateOf  "`+ req.body.stateOfproperty +`" `
 
   if ( req.body.umlsCodes ) {
@@ -177,7 +177,12 @@ router.post('/property/delete', function(req, res, next) {
 
 router.post('/all/get/', function(req, res, next) {
 
-    utils.getTransitionData("transitions", ( req.body.transition_URI ? "<"+req.body.transition_URI+">" : "data:Tr"+req.body.transition_id), function(transitionData) {
+    utils.getTransitionData("transitions", ( req.body.transition_URI ? "<"+req.body.transition_URI+">" : "data:Tr"+req.body.transition_id), function(err, transitionData) {
+
+      if(err) {
+        res.sendStatus(404).send(transitionData);
+        return;
+      }
 
       //if  data found in Object (we check), begin
       if(transitionData.constructor === Object && Object.entries(transitionData).length != 0) {
@@ -256,7 +261,7 @@ router.post('/all/get/', function(req, res, next) {
 router.post( '/situation/all/get/', function(req, res, next) {
 
     utils.sparqlGetPreds_Objcts("transitions", ( req.body.situation_URI ? "<"+req.body.situation_URI+">" : "data:Sit"+req.body.situation_id), 
-     function(situationData) {
+     function(err, situationData) {
 
       res.send(situationData);
   
@@ -266,7 +271,7 @@ router.post( '/situation/all/get/', function(req, res, next) {
 router.post('/property/all/get/', function(req, res, next) {
 
     utils.sparqlGetPreds_Objcts("transitions", ( req.body.property_URI ? "<"+req.body.property_URI+">" : "data:Prop"+req.body.property_id ), 
-      function(propertyData) {
+      function(err,propertyData) {
 
       res.send(propertyData);
   

@@ -12,17 +12,17 @@ class Util {
 
 	/**
 	 * 
-	 * @param {CIG identifier} dataset_id 
-	 * @param {SPARQL query content} content 
-	 * @param {insert | delete} insertOrDelete 
-	 * @param {callback} callback 
+	 * @param {string} dataset_id CIG identifier
+	 * @param {string} content SPARQL query content
+	 * @param {string} insertOrDelete insert | delete
+	 * @param {(Error, number)} callback callback where number has status (200 | 400)
 	 */
 	static sparqlUpdate(dataset_id, content, insertOrDelete, callback) {
 
-		var sparqlUpdate = ` ` + insertOrDelete + ` DATA {
+		let sparqlUpdate = ` ` + insertOrDelete + ` DATA {
 	` + content + `}`;
 
-		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		let prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
 
 		request.post(
@@ -38,12 +38,12 @@ class Util {
 
 				if (!error && response && response.statusCode < 400) {
 
-					callback(200);
+					callback(null, 200);
 
 				} else {
 
 					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(400);
+					callback(err, 400);
 
 				}
 
@@ -55,20 +55,20 @@ class Util {
 
 	/**
 	 * 
-	 * @param {identifier of Jenna dataset} dataset_id 
-	 * @param {URI of recommendation assertion to be deleted} rec_uri 
-	 * @param {callback function to deliver response} callback 
+	 * @param {string} dataset_id identifier of Jenna dataset
+	 * @param {string} rec_uri URI of recommendation assertion to be deleted
+	 * @param {(Error, number) => number} callback callback function to deliver response (err, status)
 	 */
 	static sparqlDropGraphs(dataset_id, graph_uri, callback) {
 
-		var sparqlUpdate = ` DROP SILENT GRAPH ` + graph_uri + `_head ;
+		let sparqlUpdate = ` DROP SILENT GRAPH ` + graph_uri + `_head ;
 		 DROP SILENT GRAPH ` + graph_uri + ` ;
 		 DROP SILENT GRAPH ` + graph_uri + `_provenance ; 
 		 DROP SILENT GRAPH ` + graph_uri + `_publicationinfo ;
 		 DELETE  SILENT { `+ graph_uri + ` vocab:isPartOf ?subguideline } WHERE 
 		 { `+ graph_uri + ` vocab:isPartOf ?subguideline } `
 
-		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		let prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
 
 		request.post(
@@ -84,12 +84,12 @@ class Util {
 
 				if (!error && response && response.statusCode < 400) {
 
-					callback(200);
+					callback(null, 200);
 
 				} else {
 
 					console.log("SPARQL update failed at: " + URL + "  Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(400);
+					callback(error, 400);
 
 				}
 
@@ -101,9 +101,9 @@ class Util {
 
 	/**
 	 * 
-	 * @param {identifier of CIG} dataset_id 
-	 * @param {SPARQL query} query 
-	 * @param {callback} callback 
+	 * @param {string} dataset_id identifier of CIG
+	 * @param {string} query SPARQL query
+	 * @param {(Error, [])} callback callback returns empty array if err found
 	 */
 	static sparqlQuery(dataset_id, query, callback) {
 
@@ -123,9 +123,9 @@ class Util {
 				//console.log("body:\n" + body)
 				if (!error && response && response.statusCode == 200) {
 
-					var data = [];
+					let data = [];
 
-					var queryContainer = xmlQuery(xmlReader.parseSync(body));
+					let queryContainer = xmlQuery(xmlReader.parseSync(body));
 
 					queryContainer.find('binding').each(function (binding) {
 
@@ -133,13 +133,13 @@ class Util {
 
 					});
 
-					callback(data);
+					callback(null, data);
 
 				} else {
 
 					console.log("SPARQL query failed: " + prefixAndSparqlQuery + ". Error: " + error + ". Body: " + body +
 					 ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(null);
+					callback(error, []);
 
 				}
 
@@ -151,9 +151,9 @@ class Util {
 
 	/**
 	 * 
-	 * @param {identifier of CIG} dataset_id 
-	 * @param {SPARQL query} query 
-	 * @param {callback} callback 
+	 * @param {string} dataset_id identifier of CIG
+	 * @param {string} query SPARQL query
+	 * @param {(Error, JSON)} callback callback function
 	 */
 	static sparqlJSONQuery(dataset_id, query, callback) {
 
@@ -173,11 +173,11 @@ class Util {
 				//console.log(body)
 				if (!error && response && response.statusCode == 200) {
 
-					callback(JSON.parse(body));
+					callback(null, JSON.parse(body));
 
 				} else {
 					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback({});
+					callback(error, {});
 				}
 			}
 		);
@@ -185,32 +185,37 @@ class Util {
 
 	/**
 	 * 
-	 * @param {CIG Recommendations are inserted into} cigTo 
-	 * @param {array of graphs labels} graphIdList 
+	 * @param {string} cigFrom original CIG
+	 * @param {string} cigTo destination CIG
+	 * @param {string} nanoHead 
+	 * @param {string} nanoAssert 
+	 * @param {string} nanoProv 
+	 * @param {string} nanoPubInfo 
+	 * @param {(Error, number) => number} callback callback function returning status
 	 */
 	static addGraphsDataFromToCig(cigFrom, cigTo, nanoHead, nanoAssert, nanoProv, nanoPubInfo, callback) {
 
-		//var createGraphs = ``;
-		var insertGraphsData = ``;
-		var preGraphs = ``;
-		var postGraphs = ``;
-		var nanopubGraphs = ``;
-		var graphDescrDel = ``;
-		var graphDescrIns = ``;
-		var deleteTriples = `\nDELETE WHERE { `;
-		//var insertTriples = `\nINSERT DATA { `;
+		//let createGraphs = ``;
+		let insertGraphsData = ``;
+		let preGraphs = ``;
+		let postGraphs = ``;
+		let nanopubGraphs = ``;
+		let graphDescrDel = ``;
+		let graphDescrIns = ``;
+		let deleteTriples = `\nDELETE WHERE { `;
+		//let insertTriples = `\nINSERT DATA { `;
 
 		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
 
 
-		for (var index in nanoHead) {
+		for (let index in nanoHead) {
 			
-			//var graphsDescr = `\nGRAPH <` + nanoHead[index] + `> { ?a ?b ?c } \nGRAPH <` + nanoAssert[index] + `> { ?d ?e ?f } \nGRAPH <` + nanoProv[index] + `> { ?g ?h ?i } \nGRAPH <` + nanoPubInfo[index] + `> { ?j ?k ?l } `;
+			//let graphsDescr = `\nGRAPH <` + nanoHead[index] + `> { ?a ?b ?c } \nGRAPH <` + nanoAssert[index] + `> { ?d ?e ?f } \nGRAPH <` + nanoProv[index] + `> { ?g ?h ?i } \nGRAPH <` + nanoPubInfo[index] + `> { ?j ?k ?l } `;
 			
 			 preGraphs += 
 			 	`\nGRAPH <` + nanoAssert[index] + `> { ?a`+index+` ?b`+index+` ?c`+index+` } `;
 			 nanopubGraphs +=
-			 	 `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> prov:wasDerivedFrom ?d`+index+` ;\n vocab:partOf data:`+ cigTo + `;\n vocab:extractedFrom data:`+ cig +` } `;
+			 	 `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> prov:wasDerivedFrom ?d`+index+` ;\n vocab:partOf data:`+ cigTo + `;\n vocab:extractedFrom data:`+ cigFrom +` } `;
 			 postGraphs += 
 			 	 `\nGRAPH <` + nanoProv[index] + `> { <` + nanoAssert[index] + `> prov:wasDerivedFrom ?d`+index+` } ` ;
 
@@ -228,10 +233,10 @@ class Util {
 
 		//////UPDATE GRAPH STORE//////
 
-		var sparqlUpdate =  insertGraphsData + deleteTriples ;//+ insertTriples;
+		let sparqlUpdate =  insertGraphsData + deleteTriples ;//+ insertTriples;
 		//console.log(`insertGraphData: ` + sparqlUpdate);
 
-		var prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+		let prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
 
 		request.post(
@@ -245,12 +250,12 @@ class Util {
 				
 				if (!error && response && response.statusCode < 400) {
 
-					callback(200);
+					callback(null, 200);
 
 				} else {
 
 					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(400);
+					callback(error, 400);
 
 				}
 
@@ -260,30 +265,47 @@ class Util {
 
 	}
 
+	/**
+	 * 
+	 * @param {string} cigId 
+	 * @param {string} recAssertUri 
+	 * @param {string} beliefDsId 
+	 * @param {string} TrDsId 
+	 * @param {string} actDsId 
+	 * @param {(Error, JSON)} callback 
+	 */
 	static getRecData(cigId, recAssertUri, beliefDsId, TrDsId, actDsId, callback) {
+
+		const recAssertURI = `<` + recAssertUri + `>`;
+		const recProvURI = `<` + recAssertUri + `_provenance>`;
 
 		const cbUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + beliefDsId + "/query>";
 		const TrUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrDsId + "/query>";
 		const actUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actDsId + "/query>";
 
-		var query = 
+		let query = 
 		`
-		SELECT DISTINCT ?text ?actAdmin ?cbUri ?motive ?strength ?contrib ?sourceOfRec ?partOf
+		SELECT DISTINCT ?text ?actAdmin ?cbUri ?strength ?contrib ?sourceOfRec ?partOf
 						?freq ?evidence ?TrUri ?PropUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
-						?adminT ?actId ?adminLabel ?actType
+						?adminT ?actId ?adminLabel ?actType ?actLabel  
 	    WHERE { 
 
-		   GRAPH   `+ recAssertUri + `  {
-			`+ recAssertUri + ` a  vocab:ClinicalRecommendation . 
-			`+ recAssertUri + ` rdfs:label ?text .
-			`+ recAssertUri + ` vocab:aboutExecutionOf ?actAdmin .
-			`+ recAssertUri + ` vocab:basedOn ?cbUri .
-			`+ recAssertUri + ` vocab:motivation ?motive .
-			`+ recAssertUri + ` vocab:strength ?strength .
+		   GRAPH   `+ recAssertURI + `  {
+			`+ recAssertURI + ` a  vocab:ClinicalRecommendation . 
+			`+ recAssertURI + ` rdfs:label ?text .
+			`+ recAssertURI + ` vocab:aboutExecutionOf ?actAdmin .
+			`+ recAssertURI + ` vocab:basedOn ?cbUri .
+			`+ recAssertURI + ` vocab:strength ?strength .
 			?cbUri vocab:contribution ?contrib .
-			OPTIONAL { `+ recAssertUri + ` vocab:extractedFrom ?partOf . } .
-			OPTIONAL { `+ recAssertUri + ` prov:wasDerivedFrom  ?sourceOfRec .} .
+			OPTIONAL { `+ recAssertURI + ` vocab:extractedFrom ?extractedFrom . } .
+			OPTIONAL { `+ recAssertURI + ` vocab:partOf ?partOf . } .
 			}
+
+			GRAPH   `+ recProvURI + `  {
+				`+ recProvURI + ` a  <http://www.w3.org/ns/oa#Annotation> . 
+				`+ recProvURI + `  <http://www.w3.org/ns/oa#hasBody> ` + recAssertURI + ` .
+				`+ recAssertURI + ` prov:wasDerivedFrom ?sourceOfRec .
+				}
 
 			SERVICE `+ cbUrl + ` {
 				GRAPH  ?cbUri {
@@ -316,7 +338,6 @@ class Util {
 				?actId a owl:NamedIndividual .
 				?actId a ?actType .
 				?actId rdfs:label ?actLabel .
-				?actId vocab:snomedCode  ?snomed .
 				FILTER (?actType != owl:NamedIndividual &&
 					 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
 					 ?adminT != owl:NamedIndividual) .
@@ -324,18 +345,26 @@ class Util {
 	   }
 	   `; 
 
-		this.sparqlJSONQuery(cigId, query, function (data) {
-			callback(data);
+		this.sparqlJSONQuery(cigId, query, function (err, data) {
+			callback(err, data);
 		});
 
 	}
 
+	/**
+	 * 
+	 * @param {string} datasetId 
+	 * @param {string} belief_Uri 
+	 * @param {string} TrId 
+	 * @param {string} actId 
+	 * @param {(Error, JSON))} callback 
+	 */
 	static getBeliefData(datasetId, belief_Uri, TrId, actId, callback) {
 
 		const TrUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + TrId + "/query>";
 		const actUrl = "<http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + actId + "/query>";
 
-		var query = `
+		let query = `
 	SELECT DISTINCT 
 	?freq ?strength ?TrUri
 	?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
@@ -380,17 +409,23 @@ class Util {
 		}
 	}
 	`;
-		this.sparqlJSONQuery( datasetId, query, function (data) {
+		this.sparqlJSONQuery( datasetId, query, function (err, data) {
 
-			callback(data);
+			callback(err, data);
 
 		});
 
 	}
 
+	/**
+	 * 
+	 * @param {string} dataset_id 
+	 * @param {string} uri 
+	 * @param {(Error, JSON)} callback 
+	 */
 	static getCareActionData(dataset_id, uri, callback) {
 
-		var query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed
+		let query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed
 		WHERE {
 			<`+ uri + `> a owl:NamedIndividual.
 			<`+ uri + `> a ?adminT.
@@ -406,12 +441,18 @@ class Util {
 		}
 		`;
 
-		this.sparqlJSONQuery(dataset_id, query, callback)
+		this.sparqlJSONQuery(dataset_id, query, callback);
 	}
 
+	/**
+	 * 
+	 * @param {string} dataset_id 
+	 * @param {string} TrUri 
+	 * @param {(Error, JSON)} callback 
+	 */
 	static getTransitionData(dataset_id, TrUri, callback) {
 
-		var query = `SELECT DISTINCT  ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?propTxt ?propUri ?deriv
+		let query = `SELECT DISTINCT  ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?propTxt ?propUri ?deriv
 		WHERE {
 			`+ TrUri + ` a vocab:TransitionType .
 			`+ TrUri + ` vocab:affects ?propUri .
@@ -427,27 +468,27 @@ class Util {
 		}
 		`;
 
-		this.sparqlJSONQuery(dataset_id, query, callback)
+		this.sparqlJSONQuery(dataset_id, query, callback );
 	}
 
 	static sparqlGetSubjectAllNamedGraphs(dataset_id, instance, callback) {
 
 		logger.info(`dataset_id: ` + dataset_id + ` and instance: ` + instance);
 
-		var query = `
+		let query = `
 		SELECT ?s
 		WHERE {
 		  GRAPH ?g { ?s a ` + instance + ` }
 		}
 		`;
 
-		this.sparqlQuery(dataset_id, query, callback)
+		this.sparqlQuery(dataset_id, query, callback);
 
 	}
 
 	static sparqlGetSubjectDefaultGraph(dataset_id, instance, callback) {
 
-		var query = `
+		let query = `
 		SELECT ?s
 		WHERE {
 		   ?s a ` + instance + ` 
@@ -460,13 +501,13 @@ class Util {
 
 	static nList(list, n) {
 
-		var pairedPredicateObject = [];
+		let pairedPredicateObject = [];
 
-		for (var i = 0; i < list.length; i += n) {
+		for (let i = 0; i < list.length; i += n) {
 
-			var nTuple = [];
+			let nTuple = [];
 
-			for (var j = i; j < i + n; j++) {
+			for (let j = i; j < i + n; j++) {
 
 				nTuple.push(list[j]);
 
@@ -481,16 +522,17 @@ class Util {
 	}
 
 	static sparqlGetResourcesFromNamedGraph(dataset_id, graph, callback) {
-		var query = `
+		let query = `
 		SELECT ?s ?p ?o
 		WHERE {
 			GRAPH  `+ graph + `  { ?s ?p ?o }
 		}
 		`;
 
-		this.sparqlQuery(dataset_id, query, function (data) {
+		this.sparqlQuery(dataset_id, query, function (err, data) {
 
-			callback(Util.nList(data, 3));
+			//list could be empty if err
+			callback(err, Util.nList(data, 3));
 
 		});
 
@@ -498,16 +540,16 @@ class Util {
 
 	static sparqlGetPreds_Objcts(dataset_id, subject, callback) {
 
-		var query = `
+		let query = `
 		SELECT ?p ?o
 		WHERE {
 		 `+ subject + ` ?p ?o .
 		}
 		`;
 
-		this.sparqlQuery(dataset_id, query, function (data) {
+		this.sparqlQuery(dataset_id, query, function (err, data) {
 
-			callback(Util.nList(data, 2));
+			callback(err, Util.nList(data, 2));
 
 		});
 
@@ -515,7 +557,7 @@ class Util {
 
 	static sparqlGetNamedGraphsFromObject(dataset_id, instance, callback) {
 
-		var query = `
+		let query = `
 		SELECT ?g
 		WHERE {
 		  GRAPH ?g { ?s a ` + instance + ` }
@@ -534,7 +576,7 @@ class Util {
 	 */
 	static sparqlGetNamedNanopubFromSubguidelines(dataset_id, filterString, callback) {
 
-		var query = `
+		let query = `
 		SELECT DISTINCT ?g
 		WHERE {
 			?g vocab:isPartOf ?sg
@@ -566,12 +608,12 @@ class Util {
 				//console.info(error + ", " + response.statusCode )
 				if (!error && response && response.statusCode < 400 && body) {
 					//console.info(body);
-					callback(body);
+					callback(null, body);
 
 				} else {
 
 					logger.error("Failed to call prolog server with path: " + path + ". Data: " + data + ". Error: " + error + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(null);
+					callback(error, null);
 
 				}
 
