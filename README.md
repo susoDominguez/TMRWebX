@@ -43,7 +43,7 @@ cd backend
 Clone the TMR repository:
 
 ```
-git clone https://github.com/k1214757/TMR.git
+git clone https://github.kcl.ac.uk/k1214757/TMR.git
 ```
 
 Enter Prolog environment, and include address of Fuseki server as environment variable:
