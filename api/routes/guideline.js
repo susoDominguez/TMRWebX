@@ -6,12 +6,14 @@ const bodyParser = require("body-parser");
 const config = require("../lib/config");
 const guidelines = require("../lib/guidelines");
 const utils = require("../lib/utils");
+const { handleError, ErrorHandler } = require("../lib/errorHandler");
 
 /**
- * Create a persistent or in-memory CIG
+ * Create a persistent or in-memory CIG and return label of CIG
  */
 router.post("/create", bodyParser.json(), function (req, res, next) {
-  var id = req.body.cig_id;
+  
+  let id = req.body.cig_id ? req.body.cig_id : new Date().toISOString();
 
   cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
 
@@ -45,19 +47,16 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
       }
 
       const description =
-        `data:` +
-        cigId +
-        ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
-                     rdfs:label "` +
-        req.body.description +
-        `"@en .`;
+        `data:` + cigId + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
+                         rdfs:label "` + req.body.description + `"@en .`;
 
       utils.sparqlUpdate(cigId, description, config.INSERT, function (
         err,
         status
       ) {
-        //if err -> status is fixed to 400 in sparqlUpdate
-        res.sendStatus(status);
+        if(err) return  next(new ErrorHandler(status, `sparql has returned an error when creating clinical guideline dataset.`));
+        //otherwise
+        res.json({cig_id: cigId});
       });
     }
   );
@@ -67,9 +66,12 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
  * Delete a persistent or in-memory CIG
  */
 router.post("/delete", function (req, res, next) {
-  var id = req.body.cig_id;
 
-  if (id) {
+  let id = req.body.cig_id;
+
+  if (!id) return next(new ErrorHandler(400, `guideline could not be deleted due to internal error.`));
+  //otherwise
+
     const cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
 
     request.delete(
@@ -89,16 +91,14 @@ router.post("/delete", function (req, res, next) {
       },
       function (error, response, body) {
         if (error) {
-          res.sendStatus(400).send(error);
+          res.sendStatus(400);
         } else {
           //console.log(body);
-          res.sendStatus(200).send(body);
+          res.sendStatus(200);
         }
       }
     );
-  } else {
-    res.sendStatus(404);
-  }
+  
 });
 
 function action(req, res, insertOrDelete) {

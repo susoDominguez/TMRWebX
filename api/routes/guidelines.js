@@ -5,10 +5,10 @@ const grammar = require("../lib/parser/grammar.js");
 //const request = require('request');
 // Create a Parser object from our grammar.
 const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar));
-const util = require("util");
+//const util = require("util");
 const utils = require("../lib/utils");
 const logger = require("../config/winston");
-const { ErrorHandler } = require('../lib/errorHandler.js');
+const { ErrorHandler } = require('../lib/errorHandler');
 
 /*
 //handler of async for errors when used with express
