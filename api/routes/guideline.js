@@ -93,7 +93,6 @@ router.post("/delete", function (req, res, next) {
         if (error) {
           res.sendStatus(400);
         } else {
-          //console.log(body);
           res.sendStatus(200);
         }
       }
