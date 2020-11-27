@@ -3,12 +3,12 @@ const n3 = require('n3');
 const parser = new n3.Parser();
 const xmlReader = require('xml-reader');
 const xmlQuery = require('xml-query');
-
+const { ErrorHandler } = require('./errorHandler.js');
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
 const logger = require('../config/winston');
 
-class Util {
+class Sparql_Util {
 
 	/**
 	 * 
@@ -120,8 +120,8 @@ class Util {
 			form: { query: prefixAndSparqlQuery }
 		},
 			function (error, response, body) {
-				//console.log("body:\n" + body)
-				if (!error && response && response.statusCode == 200) {
+
+				if (response && response.statusCode < 400) {
 
 					let data = [];
 
@@ -137,9 +137,9 @@ class Util {
 
 				} else {
 
-					console.log("SPARQL query failed: " + prefixAndSparqlQuery + ". Error: " + error + ". Body: " + body +
+					console.log("SPARQL query failed: "  + ". Error: " + error + ". Body: " + body +
 					 ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(error, []);
+					callback(body, null);
 
 				}
 
@@ -160,24 +160,24 @@ class Util {
 		const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query
 		const url = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/query";
 
-		request.post(url, {
-
+		let options = {
+			uri: url,
+			method: "POST",
 			headers: {
 				"Authorization": "Basic " + new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
 				"Accept": 'application/sparql-results+json'
 			},
-
 			form: { query: prefixAndSparqlQuery }
-		},
+		};
+		request.post(options,
 			function (error, response, body) {
-				//console.log(body)
-				if (!error && response && response.statusCode == 200) {
-
-					callback(null, JSON.parse(body));
-
+			
+				if( error || (response && response.statusCode !== 200))
+				{
+					logger.error("SPARQL query failed: " + response + ". Error: " + error + ". Body: " + body + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					callback(new ErrorHandler(response.statusCode, "Error: " + error + ". Body: " + body), null);
 				} else {
-					console.log("SPARQL query failed: " + query + ". Error: " + error + ". Body: " + body + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(error, {});
+					callback(null, JSON.parse(body));
 				}
 			}
 		);
@@ -228,13 +228,10 @@ class Util {
 		insertGraphsData = `\nINSERT {` + nanopubGraphs + preGraphs + `} \nWHERE { SERVICE <` + cigFromUrl + `> { ` + postGraphs + preGraphs + ` } } ; `;
 
 		deleteTriples += graphDescrDel + ` } ; `;
-		//insertTriples += graphDescrIns + ` } ;`
-		//renameCig = renameCig.substring(0, renameCig.length - 2);
 
 		//////UPDATE GRAPH STORE//////
 
-		let sparqlUpdate =  insertGraphsData + deleteTriples ;//+ insertTriples;
-		//console.log(`insertGraphData: ` + sparqlUpdate);
+		let sparqlUpdate =  insertGraphsData + deleteTriples ;
 
 		let prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
@@ -250,13 +247,13 @@ class Util {
 				
 				if (!error && response && response.statusCode < 400) {
 
-					callback(null, 200);
+					callback(null, response.statusCode);
 
 				} else {
 
-					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(error, 400);
+					logger.error("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
 
+					callback(error, null);
 				}
 
 			}
@@ -344,10 +341,8 @@ class Util {
 			}
 	   }
 	   `; 
-
-		this.sparqlJSONQuery(cigId, query, function (err, data) {
-			callback(err, data);
-		});
+	   
+		this.sparqlJSONQuery( cigId, query, callback );
 
 	}
 
@@ -357,7 +352,7 @@ class Util {
 	 * @param {string} belief_Uri 
 	 * @param {string} TrId 
 	 * @param {string} actId 
-	 * @param {(Error, JSON))} callback 
+	 * @param {(Error, JSON)} callback 
 	 */
 	static getBeliefData(datasetId, belief_Uri, TrId, actId, callback) {
 
@@ -368,7 +363,7 @@ class Util {
 	SELECT DISTINCT 
 	?freq ?strength ?TrUri
 	?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
-	?actId ?adminLabel ?actType ?actLabel ?snomed 
+	?actId ?adminLabel ?actType ?actLabel 
 	WHERE {
 		GRAPH  `+ belief_Uri + ` {
 		 `+ belief_Uri + ` a  vocab:CausationBelief . 
@@ -402,18 +397,13 @@ class Util {
 			?actId a owl:NamedIndividual .
 			?actId a ?actType .
 			?actId rdfs:label ?actLabel .
-			?actId vocab:snomedCode  ?snomed .
 			FILTER (?actType != owl:NamedIndividual &&
 				 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
 				 ?adminT != owl:NamedIndividual) .
 		}
 	}
 	`;
-		this.sparqlJSONQuery( datasetId, query, function (err, data) {
-
-			callback(err, data);
-
-		});
+		this.sparqlJSONQuery( datasetId, query, callback);
 
 	}
 
@@ -471,9 +461,15 @@ class Util {
 		this.sparqlJSONQuery(dataset_id, query, callback );
 	}
 
+	/**
+	 * 
+	 * @param {String} dataset_id 
+	 * @param {String} instance 
+	 * @param {(Error, JSON)} callback 
+	 */
 	static sparqlGetSubjectAllNamedGraphs(dataset_id, instance, callback) {
 
-		logger.info(`dataset_id: ` + dataset_id + ` and instance: ` + instance);
+		//logger.info(`dataset_id: ` + dataset_id + ` and instance: ` + instance);
 
 		let query = `
 		SELECT ?s
@@ -499,7 +495,7 @@ class Util {
 
 	}
 
-	static nList(list, n) {
+	static  nList(list, n) {
 
 		let pairedPredicateObject = [];
 
@@ -532,7 +528,7 @@ class Util {
 		this.sparqlQuery(dataset_id, query, function (err, data) {
 
 			//list could be empty if err
-			callback(err, Util.nList(data, 3));
+			callback(err, Sparql_Util.nList(data, 3));
 
 		});
 
@@ -549,7 +545,7 @@ class Util {
 
 		this.sparqlQuery(dataset_id, query, function (err, data) {
 
-			callback(err, Util.nList(data, 2));
+			callback(err, Sparql_Util.nList(data, 2));
 
 		});
 
@@ -605,9 +601,9 @@ class Util {
 		},
 
 			function (error, response, body) {
-				//console.info(error + ", " + response.statusCode )
+				
 				if (!error && response && response.statusCode < 400 && body) {
-					//console.info(body);
+			
 					callback(null, body);
 
 				} else {
@@ -625,4 +621,4 @@ class Util {
 
 }
 
-module.exports = Util;
+module.exports = Sparql_Util;

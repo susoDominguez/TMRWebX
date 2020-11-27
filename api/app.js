@@ -33,9 +33,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 router.get('/', function(req, res, next) {
-
   res.end();
-
 });
 
 router.use('/guideline', guidelineRouter);
@@ -50,9 +48,9 @@ router.use('/transitions', transitionsRouter);
 app.use('/tmrweb', router);
 
 // catch 404 and forward to error handler
-//app.use(function(req, res, next) {
-//  next(createError(404));
-//});
+app.use(function(req, res, next) {
+  next(createError(404));
+});
 
 // error handler
 app.use(function(err, req, res, next) {
@@ -65,8 +63,8 @@ app.use(function(err, req, res, next) {
   // render the error page
   res.status(err.status || 500);
   //new error handler
-  handleError(err, res);
-  //res.render('error');
+  //handleError(err, res);
+  res.render('error');
 });
 
 module.exports = app; //DEBUG=drug-interaction-middleware:* npm run devstart

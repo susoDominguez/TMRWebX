@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const config = require('../lib/config');
+const { ErrorHandler } = require('../lib/errorHandler');
 const utils = require('../lib/utils');
 
 function action(req, res, insertOrDelete) {
@@ -70,14 +71,18 @@ router.post('/delete', function (req, res) {
 
 });
 
-router.post('/all/get/', function (req, res) {
+router.post('/all/get/', function (req, res, next) {
 
   //belief_URI
   utils.getBeliefData("beliefs", ( req.body.belief_URI ? "<" + req.body.belief_URI + ">" : "data:CB" + req.body.belief_id), "transitions", "careActions", function (err, beliefData) {
     
-    //if  data found in Object (we check), begin
-    if (beliefData.constructor === Object && Object.entries(beliefData).length != 0) {
- 
+    if (err || !beliefData || beliefData.constructor !== Object || Object.entries(beliefData).length === 0) {
+      next(err);
+      return;
+    }
+    //otherwise
+  try {
+    
       var cbData = {
         id: req.body.belief_URI,
         author: "JDA"
@@ -173,9 +178,6 @@ router.post('/all/get/', function (req, res) {
             case "actLabel":
               actData.drugLabel = value;
               break;
-            case "snomed":
-              actData.snomedCode = value;
-              break;
           }
         }
       }
@@ -185,8 +187,8 @@ router.post('/all/get/', function (req, res) {
       cbData.careActionType = actData;
 
       res.send(cbData);
-    } else {
-      res.send({});
+    } catch (error) {
+      next(new ErrorHandler(500, err));
     }
   });
 });

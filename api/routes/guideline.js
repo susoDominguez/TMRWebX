@@ -301,12 +301,12 @@ router.post("/rec/all/get/", function (req, res, next) {
     "transitions",
     "careActions",
     function (err, guidelineData) {
+
       if (err) {
         return next(err);
       }
-
       //if  data found in Object (we check), begin
-      if (
+      if ( guidelineData &&
         guidelineData.constructor === Object &&
         Object.entries(guidelineData).length != 0
       ) {
