@@ -11,6 +11,7 @@ const e = require("express");
 const { throws } = require("assert");
 
 router.post("/interactions", function (req, res) {
+
   if (!req.body.cig_id) {
     res.sendStatus(406).send({ error: "cig_id param missing" });
     return;
@@ -147,10 +148,12 @@ router.post("/rec/get", function (req, res) {
  * add nanopub graphs from one existing CIG to another
  */
 router.post("/add", function (req, res) {
+
   if (!req.body.cig_from || !req.body.cig_to) {
     res.sendStatus(406);
     return;
   }
+
   if (!req.body.cig_from.startsWith(`CIG-`)) {
     req.body.cig_from = `CIG-` + req.body.cig_from;
   }
@@ -162,7 +165,7 @@ router.post("/add", function (req, res) {
   var filterString = ``;
   if (req.body.subguidelines) {
     req.body.subguidelines.split(",").forEach(function (SubId) {
-      filterString += `?sg = data:` + SubId.trim() + ` || `;
+      filterString += `?sg = data:subCIG-` + SubId.trim() + ` || `;
     });
     //remove last operator and whitespace
     filterString = filterString.substring(0, filterString.length - 4);
@@ -171,13 +174,13 @@ router.post("/add", function (req, res) {
   }
 
   filterString = `FILTER(` + filterString + `)`;
-  //logger.info(filterString)
 
   //select nanopub URIs from subguidelines
   utils.sparqlGetNamedNanopubFromSubguidelines(
     req.body.cig_from,
     filterString,
     function (err, assertionList) {
+
       if (err) {
         res.sendStatus(400);
         return;
@@ -189,26 +192,31 @@ router.post("/add", function (req, res) {
 
       //for each assertion URI, add the rest of the related nano graphs
       for (var index in assertionList) {
-        var uri = assertionList[index];
-        //logger.info(uri);
-        nanoHeadList.push(uri + `_head`);
-        nanoProbList.push(uri + `_provenance`);
-        nanoPubList.push(uri + `_publicationinfo`);
-      }
+        
+        let uri = assertionList[index];
 
-      if (assertionList) {
-        utils.addGraphsDataFromToCig(
-          req.body.cig_from,
-          req.body.cig_to,
-          nanoHeadList,
-          assertionList,
-          nanoProbList,
-          nanoPubList,
-          function (err, status) {
-            res.sendStatus(status);
-          }
-        );
+        logger.info('uri is ' + uri);
+        //nanoHeadList.push(uri + `_head`);
+        //nanoProbList.push(uri + `_provenance`);
+        //nanoPubList.push(uri + `_publicationinfo`);
+
+          utils.addGraphsDataFromToCig(
+            req.body.cig_from,
+            req.body.cig_to,
+            [uri + `_head`],//nanoHeadList,
+            [uri], //assertionList,
+            [uri + `_provenance`], //nanoProbList,
+            [uri + `_publicationinfo`],//nanoPubList,
+            function (err, status) {
+  
+              if (err) {
+                res.sendStatus(400);
+                return;
+              }
+            }
+          );
       }
+      res.sendStatus(200);
     }
   );
 });

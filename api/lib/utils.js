@@ -193,49 +193,53 @@ class Sparql_Util {
 	 * @param {string} nanoPubInfo 
 	 * @param {(Error, number) => number} callback callback function returning status
 	 */
-	static addGraphsDataFromToCig(cigFrom, cigTo, nanoHead, nanoAssert, nanoProv, nanoPubInfo, callback) {
+	static addGraphsDataFromToCig(cigFrom, cigTo, nanoHead, nanoAssert, nanoProv, nanoPub, callback) {
 
-		//let createGraphs = ``;
 		let insertGraphsData = ``;
+		let graphs ;
 		let preGraphs = ``;
+		let provGraphs = ``;
 		let postGraphs = ``;
 		let nanopubGraphs = ``;
 		let graphDescrDel = ``;
 		let graphDescrIns = ``;
-		let deleteTriples = `\nDELETE WHERE { `;
-		//let insertTriples = `\nINSERT DATA { `;
+
+		let deleteTriples ;
+		
+		
 
 		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
 
 
 		for (let index in nanoHead) {
 			
-			//let graphsDescr = `\nGRAPH <` + nanoHead[index] + `> { ?a ?b ?c } \nGRAPH <` + nanoAssert[index] + `> { ?d ?e ?f } \nGRAPH <` + nanoProv[index] + `> { ?g ?h ?i } \nGRAPH <` + nanoPubInfo[index] + `> { ?j ?k ?l } `;
-			
-			 preGraphs += 
-			 	`\nGRAPH <` + nanoAssert[index] + `> { ?a`+index+` ?b`+index+` ?c`+index+` } `;
-			 nanopubGraphs +=
-			 	 `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> prov:wasDerivedFrom ?d`+index+` ;\n vocab:partOf data:`+ cigTo + `;\n vocab:extractedFrom data:`+ cigFrom +` } `;
-			 postGraphs += 
-			 	 `\nGRAPH <` + nanoProv[index] + `> { <` + nanoAssert[index] + `> prov:wasDerivedFrom ?d`+index+` } ` ;
+			preGraphs += 
+				 `\nGRAPH <` + nanoAssert[index] + `> { ?a`+index+` ?b`+index+` ?c`+index+` } `;
+			postGraphs += 
+				 `\nGRAPH <` + nanoProv[index] + `> { <` + nanoAssert[index] + `> prov:wasDerivedFrom ?d`+index+` } ` ;
 
 			graphDescrDel += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigFrom +` } `;
 			
-			//graphDescrIns += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigTo +` } `;
+			graphDescrIns += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigTo +` } `;
 
 		}
 
-		insertGraphsData = `\nINSERT {` + nanopubGraphs + preGraphs + `} \nWHERE { SERVICE <` + cigFromUrl + `> { ` + postGraphs + preGraphs + ` } } ; `;
+		insertGraphsData = `\nINSERT {` + preGraphs + graphDescrIns + postGraphs + `} \nWHERE { SERVICE <` + cigFromUrl + `> { ` +  preGraphs  + postGraphs + ` } } ; `;
 
-		deleteTriples += graphDescrDel + ` } ; `;
+		deleteTriples = `\nDELETE WHERE { ` + graphDescrDel + ` } ; `;
 
 		//////UPDATE GRAPH STORE//////
 
 		let sparqlUpdate =  insertGraphsData + deleteTriples ;
+		
 
 		let prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
+	
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigTo + "/update";
 
+		try{
+
+		
 		request.post(
 			URL, {
 			headers: {
@@ -259,6 +263,9 @@ class Sparql_Util {
 			}
 
 		);
+		} catch(err){
+			callback(error, null);
+		}
 
 	}
 
