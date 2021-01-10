@@ -203,10 +203,10 @@ router.post("/add", function (req, res) {
           utils.addGraphsDataFromToCig(
             req.body.cig_from,
             req.body.cig_to,
-            [uri + `_head`],//nanoHeadList,
-            [uri], //assertionList,
-            [uri + `_provenance`], //nanoProbList,
-            [uri + `_publicationinfo`],//nanoPubList,
+            uri + `_head`,//nanoHeadList,
+            uri, //assertionList,
+            uri + `_provenance`, //nanoProbList,
+            uri + `_publicationinfo`,//nanoPubList,
             function (err, status) {
   
               if (err) {

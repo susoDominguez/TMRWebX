@@ -197,9 +197,9 @@ class Sparql_Util {
 
 		let insertGraphsData = ``;
 		let graphs ;
-		let preGraphs = ``;
+		let assertGraphs = ``;
 		let provGraphs = ``;
-		let postGraphs = ``;
+		let headGraphs = ``;
 		let nanopubGraphs = ``;
 		let graphDescrDel = ``;
 		let graphDescrIns = ``;
@@ -209,22 +209,22 @@ class Sparql_Util {
 		
 
 		const cigFromUrl = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + cigFrom + "/query";
-
-
-		for (let index in nanoHead) {
 			
-			preGraphs += 
-				 `\nGRAPH <` + nanoAssert[index] + `> { ?a`+index+` ?b`+index+` ?c`+index+` } `;
-			postGraphs += 
-				 `\nGRAPH <` + nanoProv[index] + `> { <` + nanoAssert[index] + `> prov:wasDerivedFrom ?d`+index+` } ` ;
+			assertGraphs = 
+				 `\nGRAPH <` + nanoAssert + `> { ?a  ?b ?c } `;
+			provGraphs = 
+				 `\nGRAPH <` + nanoProv + `> { ?d  ?e ?f } ` ;
+			nanopubGraphs = 
+				 `\nGRAPH <` + nanoPub + `> { ?g ?h ?i } ` ;
+			headGraphs = 
+				 `\nGRAPH <` + nanoHead + `> { ?j  ?k ?l } ` ;
 
-			graphDescrDel += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigFrom +` } `;
+			graphDescrDel += `\nGRAPH <` + nanoAssert + `> { <`+ nanoAssert +`> vocab:partOf data:`+ cigFrom +` } `;
 			
-			graphDescrIns += `\nGRAPH <` + nanoAssert[index] + `> { <`+ nanoAssert[index] +`> vocab:partOf data:`+ cigTo +` } `;
+			graphDescrIns += `\nGRAPH <` + nanoAssert + `> { <`+ nanoAssert +`> vocab:partOf data:`+ cigTo +` } `;
 
-		}
 
-		insertGraphsData = `\nINSERT {` + preGraphs + graphDescrIns + postGraphs + `} \nWHERE { SERVICE <` + cigFromUrl + `> { ` +  preGraphs  + postGraphs + ` } } ; `;
+		insertGraphsData = `\nINSERT {` + headGraphs + assertGraphs + graphDescrIns + nanopubGraphs + provGraphs + `} \nWHERE { SERVICE <` + cigFromUrl + `> { ` + headGraphs + assertGraphs + nanopubGraphs + provGraphs + ` } } ; `;
 
 		deleteTriples = `\nDELETE WHERE { ` + graphDescrDel + ` } ; `;
 
