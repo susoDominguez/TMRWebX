@@ -45,5 +45,6 @@ show_interactions(Request) :-
   maplist(recommendation_term, Recommendations, _Terms),
   findall(interaction(Interaction,Label,Elems,External), interaction(Recommendations, Interaction, Label, Elems, External), Interactions),
   print_list(Interactions),
-  unloadOntologies,
-  rdf_unload_graph(Dataset_graph_id).
+  rdf_reset_db.
+  % unloadOntologies,
+  % rdf_unload_graph(Dataset_graph_id).
