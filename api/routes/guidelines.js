@@ -7,8 +7,9 @@ const { reportError } = require("../lib/parser/parserError");
 const utils = Promise.promisifyAll(require("../lib/utils"));
 const logger = require("../config/winston");
 const { ErrorHandler } = require("../lib/errorHandler");
-const e = require("express");
-const { throws } = require("assert");
+//const e = require("express");
+//const { throws } = require("assert");
+
 
 router.post("/interactions", function (req, res) {
 
@@ -31,12 +32,13 @@ router.post("/interactions", function (req, res) {
 
   //Call prolog server and convert response to JSON object
   utils.callPrologServer("interactions", postData, function (err, data) {
+
     if (err) {
       res.sendStatus(400);
       return;
     }
 
-    // logger.info("data sent to grammar parser is: " + data);
+     logger.info("data sent to grammar parser is: " + data);
 
     //use grammar to parse response into a JSON object
     const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar), {
@@ -65,62 +67,6 @@ router.post("/interactions", function (req, res) {
       res.sendStatus(500);
     }
   });
-});
-
-router.post("/drug", function (req, res) {
-  if (!req.body.cig_id || !req.body.rec_URI) {
-    res.sendStatus(406);
-    return;
-  }
-  var cigId = req.body.cig_id.startsWith(`CIG-`)
-    ? req.body.cig_id
-    : `CIG-` + req.body.cig_id;
-
-  var postData = require("querystring").stringify({
-    //Jena dataset name
-    guideline_id: cigId,
-    recommendation_uri: req.body.rec_URI,
-  });
-
-  logger.info(
-    "Determining care action part of recommendation with data: " +
-      JSON.stringify(postData)
-  );
-
-  //Call prolog server and convert response to JSON object
-  utils.callPrologServer("drug", postData, function (err, data) {
-    if (err) {
-      res.sendStatus(400);
-    } else {
-      //logger.info(data);
-      res.send(data);
-    }
-  });
-});
-
-router.post("/drugeffects", function (req, res) {
-  if (req.body.careAction_URI) {
-    var postData = require("querystring").stringify({
-      drug_URI: req.body.careAction_URI,
-    });
-
-    logger.info(
-      "Determining effects of care action application with care action: " +
-        JSON.stringify(postData)
-    );
-
-    //Call prolog server and convert response to JSON object
-    utils.callPrologServer("drugeffects", postData, function (err, data) {
-      if (err) {
-        res.sendStatus(400);
-      } else {
-        //logger.info(data);
-        res.send(data);
-      }
-    });
-  } else {
-    res.sendStatus(404);
-  }
 });
 
 /**
@@ -394,6 +340,64 @@ router.post("/cig/get",  function (req, res, next) {
     })
     .then((cigData) => res.send(cigData))
     .catch((err) => next( new ErrorHandler(404, `thrown when converting Sparql (Recommendation) data into Json data: ${err}.`)));
+});
+
+
+router.post("/drug", function (req, res) {
+  if (!req.body.cig_id || !req.body.rec_URI) {
+    res.sendStatus(406);
+    return;
+  }
+  var cigId = req.body.cig_id.startsWith(`CIG-`)
+    ? req.body.cig_id
+    : `CIG-` + req.body.cig_id;
+
+  var postData = require("querystring").stringify({
+    //Jena dataset name
+    guideline_id: cigId,
+    recommendation_uri: req.body.rec_URI,
+  });
+
+  logger.info(
+    "Determining care action part of recommendation with data: " +
+      JSON.stringify(postData)
+  );
+
+  //Call prolog server and convert response to JSON object
+  utils.callPrologServer("drug", postData, function (err, data) {
+    if (err) {
+      res.sendStatus(400);
+    } else {
+      //logger.info(data);
+      res.send(data);
+    }
+  });
+});
+
+
+router.post("/drugeffects", function (req, res) {
+  if (req.body.careAction_URI) {
+    var postData = require("querystring").stringify({
+      drug_URI: req.body.careAction_URI,
+    });
+
+    logger.info(
+      "Determining effects of care action application with care action: " +
+        JSON.stringify(postData)
+    );
+
+    //Call prolog server and convert response to JSON object
+    utils.callPrologServer("drugeffects", postData, function (err, data) {
+      if (err) {
+        res.sendStatus(400);
+      } else {
+        //logger.info(data);
+        res.send(data);
+      }
+    });
+  } else {
+    res.sendStatus(404);
+  }
 });
 
 module.exports = router;

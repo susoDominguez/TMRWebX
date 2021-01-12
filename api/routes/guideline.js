@@ -47,8 +47,11 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
       }
 
       const description =
-        `data:` + cigId + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
-                         rdfs:label "` + req.body.description + `"@en .`;
+
+        `GRAPH data:` + cigId + `{ 
+            data:` + cigId + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
+                         rdfs:label "` + req.body.description + `"@en . 
+              }`;
 
       utils.sparqlUpdate(cigId, description, config.INSERT, function (
         err,

@@ -7,6 +7,7 @@ const { ErrorHandler } = require('./errorHandler.js');
 const config = require('../lib/config');
 const guidelines = require('../lib/guidelines');
 const logger = require('../config/winston');
+const { INSERT } = require('../lib/config');
 
 class Sparql_Util {
 
@@ -52,6 +53,7 @@ class Sparql_Util {
 		);
 
 	}
+
 
 	/**
 	 * 

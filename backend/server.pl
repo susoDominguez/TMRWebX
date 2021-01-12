@@ -24,7 +24,7 @@
 :- rdf_prefix(prov, 'http://www.w3.org/ns/prov#').
 :- rdf_prefix(nanopub, 'http://www.nanopub.org/nschema#').
 
-%:- http_handler(root(guidelines), get_available_guidelines, []).
+:- http_handler(root(guidelines), get_available_guidelines, []).
 :- http_handler(root(interactions), show_interactions, []). %[spawn(compute) ]).
 :- http_handler(root(drug), show_drug, []).
 :- http_handler(root(drugeffects), show_drug_effects, []).
@@ -44,7 +44,7 @@ load_guideline_group(Dataset_id, Dataset_graph_id) :-
   rdf_load(MainGuidelinesPath, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph(Dataset_graph_id)]).
 
 show_interactions(Request) :-
-  %loadOntologies,
+  loadOntologies,
   http_parameters(Request, [ guideline_id(Dataset_id, [ string ]) ]),
   load_guideline_group(Dataset_id, Dataset_graph_id),
   inferInternalInteractions,
@@ -54,10 +54,10 @@ show_interactions(Request) :-
   maplist(recommendation_term, Recommendations, _Terms),
   findall(interaction(Interaction,Label,Elems,External), interaction(Recommendations, Interaction, Label, Elems, External), Interactions),
   print_list(Interactions),
-  %unloadOntologies,
+  unloadOntologies,
   rdf_unload_graph(Dataset_graph_id).
 
-/*
+
 get_available_guidelines(_Request) :-
   directory_files('tmr/ontologies/guidelines', Files),
   format('Content-type: text/plain~n~n'),
@@ -66,7 +66,7 @@ get_available_guidelines(_Request) :-
   remove_head(SortedFilesWithoutHead, Guidelines),
   maplist(remove_file_extension, Guidelines, GuidelineNames),
   print_list(GuidelineNames).
-*/
+
 
  show_drug(Request) :-
   loadOntologies(),
