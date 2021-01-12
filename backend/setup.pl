@@ -24,14 +24,14 @@ loadOntologies() :-
   atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_DRUGS_URL),
   rdf_load(FUSEKI_DRUGS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
   atom_concat(FUSEKI_HOST_PORT, "transitions", FUSEKI_TRANSITIONS_URL),
-  rdf_load(FUSEKI_TRANSITIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/Transition&SituationTypes')]),
-  atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_BELIEFS_URL),
-  rdf_load(FUSEKI_BELIEFS_URL, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
+  rdf_load(FUSEKI_TRANSITIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/Transition&SituationTypes')]).
+  % atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_BELIEFS_URL),
+  % rdf_load(FUSEKI_BELIEFS_URL, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
 
 unloadOntologies() :-
   rdf_unload_graph('http://anonymous.org/CareAction&DrugTypes'),
   rdf_unload_graph('http://anonymous.org/Transition&SituationTypes'),
-  rdf_unload_graph('http://anonymous.org/CausationBeliefs-Nanopub').
+ rdf_unload_graph('http://anonymous.org/CausationBeliefs-Nanopub').
 
 % keep ontologies loaded from the start. then, dont unload it at each iteration
 %:-loadOntologies.
