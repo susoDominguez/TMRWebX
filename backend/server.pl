@@ -8,13 +8,7 @@
 :- use_module(library(semweb/rdf_db)).
 :- use_module(library(semweb/rdf_ntriples)).
 :- use_module(library(thread_pool)).
-:- use_module(library(debug)).
-
-/*:- thread_pool_create(compute, 5,
-                      [ local(20000), global(100000), trail(50000),
-                        backlog(5)
-                      ]).
-                    */
+              
 
 % Prefixes
 :- rdf_prefix(data, 'http://anonymous.org/data/').
@@ -24,10 +18,7 @@
 :- rdf_prefix(prov, 'http://www.w3.org/ns/prov#').
 :- rdf_prefix(nanopub, 'http://www.nanopub.org/nschema#').
 
-:- http_handler(root(guidelines), get_available_guidelines, []).
 :- http_handler(root(interactions), show_interactions, []). %[spawn(compute) ]).
-:- http_handler(root(drug), show_drug, []).
-:- http_handler(root(drugeffects), show_drug_effects, []).
 
 :- set_prolog_flag(color_term,false).
 
@@ -56,38 +47,3 @@ show_interactions(Request) :-
   print_list(Interactions),
   unloadOntologies,
   rdf_unload_graph(Dataset_graph_id).
-
-
-get_available_guidelines(_Request) :-
-  directory_files('tmr/ontologies/guidelines', Files),
-  format('Content-type: text/plain~n~n'),
-  sort(Files, SortedFiles),
-  remove_head(SortedFiles, SortedFilesWithoutHead),
-  remove_head(SortedFilesWithoutHead, Guidelines),
-  maplist(remove_file_extension, Guidelines, GuidelineNames),
-  print_list(GuidelineNames).
-
-
- show_drug(Request) :-
-  loadOntologies(),
-  http_parameters(Request, [ recommendation_uri(Rec_URI, [ string ]), s(Dataset_id, [ string ]) ]),
-  load_guideline_group(Dataset_id, Dataset_graph_id),
-  format('Content-type: text/plain~n~n', []),
-  atom_string(Rec_URI_atom, Rec_URI),
-  rdf(Rec_URI_atom, vocab:'aboutExecutionOf', DrugAdministration),
-  rdf(DrugAdministration, vocab:'administrationOf', Drug),
-  format(Drug),
-  rdf_unload_graph(Dataset_graph_id),
-  unloadOntologies().
-
-show_drug_effects(Request) :-
-  loadOntologies(),
-  http_parameters(Request, [ drug_URI(DrugID, [ string ]) ]),
-  format('Content-type: text/plain~n~n', []),
-  atom_string(DrugID_atom, DrugID),
-  rdf(DrugAdministration, vocab:administrationOf, DrugID_atom),
-  rdf(DrugAdministration, vocab:'causes', Transition),
-  string_concat(' causes ', Transition, Join1), % `causes Tr`
-  string_concat(DrugAdministration, Join1, Join2), %`DrugAdmin causes Tr`
-  format(Join2),
-  unloadOntologies().
