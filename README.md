@@ -21,7 +21,7 @@ docker run --name fuseki-data -v /fuseki busybox
 Run main container, supply port (3030, recommended), password and container store:
 
 ```
-docker run -e ADMIN_PASSWORD=[Password] JVM_ARGS=-Xmx2g -d --name fuseki -p 3030:3030 --volumes-from fuseki-data stain/jena-fuseki
+docker run -e ADMIN_PASSWORD=[Password] -e JVM_ARGS=-Xmx2g -d --name fuseki -p 3030:3030 --volumes-from fuseki-data stain/jena-fuseki
 ```
 
 Navigate to http://localhost:3030, login with the username `admin` and the password as set above. select Manage Datasets, and create three new (persistent) datasets: careActions, transitions and beliefs.
