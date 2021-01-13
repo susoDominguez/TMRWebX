@@ -13,11 +13,12 @@
 
 % Base ontologies.
 
-:- rdf_load('tmr/schema/model.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/vocab/'), graph('http://anonymous.org/vocab')]).
-:- rdf_load('tmr/schema/model4I3.0.ttl', [format('turtle'), register_namespaces(false),base_uri('http://anonymous.org/vocab4i/'), graph('http://anonymous.org/vocab4i')]).
+loadBaseOntologies() :-
+  rdf_load('tmr/schema/model.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/vocab/'), graph('http://anonymous.org/vocab')]),
+  rdf_load('tmr/schema/model4I3.0.ttl', [format('turtle'), register_namespaces(false),base_uri('http://anonymous.org/vocab4i/'), graph('http://anonymous.org/vocab4i')]).
+
 
 % User ontologies, at Jena endpoint.
-
 
 loadOntologies() :-
   getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
@@ -33,8 +34,6 @@ unloadOntologies() :-
   rdf_unload_graph('http://anonymous.org/Transition&SituationTypes'),
   rdf_unload_graph('http://anonymous.org/CausationBeliefs-Nanopub').
 
-% keep ontologies loaded from the start. then, dont unload it at each iteration
-%:-loadOntologies.
 
 % Logic libraries
 :- include('tmr/logic/interactionRules').

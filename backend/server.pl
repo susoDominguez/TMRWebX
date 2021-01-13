@@ -35,6 +35,7 @@ load_guideline_group(Dataset_id, Dataset_graph_id) :-
   rdf_load(MainGuidelinesPath, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph(Dataset_graph_id)]).
 
 show_interactions(Request) :-
+  loadBaseOntologies,
   loadOntologies,
   http_parameters(Request, [ guideline_id(Dataset_id, [ string ]) ]),
   load_guideline_group(Dataset_id, Dataset_graph_id),
@@ -46,5 +47,7 @@ show_interactions(Request) :-
   findall(interaction(Interaction,Label,Elems,External), interaction(Recommendations, Interaction, Label, Elems, External), Interactions),
   print_list(Interactions),
   rdf_reset_db.
-  % unloadOntologies,
+  
+  % These functions below dont work becuase they only remove the named graph not the whole dataset
+  % unloadOntologies,     
   % rdf_unload_graph(Dataset_graph_id).
