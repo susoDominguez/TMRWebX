@@ -7,6 +7,7 @@ const config = require("../lib/config");
 const guidelines = require("../lib/guidelines");
 const utils = require("../lib/utils");
 const { handleError, ErrorHandler } = require("../lib/errorHandler");
+const logger = require("../config/winston");
 
 /**
  * Create a persistent or in-memory CIG and return label of CIG
@@ -18,7 +19,7 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
   cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
 
   const dbType = req.body.IsPersistent ? `tdb` : `mem`;
-
+   
   request.post(
     {
       url:
@@ -37,6 +38,8 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
       },
     },
     function (error, response, body) {
+     
+      //send error and end
       if (error) {
         res.sendStatus(404).send({ error: error });
         return;
@@ -48,21 +51,22 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
 
       const description =
 
-        `GRAPH data:` + cigId + `{ 
-            data:` + cigId + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
-                         rdfs:label "` + req.body.description + `"@en . 
-              }`;
+        //`data:` + cigId + `{ 
+            `data:` + cigId + ` rdf:type vocab:ClinicalGuideline, owl:NamedIndividual ;
+                         rdfs:label "` + req.body.description + `"@en .`; 
+        // }`;
 
       utils.sparqlUpdate(cigId, description, config.INSERT, function (
         err,
         status
       ) {
+       
         if(err) return  next(new ErrorHandler(status, `sparql has returned an error when creating clinical guideline dataset.`));
         //otherwise
         res.json({cig_id: cigId});
       });
     }
-  );
+  ); 
 });
 
 /**

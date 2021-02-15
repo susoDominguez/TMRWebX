@@ -612,14 +612,13 @@ class Sparql_Util {
 			function (error, response, body) {
 				
 				if (!error && response && response.statusCode < 400 && body) {
-			
+
 					callback(null, body);
 
 				} else {
-
-					logger.error("Failed to call prolog server with path: " + path + ". Data: " + data + ". Error: " + error + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(error, null);
-
+					let err = "Failed to call prolog server with path: " + path + ". Data: " + data + ". Error: " + error + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".";
+					logger.error(err);
+					callback(err, null);
 				}
 
 			}

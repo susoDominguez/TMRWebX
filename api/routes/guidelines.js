@@ -10,13 +10,13 @@ const { ErrorHandler } = require("../lib/errorHandler");
 //const e = require("express");
 //const { throws } = require("assert");
 
-
-router.post("/interactions", function (req, res) {
+router.post("/interactions", function (req, res, next) {
 
   if (!req.body.cig_id) {
-    res.sendStatus(406).send({ error: "cig_id param missing" });
+    res.status(406).send({ error: "cig_id param missing" });
     return;
   }
+
   let cigId = req.body.cig_id.startsWith(`CIG-`)
     ? req.body.cig_id
     : `CIG-` + req.body.cig_id;
@@ -30,49 +30,51 @@ router.post("/interactions", function (req, res) {
     "Determining interactions with data: " + JSON.stringify(postData)
   );
 
-  //Call prolog server and convert response to JSON object
-  utils.callPrologServer("interactions", postData, function (err, data) {
+  utils
+    .callPrologServerAsync("interactions", postData)
+    .then((data) => {
+      //logger.info("data sent to grammar parser is: " + data);
 
-    if (err) {
-      res.sendStatus(400);
-      return;
-    }
+      //use grammar to parse response into a JSON object
+      const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar), {
+        keepHistory: true,
+      });
 
-     logger.info("data sent to grammar parser is: " + data);
+      let result;
 
-    //use grammar to parse response into a JSON object
-    const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar), {
-      keepHistory: true,
-    });
+      try {
+        parser.feed(data);
 
-    let result;
-    try {
-      parser.feed(data);
-
-      result = parser.results[0];
-      //convert type of first recommendation to secondary when type of interaction is repairable
-      for (let val of result) {
-        if (val.type === "repairable") {
-          val.interactionNorms[0].type = "secondary";
+        result = parser.results[0];
+        //convert type of first recommendation to secondary when type of interaction is repairable
+        for (let val of result) {
+          if (val.type === "repairable") {
+            val.interactionNorms[0].type = "secondary";
+          }
         }
+      } catch (e) {
+        reportError(e, parser);
+        throw ErrorHandler(400, "result of parsing failed");
       }
-    } catch (e) {
-      reportError(e, parser);
-      result = null;
-    }
 
-    if (result) {
-      res.send(result);
-    } else {
-      res.sendStatus(500);
-    }
-  });
+      if (result) {
+        return res.status(200).json(result);
+      } else {
+        throw ErrorHandler(400, "result of parsing failed");
+      }
+    })
+    .catch((err) => {
+      res.status(400).json({
+        status: "error",
+        error: err,
+      });
+    });
 });
 
 /**
  * get URIs of all Recommendations in a given CIG
  */
-router.post("/rec/get", function (req, res) {
+router.post("/rec/get", function (req, res, next) {
   if (req.body.cig_id) {
     var cigId = req.body.cig_id;
 
@@ -93,11 +95,13 @@ router.post("/rec/get", function (req, res) {
 /**
  * add nanopub graphs from one existing CIG to another
  */
-router.post("/add", function (req, res) {
+router.post("/add", async function (req, res, next) {
 
   if (!req.body.cig_from || !req.body.cig_to) {
-    res.sendStatus(406);
-    return;
+    return res.status(406).json({
+      status: "error",
+      error: "parameters cig_from or cig_to cannot be empty",
+    });
   }
 
   if (!req.body.cig_from.startsWith(`CIG-`)) {
@@ -109,6 +113,7 @@ router.post("/add", function (req, res) {
   }
 
   var filterString = ``;
+
   if (req.body.subguidelines) {
     req.body.subguidelines.split(",").forEach(function (SubId) {
       filterString += `?sg = data:subCIG-` + SubId.trim() + ` || `;
@@ -121,58 +126,55 @@ router.post("/add", function (req, res) {
 
   filterString = `FILTER(` + filterString + `)`;
 
+  try {
+
   //select nanopub URIs from subguidelines
-  utils.sparqlGetNamedNanopubFromSubguidelines(
-    req.body.cig_from,
-    filterString,
-    function (err, assertionList) {
+  const assertionList = await utils.sparqlGetNamedNanopubFromSubguidelinesAsync(
+      req.body.cig_from,
+      filterString
+    );
 
-      if (err) {
-        res.sendStatus(400);
-        return;
-      }
-
-      var nanoHeadList = [];
-      var nanoProbList = [];
-      var nanoPubList = [];
+  
+      //throw catch if no data
+      if (assertionList == null)
+        throw Error("Failure retrieving recommendations referenced in subguidelines from database");
 
       //for each assertion URI, add the rest of the related nano graphs
-      for (var index in assertionList) {
+      const promises = assertionList.map((uri) => {
+      
+         return utils.addGraphsDataFromToCigAsync(
+          req.body.cig_from,
+          req.body.cig_to,
+          uri + `_head`, //nanoHeadList,
+          uri, //assertionList,
+          uri + `_provenance`, //nanoProbList,
+          uri + `_publicationinfo` //nanoPubList,
+        );
         
-        let uri = assertionList[index];
+      });
+     
+      let result = await Promise.all(promises);
+     
+      return res.status(204).end();
 
-        logger.info('uri is ' + uri);
-        //nanoHeadList.push(uri + `_head`);
-        //nanoProbList.push(uri + `_provenance`);
-        //nanoPubList.push(uri + `_publicationinfo`);
-
-          utils.addGraphsDataFromToCig(
-            req.body.cig_from,
-            req.body.cig_to,
-            uri + `_head`,//nanoHeadList,
-            uri, //assertionList,
-            uri + `_provenance`, //nanoProbList,
-            uri + `_publicationinfo`,//nanoPubList,
-            function (err, status) {
-  
-              if (err) {
-                res.sendStatus(400);
-                return;
-              }
-            }
-          );
-      }
-      res.sendStatus(200);
+    } catch(error) {
+      res.status(406).json({
+        status: "error",
+        error: error,
+      });
     }
-  );
 });
 
 /**
  * get URIs of all Recommendations in a given CIG
  */
-router.post("/cig/get",  function (req, res, next) {
-
-  if (!req.body.cig_id) next("parameter cig_id missing in /cig/get");
+router.post("/cig/get", function (req, res, next) {
+  if (!req.body.cig_id) {
+    return res.status(406).json({
+      status: "error",
+      error: "parameter cig_id is missing.",
+    });
+  }
 
   //label of CIG{
   let cigId = req.body.cig_id;
@@ -182,222 +184,188 @@ router.post("/cig/get",  function (req, res, next) {
   //promise to deliver list of Ids
   utils
     .sparqlGetSubjectAllNamedGraphsAsync(cigId, "vocab:ClinicalRecommendation")
-    .map((recURI) => {
-      //get sparql data for the given recommendation URI
-      return utils
-        .getRecDataAsync(cigId, recURI, "beliefs", "transitions", "careActions")
-        .then( (guidelineData) => {
-          if (
-            !guidelineData ||
-            guidelineData.constructor !== Object ||
-            Object.entries(guidelineData).length === 0
-          )
-            throw new SyntaxError(
-              "guidelineData at RecURI: " +
-                recURI +
-                " in /cig/get does not have the expected properties for CIG " +
-                cigId
-            );
+    .then(async (uriList) => {
+      let resultList = [];
 
-          let recData = {
-            id: recURI,
-            causationBeliefs: [],
-          };
-          let cbData = {
-            author: "JDA",
-          };
-          let actData = {};
-          let TrData = {
-            situationTypes: [
-              {
-                type: "hasTransformableSituation",
-                value: {},
-              },
-              {
-                type: "hasExpectedSituation",
-                value: {},
-              },
-            ],
-            property: {},
-          };
+      try {
+        let promises = uriList.map((recURI) => {
+          return utils
+            .getRecDataAsync(
+              cigId,
+              recURI,
+              "beliefs",
+              "transitions",
+              "careActions"
+            )
+            .then((guidelineData) => getRecJsonData(guidelineData, recURI));
+        }); //end of map
 
-          let vars = guidelineData.head.vars;
-          let bindings = guidelineData.results.bindings;
+        let recJsonResult = await Promise.all(promises);
 
-          if (bindings.length === 0)
-            throw new SyntaxError(
-              "guidelineData at RecURI: " +
-                recURI +
-                " in /cig/get does not have any (expected) bindings for CIG " +
-                cigId
-            );
-
-          //format data by looping through results
-          for (let pos in bindings) {
-            let bind = bindings[pos];
-            //console.info(bind);
-
-            for (let varPos in vars) {
-              let value = vars[varPos] in bind ? bind[vars[varPos]].value : "";
-              let type;
-
-              //for each heading, add a field
-              switch (vars[varPos]) {
-                case "partOf":
-                  let extractedFrom = value.slice(30);
-                  recData.partOf = extractedFrom;
-                  break;
-                case "text":
-                  recData.text = value;
-                  break;
-                case "strength":
-                  recData.suggestion =
-                    value == "should" ? "recommend" : "nonRecommend";
-                  break;
-                case "sourceOfRec":
-                  recData.derivedFrom = value;
-                  break;
-                case "contrib":
-                  cbData.contribution = value;
-                  break;
-                case "cbUri": //data from main contribution
-                  cbData.id = value;
-                  break;
-                case "freq":
-                  cbData.probability = value;
-                  break;
-                case "evidence":
-                  cbData.evidence = value;
-                  break;
-                case "TrUri":
-                  TrData.id = value;
-                  break;
-                case "sitFromId":
-                  TrData.situationTypes[0].id = value;
-                  //extract code
-                  type = value.slice(26);
-                  TrData.situationTypes[0].value.code = type;
-                  break;
-                case "sitToId":
-                  TrData.situationTypes[1].id = value;
-                  //extract code
-                  type = value.slice(26);
-                  TrData.situationTypes[1].value.code = type;
-                  break;
-                case "PropUri":
-                  TrData.property.id = value;
-                  //extract code
-                  type = value.slice(26);
-                  TrData.property.code = type;
-                  break;
-                case "sitFromLabel":
-                  TrData.situationTypes[0].value.display = value;
-                  break;
-                case "sitToLabel":
-                  TrData.situationTypes[1].value.display = value;
-                  break;
-                case "propTxt":
-                  TrData.property.display = value;
-                  break;
-                case "deriv":
-                  TrData.effect = value;
-                  break;
-                case "actId":
-                  actData.id = value;
-                  break;
-                case "adminLabel":
-                  actData.display = value;
-                  break;
-                case "actLabel":
-                  actData.code = value;
-                  break;
-                case "actType":
-                  //extract code
-                  type = value.slice(27);
-                  //actData.code = type;
-                  actData.requestType = 0; //for drugT and DrugCat
-                  //check for therapy
-                  if (type.startsWith("NonDrugT")) {
-                    actData.requestType = 1;
-                  } else {
-                    //check for vaccine
-                    if (type.startsWith("VacT")) {
-                      actData.requestType = 2;
-                    }
-                  }
-                  break;
-              }
-            } //end of for vars
-          } //end of for bindings
-
-          //join data together
-          cbData.transition = TrData;
-          recData.careActionType = actData;
-          recData.causationBeliefs[0] = cbData;
-
-          return recData;
-        }) //TODO: if it fails early, does it go to the outer catch?
+        return res.status(200).json(recJsonResult);
+      } catch (error) {
+        //end loop if error found
+        logger.info(recURI);
+        logger.error(error);
+        throw error;
+      }
     })
-    .then((cigData) => res.send(cigData))
-    .catch((err) => next( new ErrorHandler(404, `thrown when converting Sparql (Recommendation) data into Json data: ${err}.`)));
-});
-
-
-router.post("/drug", function (req, res) {
-  if (!req.body.cig_id || !req.body.rec_URI) {
-    res.sendStatus(406);
-    return;
-  }
-  var cigId = req.body.cig_id.startsWith(`CIG-`)
-    ? req.body.cig_id
-    : `CIG-` + req.body.cig_id;
-
-  var postData = require("querystring").stringify({
-    //Jena dataset name
-    guideline_id: cigId,
-    recommendation_uri: req.body.rec_URI,
-  });
-
-  logger.info(
-    "Determining care action part of recommendation with data: " +
-      JSON.stringify(postData)
-  );
-
-  //Call prolog server and convert response to JSON object
-  utils.callPrologServer("drug", postData, function (err, data) {
-    if (err) {
-      res.sendStatus(400);
-    } else {
-      //logger.info(data);
-      res.send(data);
-    }
-  });
-});
-
-
-router.post("/drugeffects", function (req, res) {
-  if (req.body.careAction_URI) {
-    var postData = require("querystring").stringify({
-      drug_URI: req.body.careAction_URI,
+    .catch((error) => {
+      return res.status(406).json({
+        status: "error",
+        error: error,
+      });
     });
+});
 
-    logger.info(
-      "Determining effects of care action application with care action: " +
-        JSON.stringify(postData)
+function getRecJsonData(guidelineData, recURI) {
+  //check there are entries
+  if (
+    !guidelineData ||
+    guidelineData.constructor !== Object ||
+    Object.entries(guidelineData).length === 0
+  )
+    throw Error("guideline data constructor has no entries.");
+
+  ////////////////////
+  let recData = {
+    id: recURI,
+    causationBeliefs: [],
+  };
+  let cbData = {
+    author: "JDA",
+  };
+  let actData = {};
+  let TrData = {
+    situationTypes: [
+      {
+        type: "hasTransformableSituation",
+        value: {},
+      },
+      {
+        type: "hasExpectedSituation",
+        value: {},
+      },
+    ],
+    property: {},
+  };
+  ///////////////////////////
+
+  let vars = guidelineData.head.vars;
+  let bindings = guidelineData.results.bindings;
+
+  //if no bindings throw error
+  if (bindings.length === 0)
+    throw new SyntaxError(
+      "guidelineData at RecURI: " +
+        recURI +
+        " in /cig/get does not have any (expected) bindings for CIG " +
+        cigId
     );
 
-    //Call prolog server and convert response to JSON object
-    utils.callPrologServer("drugeffects", postData, function (err, data) {
-      if (err) {
-        res.sendStatus(400);
-      } else {
-        //logger.info(data);
-        res.send(data);
+  //format data by looping through results
+  for (let pos in bindings) {
+    let bind = bindings[pos];
+    //console.info(bind);
+
+    for (let varPos in vars) {
+      let value = vars[varPos] in bind ? bind[vars[varPos]].value : "";
+      let type;
+
+      //for each heading, add a field
+      switch (vars[varPos]) {
+        case "partOf":
+          let extractedFrom = value.slice(30);
+          recData.partOf = extractedFrom;
+          break;
+        case "text":
+          recData.text = value;
+          break;
+        case "strength":
+          recData.suggestion = value == "should" ? "recommend" : "nonRecommend";
+          break;
+        case "sourceOfRec":
+          recData.derivedFrom = value;
+          break;
+        case "contrib":
+          cbData.contribution = value;
+          break;
+        case "cbUri": //data from main contribution
+          cbData.id = value;
+          break;
+        case "freq":
+          cbData.probability = value;
+          break;
+        case "evidence":
+          cbData.evidence = value;
+          break;
+        case "TrUri":
+          TrData.id = value;
+          break;
+        case "sitFromId":
+          TrData.situationTypes[0].id = value;
+          //extract code
+          type = value.slice(26);
+          TrData.situationTypes[0].value.code = type;
+          break;
+        case "sitToId":
+          TrData.situationTypes[1].id = value;
+          //extract code
+          type = value.slice(26);
+          TrData.situationTypes[1].value.code = type;
+          break;
+        case "PropUri":
+          TrData.property.id = value;
+          //extract code
+          type = value.slice(26);
+          TrData.property.code = type;
+          break;
+        case "sitFromLabel":
+          TrData.situationTypes[0].value.display = value;
+          break;
+        case "sitToLabel":
+          TrData.situationTypes[1].value.display = value;
+          break;
+        case "propTxt":
+          TrData.property.display = value;
+          break;
+        case "deriv":
+          TrData.effect = value;
+          break;
+        case "actId":
+          actData.id = value;
+          break;
+        case "adminLabel":
+          actData.display = value;
+          break;
+        case "actLabel":
+          actData.code = value;
+          break;
+        case "actType":
+          //extract code
+          type = value.slice(27);
+          //actData.code = type;
+          actData.requestType = 0; //for drugT and DrugCat
+          //check for therapy
+          if (type.startsWith("NonDrugT")) {
+            actData.requestType = 1;
+          } else {
+            //check for vaccine
+            if (type.startsWith("VacT")) {
+              actData.requestType = 2;
+            }
+          }
+          break;
       }
-    });
-  } else {
-    res.sendStatus(404);
-  }
-});
+    } //end of for vars
+  } //end of for bindings
+
+  //join data together
+  cbData.transition = TrData;
+  recData.careActionType = actData;
+  recData.causationBeliefs[0] = cbData;
+
+  return recData;
+}
 
 module.exports = router;
