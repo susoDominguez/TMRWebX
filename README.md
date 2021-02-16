@@ -118,7 +118,7 @@ See [documentation](api/README.md).
 
 ## Deployment
 
-Deployment is via [Docker](https://docs.docker.com/compose/install/), and includes containers for this application (api and backend), Fuskei and an optional reverse proxy. If using the reverse proxy, fill in the appropriate [configuration](proxy/nginx.conf).
+Deployment is via [Docker](https://docs.docker.com/compose/install/), and includes containers for this application (api and backend), Fuseki and an optional reverse proxy. If using the reverse proxy, fill in the appropriate [configuration](proxy/nginx.conf).
 
 Build these containers:
 

@@ -31,9 +31,9 @@ services:
     build:
       context: fuseki
     volumes:
-      - drug_volume:/fuskei
+      - drug_volume:/fuseki
     environment:
-      - ADMIN_PASSWORD=Izf3TaF0UI8oj7f
+      - ADMIN_PASSWORD=road2h
 
 volumes:
   drug_volume:
