@@ -116,7 +116,7 @@ router.post("/add", async function (req, res, next) {
 
   if (req.body.subguidelines) {
     req.body.subguidelines.split(",").forEach(function (SubId) {
-      filterString += `?sg = data:subCIG-` + SubId.trim() + ` || `;
+      filterString += `?sg = data:` + (SubId.startsWith(`subCIG-`) ? "" : `subCIG-` ) + SubId.trim() + ` || `;
     });
     //remove last operator and whitespace
     filterString = filterString.substring(0, filterString.length - 4);
@@ -125,6 +125,7 @@ router.post("/add", async function (req, res, next) {
   }
 
   filterString = `FILTER(` + filterString + `)`;
+  logger.info(filterString);
 
   try {
 
@@ -136,12 +137,12 @@ router.post("/add", async function (req, res, next) {
 
   
       //throw catch if no data
-      if (assertionList == null)
+      if (assertionList == null || assertionList == null || assertionList == [])
         throw Error("Failure retrieving recommendations referenced in subguidelines from database");
 
       //for each assertion URI, add the rest of the related nano graphs
-      const promises = assertionList.map((uri) => {
-      
+      const promises = assertionList.map( (uri) => {
+        logger.info(uri);
          return utils.addGraphsDataFromToCigAsync(
           req.body.cig_from,
           req.body.cig_to,
@@ -154,7 +155,7 @@ router.post("/add", async function (req, res, next) {
       });
      
       let result = await Promise.all(promises);
-     
+
       return res.status(204).end();
 
     } catch(error) {

@@ -45,7 +45,7 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
         return;
       }
 
-      if (!req.body.description) {
+      if (!req.body.description) {  
         req.body.description = `Guideline ` + cigId;
       }
 
