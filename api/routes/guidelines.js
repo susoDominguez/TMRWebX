@@ -115,7 +115,9 @@ router.post("/add", async function (req, res, next) {
   var filterString = ``;
 
   if (req.body.subguidelines) {
+
     req.body.subguidelines.split(",").forEach(function (SubId) {
+      
       filterString += `?sg = data:` + (SubId.startsWith(`subCIG-`) ? "" : `subCIG-` ) + SubId.trim() + ` || `;
     });
     //remove last operator and whitespace
