@@ -1,4 +1,4 @@
-version: "3.7"
+version: "3.3"
 
 services:
 
@@ -7,7 +7,7 @@ services:
       context: proxy
     depends_on:
       - webapp
-    command: ["./wait-for-it.sh", "--timeout=0", "drug-interactiob_webapp_1:8888", "--", "nginx", "-g", "daemon off;"]
+    command: ["./wait-for-it.sh", "--timeout=0", "drug-interaction_webapp_1:8888", "--", "nginx", "-g", "daemon off;"]
     tty: true
     ports:
       - '443:443'
