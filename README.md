@@ -1,4 +1,4 @@
-# Drug Interaction Middleware
+# CIG Processing Service
 
 ## Getting Started
 
