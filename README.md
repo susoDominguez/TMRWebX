@@ -1,4 +1,4 @@
-# Drug Interaction Middleware
+# CIG Processing Service
 
 ## Getting Started
 
@@ -164,9 +164,9 @@ We use [SemVer](http://semver.org/) for versioning. For the versions available, 
 
 ## Authors
 
-Produced as part of the [CONSULT project](https://consult.kcl.ac.uk/).
-
-![CONSULT project](https://consult.kcl.ac.uk/wp-content/uploads/sites/214/2017/12/overview-consult-768x230.png "CONSULT project")
+Originally produced as part of the [CONSULT project](https://consult.kcl.ac.uk/).
+Extended as part of the  [ROAD2H project](https://www.road2h.org/).
+![ROAD2H project](http://www.road2h.org/static/images/logo.png "ROAD2H project")
 
 ## License
 
@@ -175,3 +175,4 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 ## Acknowledgments
 
 * Redesigned processing tool: [github.com/veruskacz/CG-RDF](https://github.com/veruskacz/CG-RDF)
+* Original work can be found at
