@@ -174,5 +174,5 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
+* Original source code can be found at [github.com/kclconsult/tmrweb](https://github.com/kclconsult/tmrweb)
 * Redesigned processing tool: [github.com/veruskacz/CG-RDF](https://github.com/veruskacz/CG-RDF)
-* Original work can be found at
