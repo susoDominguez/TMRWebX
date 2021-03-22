@@ -1,19 +1,17 @@
 ---
 address: 'King''s College London'
 author:
-- Martin Chapman
-bibliography:
-- 'bib.bib'
-title: 'CONSULT guideline server: TMRweb'
+- Jesus Dominguez
+title: 'ROAD2H Clinical guideline interaction server (eXtension) using TMR model: TMRwebX'
 ---
 
 Introduction
 ============
 
-This document summarises how to interact with the CONSULT guidelines
-service, TMRweb, which packages TMR [@Zamborlini2016] as a web service,
-allowing for the representation of, and identification of interactions
-between, clinical guidelines, specifically drug administration, in an
+This document summarises how to interact with the ROAD2H guideline interaction
+service, TMRwebX, which packages TMR [@Zamborlini2016] as a web service,
+allowing for the representation of clinical recommendations, and identification of their interactions,
+specifically drug administration recommendations, in an
 interoperable manner.
 
 Scenario
