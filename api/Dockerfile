@@ -1,4 +1,4 @@
-FROM node:11
+FROM node:lts-alpine@sha256:76badf0d0284ad838536d49d8a804988b4985fc6bc7242dfff4f8216c851438b
 
 ENV user node
 
