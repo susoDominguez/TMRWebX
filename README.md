@@ -18,13 +18,13 @@ Run main container storage:
 docker run --name fuseki-data -v /fuseki busybox
 ```
 
-Run main container, supply port (3030, recommended), password and container store:
+Run main container, supply port (3030, recommended), password,  container store, specify 3 dataset labels (careActions, transitions, beliefs) using TDB version 2, and extend the amount of memory for the Java heap:
 
 ```
-docker run -e ADMIN_PASSWORD=[Password] -e JVM_ARGS=-Xmx2g -d --name fuseki -p 3030:3030 --volumes-from fuseki-data stain/jena-fuseki
+docker run -e TDB=2 -e FUSEKI_DATASET_1=careActions -e FUSEKI_DATASET_2=transitions -e FUSEKI_DATASET_3=beliefs -e ADMIN_PASSWORD=road2h -e JVM_ARGS=-Xmx2g -d --name fuseki -p 3030:3030 --volumes-from fuseki-data stain/jena-fuseki
 ```
 
-Navigate to http://localhost:3030, login with the username `admin` and the password as set above. select Manage Datasets, and create three new (persistent) datasets: careActions, transitions and beliefs.
+Navigate to http://localhost:3030, login with the username `admin` and the password as set above. The three persistent datasets should show. Alternatively, select Manage Datasets, and create the three (persistent) datasets: careActions, transitions and beliefs.
 
 ### TMR reasoner
 
