@@ -1,3 +1,7 @@
+:- module(server,
+      [ server/1            % ?Port
+      ]).
+
 :- use_module(library(http/thread_httpd)). %multi-threaded server
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_client)).
@@ -26,7 +30,7 @@
 :- consult(util).
 
 server(Port) :-
-  http_server(http_dispatch, [port(Port)]).
+  http_server(http_dispatch, [port(Port), workers(16)]).
 
 load_guideline_group(Dataset_id, Dataset_graph_id) :-
   getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
@@ -35,6 +39,7 @@ load_guideline_group(Dataset_id, Dataset_graph_id) :-
   rdf_load(MainGuidelinesPath, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph(Dataset_graph_id)]).
 
 show_interactions(Request) :-
+  rdf_reset_db,
   loadBaseOntologies,
   loadOntologies,
   http_parameters(Request, [ guideline_id(Dataset_id, [ string ]) ]),
@@ -45,8 +50,7 @@ show_interactions(Request) :-
   guideline_recommendations(CIG_URI, Recommendations),
   maplist(recommendation_term, Recommendations, _Terms),
   findall(interaction(Interaction,Label,Elems,External), interaction(Recommendations, Interaction, Label, Elems, External), Interactions),
-  print_list(Interactions),
-  rdf_reset_db.
+  print_list(Interactions).
   
   % These functions below dont work becuase they only remove the named graph not the whole dataset
   % unloadOntologies,     
