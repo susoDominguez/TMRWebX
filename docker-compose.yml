@@ -1,23 +1,21 @@
-version: "3.3"
-
+version: "3.7"
 services:
-
-  proxy:
-    build:
-      context: proxy
-    depends_on:
-      - webapp
-    command: ["./wait-for-it.sh", "--timeout=0", "drug-interaction_webapp_1:8888", "--", "nginx", "-g", "daemon off;"]
-    tty: true
-    ports:
-      - '443:443'
-      - '80:80'
-
+  #proxy:
+   # build:
+    #  context: proxy
+    #depends_on:
+    #  - webapp
+    #command: ["./wait-for-it.sh", "--timeout=0", "drug-interaction_webapp_1:8888", "--", "nginx", "-g", "daemon off;"]
+    #tty: true
+    #ports:
+     # - '443:443'
+      #- '80:80'
   webapp:
+    container_name: tmrweb
+    image: tmrweb_img
     build:
-      context: api
-    depends_on:
-      - backend
+      context: ./api/
+    depends_on: [backend]
 
   backend:
     build:
