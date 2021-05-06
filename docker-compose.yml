@@ -15,19 +15,21 @@ services:
     image: tmrweb_img
     build:
       context: ./api/
+    environment:
+      - JENA_HOST=fuseki
+      - PROLOG_HOST=swipl
     depends_on: [backend]
 
   backend:
     build:
-      context: backend
+      context: ./backend/
     environment:
-      - FUSEKI_HOST_PORT=http://drug-interaction_fuseki_1:3030/
-    depends_on:
-      - fuseki
+      - FUSEKI_HOST_PORT=http://fuseki:3030/
+    depends_on: [fuseki]
 
   fuseki:
     build:
-      context: fuseki
+      context: ./fuseki/
     volumes:
       - drug_volume:/fuseki
     environment:
@@ -35,3 +37,5 @@ services:
 
 volumes:
   drug_volume:
+networks:
+  tmrNetwork:
