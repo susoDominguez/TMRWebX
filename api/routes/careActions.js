@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const request = require('request');
+const logger = require('../config/winston');
 
-const config = require('../lib/config');
-const guidelines = require('../lib/guidelines');
+//const config = require('../lib/config');
+//const guidelines = require('../lib/guidelines');
 const utils = require('../lib/utils');
 
 //get all drug types URIS
@@ -12,10 +13,10 @@ router.post('/drugs/get', function(req, res, next) {
   utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType", function(err, list) {
 
     if(err) {
-      res.sendStatus(404).send(list);
+      res.status(404).send(list);
       return;
     }
-    res.sendStatus(200).send(list);
+    res.status(200).send(list);
   });
 
 });
@@ -26,10 +27,12 @@ router.post('/nonDrugs/get', function(req, res, next) {
   utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType", function(err, list) {
 
     if(err) {
-      res.sendStatus(404).send(list);
+      res.status(404).send(list);
+      return;
+    } else {
+      res.status(200).send(list);
       return;
     }
-    res.sendStatus(200).send(list);
   });
 
 });
@@ -39,10 +42,11 @@ router.post('/vaccines/get', function(req, res, next) {
 
   utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType", function(err, list) {
     if(err) {
-      res.sendStatus(404).send(list);
+      res.status(404).send(list);
       return;
+    } else {
+      res.status(200).send(list);
     }
-    res.sendStatus(200).send(list);
   });
 
 });

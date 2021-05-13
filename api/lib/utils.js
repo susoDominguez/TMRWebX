@@ -43,8 +43,10 @@ class Sparql_Util {
 
 				} else {
 
-					console.log("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(err, 400);
+					logger.error("SPARQL update failed at: " + URL + " Query: " + prefixAndSparqlUpdate + 
+					". " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " 
+					+ ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					callback(error, 400);
 
 				}
 
@@ -90,7 +92,7 @@ class Sparql_Util {
 
 				} else {
 
-					console.log("SPARQL update failed at: " + URL + "  Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
+					logger.error("SPARQL update failed at: " + URL + "  Query: " + prefixAndSparqlUpdate + ". Error: " + (error ? error : "None") + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
 					callback(error, 400);
 
 				}
@@ -139,10 +141,11 @@ class Sparql_Util {
 
 				} else {
 
-					console.log("SPARQL query failed: "  + ". Error: " + error + ". Body: " + body +
+					logger.error("SPARQL query failed: "  + ". " + error + ". Body: " + body +
 					 ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(body, null);
 
+
+					callback( ((error) ? error : body), null);
 				}
 
 			}
@@ -177,7 +180,7 @@ class Sparql_Util {
 				if( error || (response && response.statusCode !== 200))
 				{
 					logger.error("SPARQL query failed: " + response + ". Error: " + error + ". Body: " + body + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".");
-					callback(new ErrorHandler(response.statusCode, "Error: " + error + ". Body: " + body), null);
+					callback(new ErrorHandler(response ? response.statusCode : 500, "Error: " + error + ". Body: " + body), null);
 				} else {
 					callback(null, JSON.parse(body));
 				}
@@ -616,7 +619,7 @@ class Sparql_Util {
 					callback(null, body);
 
 				} else {
-					let err = "Failed to call prolog server with path: " + path + ". Data: " + data + ". Error: " + error + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".";
+					let err = "Failed to call prolog server with path: " + path + ". Data: " + data + ". Error: " + error ? error : "unknown" + ". Body: " + (body ? body : "None") + ". Status: " + ((response && response.statusCode) ? response.statusCode : "No response.") + ".";
 					logger.error(err);
 					callback(err, null);
 				}

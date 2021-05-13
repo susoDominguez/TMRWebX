@@ -11,31 +11,63 @@ services:
      # - '443:443'
       #- '80:80'
   webapp:
+    build: ./api/
+    image: road2h/tmrweb
     container_name: tmrweb
-    image: tmrweb_img
-    build:
-      context: ./api/
+    #expose: 
+    #  - 8888
+    ports:
+      - "8888:8888"
+    networks: 
+      - cig_handler
     environment:
       - JENA_HOST=fuseki
       - PROLOG_HOST=swipl
-    depends_on: [backend]
-
-  backend:
-    build:
-      context: ./backend/
+    depends_on:
+      - swipl
+  swipl:
+    build: ./backend/
+    image: road2h/swipl
+    container_name: swipl
+    #expose:
+    #  - 1234
+    ports: 
+      - "1234:1234"
+    networks: 
+      - cig_handler
     environment:
       - FUSEKI_HOST_PORT=http://fuseki:3030/
-    depends_on: [fuseki]
-
+    depends_on: 
+      - fuseki
+  busybox:
+    image: busybox:latest
+    container_name: fuseki-data
+    networks: 
+      - cig_handler
+    volumes: 
+      - "drug_volume:/fuseki"
   fuseki:
-    build:
-      context: ./fuseki/
-    volumes:
-      - drug_volume:/fuseki
+    build: ./fuseki/
+    image: road2h/fuseki
+    container_name: fuseki
+    #expose: 3030
+    ports: 
+      - "3030:3030"
+    networks: 
+      - cig_handler
+    #volumes_from: 
+     # - drug_volume
     environment:
-      - ADMIN_PASSWORD=road2h
-
+      - FUSEKI_PASSWORD=road2h
+      - TDB=2
+      - FUSEKI_DATASET_1=careActions
+      - FUSEKI_DATASET_2=transitions
+      - FUSEKI_DATASET_3=beliefs
+      - FUSEKI_DATASET_4=CIG-COPD
+      - JVM_ARGS=-Xmx2g
+    depends_on: 
+      - busybox
 volumes:
-  drug_volume:
+  drug_volume: {}
 networks:
-  tmrNetwork:
+  cig_handler: {}

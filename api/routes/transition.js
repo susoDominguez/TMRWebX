@@ -180,7 +180,7 @@ router.post('/all/get/', function(req, res, next) {
     utils.getTransitionData("transitions", ( req.body.transition_URI ? "<"+req.body.transition_URI+">" : "data:Tr"+req.body.transition_id), function(err, transitionData) {
 
       if(err) {
-        res.sendStatus(404).send(transitionData);
+        res.status(404).send(transitionData);
         return;
       }
 
