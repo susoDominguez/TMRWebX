@@ -11,6 +11,12 @@ Before installing, [download and install Docker](https://www.docker.com/get-star
 ## Running
 
 ### Apache Jena Fuseki (Triple Store)
+Pull images of busybox and stain/jena-fuseki
+
+```
+docker pull busybox
+docker pull stain/jena-fuseki
+```
 
 Run main container storage:
 
@@ -120,7 +126,7 @@ See [documentation](api/README.md).
 
 Deployment is via [Docker](https://docs.docker.com/compose/install/), and includes containers for this application (api and backend), Fuseki and an optional reverse proxy. If using the reverse proxy, fill in the appropriate [configuration](proxy/nginx.conf).
 
-Build these containers:
+Build these images:
 
 ```
 docker-compose build
