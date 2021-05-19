@@ -12,8 +12,9 @@ services:
       #- '80:80'
   webapp:
     build: ./api/
-    image: road2h/tmrweb
+    image: road2h-tmrweb
     container_name: tmrweb
+    restart: unless-stopped
     #expose: 
     #  - 8888
     ports:
@@ -23,12 +24,19 @@ services:
     environment:
       - JENA_HOST=fuseki
       - PROLOG_HOST=swipl
+      - JENA_PORT=3030
+      - PROLOG_PORT=1234
+      - PORT=8888
+      - FUSEKI_PASSWORD=road2h
     depends_on:
       - swipl
   swipl:
     build: ./backend/
-    image: road2h/swipl
+    image: road2h-swipl
     container_name: swipl
+    restart: unless-stopped
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
     #expose:
     #  - 1234
     ports: 
@@ -40,25 +48,27 @@ services:
     depends_on: 
       - fuseki
   busybox:
-    image: busybox:latest
+    image: busybox
     container_name: fuseki-data
+    #restart: unless-stopped
     networks: 
       - cig_handler
     volumes: 
       - "drug_volume:/fuseki"
   fuseki:
     build: ./fuseki/
-    image: road2h/fuseki
+    image: road2h-fuseki
     container_name: fuseki
+    restart: unless-stopped
     #expose: 3030
     ports: 
       - "3030:3030"
     networks: 
       - cig_handler
     #volumes_from: 
-     # - drug_volume
+    #  - drug_volume
     environment:
-      - FUSEKI_PASSWORD=road2h
+      - ADMIN_PASSWORD=road2h
       - TDB=2
       - FUSEKI_DATASET_1=careActions
       - FUSEKI_DATASET_2=transitions

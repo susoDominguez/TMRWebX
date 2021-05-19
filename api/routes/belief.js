@@ -46,7 +46,7 @@ function action(req, res, insertOrDelete) {
 
   utils.sparqlUpdate("beliefs", "GRAPH " + head + "\nGRAPH " + body + "\nGRAPH " + provenance + "\nGRAPH " + publication, insertOrDelete, function (err, status) {
 
-    res.sendStatus(status);
+    res.status(status).end();
 
   });
 }
@@ -65,7 +65,7 @@ router.post('/delete', function (req, res) {
 
   utils.sparqlDropGraphs(dataset_id, belief_URI, function (err, status) {
 
-    res.sendStatus(status);
+    res.status(status).end();
 
   });
 

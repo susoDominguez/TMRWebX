@@ -10,7 +10,7 @@ function postTransition(transitionData, res, insertOrDelete) {
 
   utils.sparqlUpdate('transitions', transitionData, insertOrDelete, function(err, status) {
 
-    res.sendStatus(status);
+    res.status(status).end();
 
   });
 

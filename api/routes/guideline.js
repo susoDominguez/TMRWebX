@@ -34,14 +34,14 @@ router.post("/create", bodyParser.json(), function (req, res, next) {
       headers: {
         Authorization:
           "Basic " +
-          new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
+          new Buffer("admin:" + config.FUSEKI_PASSWORD).toString('base64')
       },
     },
     function (error, response, body) {
-     
+
       //send error and end
       if (error) {
-        res.sendStatus(404).send({ error: error });
+        res.status(404).send({ error: error });
         return;
       }
 
@@ -98,9 +98,9 @@ router.post("/delete", function (req, res, next) {
       },
       function (error, response, body) {
         if (error) {
-          res.sendStatus(400);
+          res.status(400).send(error);
         } else {
-          res.sendStatus(200);
+          res.status(200).send(response);
         }
       }
     );
@@ -216,12 +216,12 @@ function action(req, res, insertOrDelete) {
           id2CIG,
           insertOrDelete,
           function (err2, status2) {
-            res.sendStatus(status2);
+            res.status(status2);
           }
         );
       } else {
         //didnt work. send first status back
-        res.sendStatus(status);
+        res.status(status);
       }
     }
   );

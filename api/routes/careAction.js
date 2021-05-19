@@ -16,31 +16,31 @@ function postDrugs(careActData, insertOrDelete, callback) {
 
 router.post('/drug/individual/add', function (req, res) {
 
-  careActDef(req, config.INSERT, (err, status) => res.sendStatus(status).end());
+  careActDef(req, config.INSERT, (err, status) => res.status(status).end());
 
 });
 
 router.post('/nondrug/individual/add', function (req, res) {
 
-  careActDef(req, config.INSERT, (err, status) => res.sendStatus(status).end());
+  careActDef(req, config.INSERT, (err, status) => res.status(status).end());
 
 });
 
 router.post('/individual/delete', function (req, res) {
 
-  careActDef(req, config.DELETE, (err, status) => res.sendStatus(status).end());
+  careActDef(req, config.DELETE, (err, status) => res.status(status).end());
 
 });
 
 router.post('/drug/category/add', function (req, res) {
 
-  drugCatCareAction(req, config.INSERT, (err, status) => res.sendStatus(status).end());
+  drugCatCareAction(req, config.INSERT, (err, status) => res.status(status).end());
 
 });
 
 router.post('/drug/category/delete', function (req, res) {
 
-  drugCatCareAction(req, config.DELETE, (err, status) => res.sendStatus(status).end());
+  drugCatCareAction(req, config.DELETE, (err, status) => res.status(status).end());
 
 });
 
@@ -76,11 +76,11 @@ router.post('/effect/get', function (req, res) {
   utils.callPrologServer("drugeffects", postData, res, function (err, data) {
 
     if(err){
-      res.sendStatus(404);
+      res.status(404).end();
       return;
     }
 
-    res.sendStatus(200).send(data);
+    res.status(200).send(data);
 
   });
 
@@ -94,7 +94,7 @@ router.post('/all/get/', function (req, res) {
     utils.getCareActionData("careActions", req.body.uri, function (err, actionResults) {
 
       if(err) {
-        res.sendStatus(404).send({}).end();
+        res.status(404).send(err);
         return;
       }
 
@@ -147,7 +147,7 @@ router.post('/all/get/', function (req, res) {
     });
 
   } else {
-    res.sendStatus(406).send({}).end();
+    res.status(406).send({});
   }
 });
 

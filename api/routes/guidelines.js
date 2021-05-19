@@ -84,11 +84,11 @@ router.post("/rec/get", function (req, res, next) {
       cigId,
       "vocab:ClinicalRecommendation",
       function (err, RecUris) {
-        err ? res.sendStatus(400) : res.send(RecUris);
+        err ? res.status(400).end() : res.send(RecUris);
       }
     );
   } else {
-    res.sendStatus(400);
+    res.status(400).end();
   }
 });
 
