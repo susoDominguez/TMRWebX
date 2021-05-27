@@ -127,7 +127,7 @@ router.post("/add", async function (req, res, next) {
   }
 
   filterString = `FILTER(` + filterString + `)`;
-  logger.info(filterString);
+  //logger.info(filterString);
 
   try {
 
@@ -144,7 +144,7 @@ router.post("/add", async function (req, res, next) {
 
       //for each assertion URI, add the rest of the related nano graphs
       const promises = assertionList.map( (uri) => {
-        logger.info(uri);
+       // logger.info(uri);
          return utils.addGraphsDataFromToCigAsync(
           req.body.cig_from,
           req.body.cig_to,

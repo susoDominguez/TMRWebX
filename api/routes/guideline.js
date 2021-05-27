@@ -286,6 +286,7 @@ router.post("/careAction/get", function (req, res, next) {
 });
 
 router.post("/rec/all/get/", function (req, res, next) {
+
   var id = req.body.cig_id;
   var idCig;
 
@@ -302,6 +303,7 @@ router.post("/rec/all/get/", function (req, res, next) {
     : "data:Rec" + id + "-" + req.body.rec_id;
 
   utils.getRecData(
+    
     idCig,
     recURI,
     "beliefs",
@@ -312,6 +314,9 @@ router.post("/rec/all/get/", function (req, res, next) {
       if (err) {
         return next(err);
       }
+
+      let data = {};
+
       //if  data found in Object (we check), begin
       if ( guidelineData &&
         guidelineData.constructor === Object &&
@@ -446,13 +451,17 @@ router.post("/rec/all/get/", function (req, res, next) {
           recData.careActionType = actData;
           recData.causationBeliefs[0] = cbData;
 
-          res.send(recData);
-        } else {
-          res.send({});
+         // res.send(recData);
+         data = recData;
         }
-      } else {
-        res.send({});
-      }
+        // else {
+          //res.send({});
+        //}
+      } 
+      //else {
+      //  res.send({});
+      //}
+      res.send(data);
     }
   );
 });
