@@ -2,7 +2,7 @@
 address: 'King''s College London'
 author:
 - Jesus Dominguez
-title: 'ROAD2H Clinical guideline interaction server (eXtension) using TMR model: TMRwebX'
+title: 'ROAD2H Interpretable-clinical guideline authoring server (eXtension) adapting the TMR model: TMRwebX'
 ---
 
 Introduction
@@ -21,9 +21,8 @@ Scenario
 *Diuretic*.[]{label="HT"}](CIG-HT.png){#HT width="0.8\linewidth"}
 
 Figure [1](#HT){reference-type="ref" reference="HT"} shows two
-hypertension guidelines that are *alternatives*, in that they express
-the same information. This is also a type of alternative known as a
-*repairable transition*, because the actions undertaken by one guideline
+hypertension recommendations. This is also a type of alternative known as a
+*repairable transition*, because the actions undertaken by one recommendation
 can be reversed by performing the actions associated with the other. In
 text form, these guidelines might read '*To reduce a patient's blood
 pressure, administer Thiazide. Similarly, to avoid exacerbating a
@@ -32,8 +31,8 @@ patient's blood pressure, avoid the administration of Ibuprofen.*'
 In the example detailed in this document, our aim is to represent these
 guidelines using the semantic format used by TMR, and to then use a
 computational implementation of TMR to identify the repairable
-transition shown, features which are both offered by TMRweb. This then
-serves as an example for how to use TMRweb to create new guideline sets,
+transition shown, features which are both offered by TMRwebX. This then
+serves as an example for how to use TMRwebX to create new guideline sets,
 and identify interactions between the constituent guidelines.
 
 In Figure [1](#HT){reference-type="ref" reference="HT"}, the second
@@ -44,7 +43,7 @@ guideline, Reduce Blood Pressure, will be referred to using the ID
 Implementation
 ==============
 
-TMRweb is a RESTful web service, which accepts HTTP POST requests.
+TMRwebX is a RESTful web service, which accepts HTTP POST requests.
 Therefore, to construct our semantic representation, and to then
 interrogate this implementation, requests will be issued to this
 service, using the *CURL* command[^1]. Examples are given throughout the
@@ -57,7 +56,7 @@ Example representation process {#example}
 ==============================
 
 To represent the set of guidelines shown in Figure
-[1](#HT){reference-type="ref" reference="HT"} and have TMRweb
+[1](#HT){reference-type="ref" reference="HT"} and have TMRwebX
 successfully leverage TMR to identify the interactions between them, we
 first need to define the world knowledge that supports their definition
 and allows TMR to operate: the existence of drugs; the concept of a
