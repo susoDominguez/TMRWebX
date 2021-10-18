@@ -2,7 +2,7 @@
 
 #### Deployed at
 
-<img src="imperial.svg" width="150">
+<img src="![Kings_College_London-logo](https://github.kcl.ac.uk/storage/user/995/files/a8c8bf00-302e-11ec-9e9a-cf4ac3242eb6)" width="150">
 
 ## Getting Started
 
