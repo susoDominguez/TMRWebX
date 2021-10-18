@@ -2,7 +2,7 @@
 
 #### Deployed at
 
-<img src="![Kings_College_London-logo](https://github.kcl.ac.uk/k1214757/TMRWebX/blob/master/Kings_College_London-logo.png)" width="150">
+<img src="Kings_College_London-logo.png" width="150">
 
 ## Getting Started
 
