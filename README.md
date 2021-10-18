@@ -5,12 +5,10 @@
 <img src="Kings_College_London-logo.png" width="150">
 
 
-
-<img src="Imperial-College-London-logo.png" width="150">
+<img src="Imperial-College-London-logo.jpeg" width="150">
 
 #### Integrated with
 
-[Heliant]
 <img src="heliant_logo.jpeg" width="150">
 
 ## Getting Started
@@ -179,13 +177,12 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 
 ## Versioning
 
-We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/martinchapman/nokia-health/tags).
-
 ## Authors
 
 Originally produced as part of the [CONSULT project](https://consult.kcl.ac.uk/).
 Extended as part of the  [ROAD2H project](https://www.road2h.org/).
-![ROAD2H project]<img src="road2h_logo.png" width="150">
+
+<img src="road2h_logo.png" width="150">
 
 ## License
 
