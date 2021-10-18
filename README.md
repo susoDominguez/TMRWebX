@@ -3,7 +3,12 @@
 #### Deployed at
 
 <img src="Kings_College_London-logo.png" width="150">
-<img src="Imperial-College-London-logo" width="150">
+<img src="Imperial-College-London-logo.png" width="150">
+
+#### Integrated with
+
+<img src="Imperial-College-London-logo.png" width="150">
+[Heliant](https://heliant.rs)
 
 ## Getting Started
 
