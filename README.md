@@ -11,7 +11,7 @@
 #### Integrated with
 
 <img src="Imperial-College-London-logo.png" width="150">
-[Heliant](https://heliant.rs)
+[Heliant](heliant_logo.jpeg)
 
 ## Getting Started
 
