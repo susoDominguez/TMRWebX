@@ -3,6 +3,7 @@
 #### Deployed at
 
 <img src="Kings_College_London-logo.png" width="150">
+<img src="Imperial-College-London-logo" width="150">
 
 ## Getting Started
 
