@@ -185,7 +185,7 @@ We use [SemVer](http://semver.org/) for versioning. For the versions available, 
 
 Originally produced as part of the [CONSULT project](https://consult.kcl.ac.uk/).
 Extended as part of the  [ROAD2H project](https://www.road2h.org/).
-![ROAD2H project](http://www.road2h.org/static/images/logo.png "ROAD2H project")
+![ROAD2H project]<img src="road2h_logo.png" width="150">
 
 ## License
 
