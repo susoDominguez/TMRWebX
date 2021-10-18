@@ -10,8 +10,8 @@
 
 #### Integrated with
 
-<img src="Imperial-College-London-logo.png" width="150">
-[Heliant](heliant_logo.jpeg)
+[Heliant]
+<img src="heliant_logo.jpeg" width="150">
 
 ## Getting Started
 
