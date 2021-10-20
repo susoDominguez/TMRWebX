@@ -67,7 +67,7 @@ patient having a certain medical state, such as a blood pressure level;
 the concept of altering a person's medical state, such as their blood
 pressure; and the effects of taking a drug.
 
-Drugs
+Care Actions
 -----
 
 To define a drug, we might start by representing a general category of
@@ -182,6 +182,20 @@ One can query the database to get all available knowledge on a situation, by usi
       curl --location --request POST 'http://localhost:8888/tmrweb/transition/situation/all/get' \
       --data-urlencode 'situation_id=NormalBP'
 
+Measured clinical property
+--------
+
+Next, we identify the clinical property being measured on both situations, that is, the blood pressure
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/transition/property/add' \
+      --data-urlencode 'property_id=BP' \
+      --data-urlencode 'property_label=blood pressure'
+    
+Again, data on a property can be deleted/retrieved using the following endpoints 
+`/tmrweb/transition/property/delete` and `/tmrweb/transition/property/all/get`
+using parameters similarly to previous cases.
+
+
 Transition
 ----------
 
@@ -189,16 +203,23 @@ We next model transitions between the situations specified previously,
 specifically moving between different blood pressure levels, as shown in
 Figure [1](#HT){reference-type="ref" reference="HT"}.
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/add \
-      --data`transition_id=IncreaseBP&prior_situation_id=NormalBP&post_situation_id=HighBP'
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/add \
-      --data`transition_id=DecreaseBP&prior_situation_id=HighBP&post_situation_id=NormalBP'
+    curl --location --request POST 'http://localhost:8888/tmrweb/transition/add' \
+      --data-urlencode 'transition_id=IncreaseBP' \
+      --data-urlencode 'pre_situation_id=NormalBP' \
+      --data-urlencode 'post_situation_id=HighBP' \
+      --data-urlencode 'affected_property_id=BP' \
+      --data-urlencode 'derivative=increase'
+    
+    curl --location --request POST 'http://localhost:8888/tmrweb/transition/add' \
+      --data-urlencode 'transition_id=DecreaseBP' \
+      --data-urlencode 'pre_situation_id=HighBP' \
+      --data-urlencode 'post_situation_id=NormalBP' \
+      --data-urlencode 'affected_property_id=BP' \
+      --data-urlencode 'derivative=decrease'
       
-Measured clinical property
---------
+Data on transitions can be deleted/retrieve using the following endpoints
+`http://localhost:8888/tmrweb/transition/delete` and
+`http://localhost:8888/tmrweb/transition/all/get` using parameters similarly to previous cases.
 
 Causation Beliefs
 -------
@@ -206,21 +227,33 @@ Causation Beliefs
 Finally, we combine our drug information (Section
 [4.1](#drugs){reference-type="ref" reference="drugs"}) and transition
 information (Section [4.3](#transition){reference-type="ref"
-reference="transition"}) to construct beliefs about the effects of
+reference="transition"}) to construct beliefs about the potential effects of
 administering a drug, for *Diuretic* and *Diuretic2* (Figure
-[1](#HT){reference-type="ref" reference="HT"}):
+[1](#HT){reference-type="ref" reference="HT"}) (or a non-drug care action):
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/belief/add \
-      --data`belief_id=ThiazideBP&drug_cause_id=Thiazide&transition_effect_id=DecreaseBP&strength=L1&frequency=always&author=martin'
+    curl --location --request POST 'http://localhost:8888/tmrweb/belief/add' \
+      --data-urlencode 'belief_id=ThiazideBP' \
+      --data-urlencode 'careAct_cause_id=Thiazide' \
+      --data-urlencode 'transition_effect_id=DecreaseBP' \
+      --data-urlencode 'strength=L1' \
+      --data-urlencode 'author=JDA'
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/belief/add \
-      --data`belief_id=IbuprofenBP&drug_cause_id=Ibuprofen&transition_effect_id=IncreaseBP&strength=L1&frequency=always&author=martin'
+    curl --location --request POST 'http://localhost:8888/tmrweb/belief/add' \
+      --data-urlencode 'belief_id=IbuprofenBP' \
+      --data-urlencode 'careAct_cause_id=Ibuprofen' \
+      --data-urlencode 'transition_effect_id=IncreaseBP' \
+      --data-urlencode 'strength=L1' \
+      --data-urlencode 'author=JDA'
 
 We can add additional information, such as a code to indicate the
 strength of the belief, and how often this belief applies to the
 referenced transition.
+
+The set of all causation beliefs URIs can be retrieved using
+
+      http://localhost:8888/tmrweb/beliefs/get
+     
+As depicted in cases above above, beliefs can also be deleted/retrieved.
 
 Guidelines
 ----------
@@ -231,36 +264,91 @@ of this information together.
 
 First, we supply some details for our guideline group[^2]:
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guideline/create \
-      --data`guideline_group_id=HT&description=CIG%20for%20hypertension'
+    curl --location --request POST 'http://localhost:8888/tmrweb/guideline/create' \
+      --data-urlencode 'cig_id=HT' \
+      --data-urlencode 'description=CIG%20for%20hypertension' \
+      --data-urlencode 'IsPersistent=true'
 
-Then, we specify information for *Diuretic*, including the remaining
-information from Figure [1](#HT){reference-type="ref" reference="HT"},
-such as the guideline name, and the nature of the associated
-recommendation (should or should not):
+Then, we specify information for *Diuretic* in the form of a recommendation,
+including the remaining information from Figure [1](#HT){reference-type="ref" reference="HT"},
+such as the guideline name, and the nature of the associated recommendation (should or should not be recommended):
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guideline/add \
-      --data`guideline_group_id=HT&guideline_id=Diuretic&drug_id=Thiazide&belief_id=ThiazideBP&label=Reduce%20blood%20pressure&should_or_shouldnot=should&author=martin'
+    curl --location --request POST 'http://localhost:8888/tmrweb/guideline/rec/add' \
+      --data-urlencode 'cig_id=HT' \
+      --data-urlencode 'rec_id=Diuretic' \
+      --data-urlencode 'careAction_id=Thiazide' \
+      --data-urlencode 'belief_id=ThiazideBP' \
+      --data-urlencode 'label=Reduce%20blood%20pressure' \
+      --data-urlencode 'isRecommended=true' \
+      --data-urlencode 'author=Jesus' \
+      --data-urlencode 'contribution=positive' \
+      --data-urlencode 'source=https://hypertension.org/Pocket-Guide.pdf'
+  
 
 *Diuretic2* is also defined accordingly:
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guideline/add \
-      --data`guideline_group_id=HT&guideline_id=Diuretic2&drug_id=Ibuprofen&belief_id=IbuprofenBP&label=Avoid%20high%20blood%20pressure&should_or_shouldnot=should-not&author=martin'
+    curl --location --request POST 'http://localhost:8888/tmrweb/guideline/rec/add' \
+      --data-urlencode 'cig_id=HT' \
+      --data-urlencode 'rec_id=Diuretic2' \
+      --data-urlencode 'careAction_id=Ibuprofen' \
+      --data-urlencode 'belief_id=IbuprofenBP' \
+      --data-urlencode 'label=Avoid%20high%20blood%20pressure' \
+      --data-urlencode 'isRecommended=false' \
+      --data-urlencode 'author=Jesus' \
+      --data-urlencode 'contribution=negative' \
+      --data-urlencode 'source=https://hypertension.org/Pocket-Guide.pdf'
+      
+A dataset (guideline) can be deleted providing its identifier:
 
+      curl --location --request POST 'http://localhost:8888/tmrweb/guideline/delete' \
+            --data-urlencode 'cig_id=CIG-HT'
+
+The set of recommendation URIs from a dataset can be retrieved as follows
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/guidelines/rec/get' \
+            --data-urlencode 'cig_id=CIG-HT'
+            
+Retrieve a particular recommendation (in JSON format) from a dataset by means of its URI
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/guideline/rec/all/get/' \
+            --data-urlencode 'rec_URI=http://anonymous.org/data/RecHT-Diuretic' \
+            --data-urlencode 'cig_id=HT'
+
+Sub-guidelines
+--------------
+
+Applying all recommendations at once from a guideline may not be benefitial. 
+One could group relevant parts of a guideline togehter as a whole, to be retrieved as part of some particular clinical scenario.
+We call it a sub-guideline and it is comprised of one or more recommendations from the same dataset.
+
+To create a sub-guideline, identify the dataset and the recommendations ids to be grouped togheter under the sub-guideline.
+In the example below, we identify both recommendations as part of the same sub-guideline we call `BP`.
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/guideline/subguideline/add' \
+            --data-urlencode 'guideline_id=HT' \
+            --data-urlencode 'subGuideline_id=BP' \
+            --data-urlencode 'recs_ids=Diuretic,Diuretic2' \
+            --data-urlencode 'description=recommendations affecting blood pressure'
+
+Similar to previous examples, there is code to delete a sub-guideline from some specific dataset.
+
+One can also copy knowledge from one or more subguidelines in a dataset and add it to another existing dataset
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/guidelines/add' \
+            --data-urlencode 'cig_from=CIG-HT' \
+            --data-urlencode 'cig_to=CIG-OTHER' \
+            --data-urlencode 'subguidelines=subCIG-BP'
+            
 Example interrogation process (single interaction)
 ==================================================
 
 Now that we have our guideline set represented, we can interrogate it in
 order to find any interactions in the following way:
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guidelines/interactions \
-      --data guideline_group_id=HT
+    curl --location --request POST 'http://localhost:8888/tmrweb/guidelines/interactions' \
+      --data-urlencode 'cig_id=HT'
 
-This gives us the following response:
+This gives us the following textual response (we have currently extended the outcome format to deliver it using a JSON structure):
 
 ``` {frame="none"}
 [interaction(http://anonymous.org/data/ReparableTransitionRecHT-Diuretic2RecHT-Diuretic,Reparable Transition,[http://anonymous.org/data/RecHT-Diuretic,http://anonymous.org/data/RecHT-Diuretic2],[])]
@@ -280,7 +368,7 @@ we can first ask which drugs each guideline in the interaction relates
 to:
 
     curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guidelines/drug \
+      --url https://localhost:8888/tmrweb/guidelines/drug \
       --data `guideline_id=http%3A%2F%2Fanonymous.org%2Fdata%2FRecHT-Diuretic&guideline_group_id=HT'
 
 ``` {frame="none"}
@@ -299,7 +387,7 @@ We can then ask what the effects of these drugs are, and thus learn why
 they are considered alternative actions:
 
     curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/drugs/effects \
+      --url https://localhost:8888/tmrweb/drugs/effects \
       --data drug_full_id=http%3A%2F%2Fanonymous.org%2Fdata%2FDrugCatThiazide
 
 ``` {frame="none"}
@@ -307,103 +395,11 @@ http://anonymous.org/data/ActAdministerThiazide causes http://anonymous.org/data
 ```
 
     curl --request POST \
-      --url https://consultin.hscr.kcl.ac.uk/tmrweb/drugs/effects \
+      --url https://localhost:8888/tmrweb/drugs/effects \
       --data drug_full_id=http%3A%2F%2Fanonymous.org%2Fdata%2FDrugTIbuprofen
 
 ``` {frame="none"}
 http://anonymous.org/data/ActAdministerIbuprofen causes http://anonymous.org/data/TrIncreaseBP
-```
-
-Example interrogation process (multiple interactions)
-=====================================================
-
-![Guideline set *HT-OA*, consisting of *Diuretic*, *Diuretic2* and
-*Painkiller*.[]{label="HT-OA"}](CIG-HT-OA.png){#HT-OA
-width="0.8\linewidth"}
-
-In order to illustrate the identification of multiple guideline
-interactions, we add a new guideline, *Painkiller*, shown in Figure
-[2](#HT-OA){reference-type="ref" reference="HT-OA"} along with
-*Diuretic* and *Diuretic2*. With the addition of this drug, we now also
-have a *contradiction* interaction: two guidelines in the same set that
-recommend, and do not recommend, the administration of the same drug,
-respectively. To model and identify this through TMRweb, first we model
-the new transitions and beliefs associated with this guideline
-(Ibuprofen is already modelled):
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/situation/add \
-      --data `situation_id=PatientHasNoPain&situation_label=Patient%20has%20no%20pain'
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/situation/add \
-      --data `situation_id=PatientHasPain&situation_label=Patient%20has%20pain&umlsCodes=C0030193'
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/add \
-      --data `transition_id=Painkiller&prior_situation_id=PatientHasPain&post_situation_id=PatientHasNoPain'
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/belief/add \
-      --data `belief_id=IbuprofenPain&drug_cause_id=Ibuprofen&transition_effect_id=Painkiller&strength=L1&frequency=always&author=martin'
-
-Next, we again model *Diuretic* and *Diuretic2* as part of a new
-guideline group along with our new guideline *Painkiller*:
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guideline/create \
-      --data `guideline_group_id=HT-OA&description=CIG%20for%20hypertension%20and%20osteoarthritis'
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guideline/add \
-      --data `guideline_group_id=HT-OA&guideline_id=Diuretic&drug_id=Thiazide&belief_id=ThiazideBP&label=Reduce%20blood%20pressure&should_or_shouldnot=should&author=martin'
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guideline/add \
-      --data `guideline_group_id=HT-OA&guideline_id=Diuretic2&drug_id=Ibuprofen&belief_id=IbuprofenBP&label=Avoid%20high%20blood%20pressure&should_or_shouldnot=should-not&author=martin'
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guideline/add \
-      --data `guideline_group_id=HT-OA&guideline_id=Painkiller&drug_id=Ibuprofen&belief_id=IbuprofenPain&label=Reduce%20pain&should_or_shouldnot=should&author=martin'
-
-We can now interrogate these guidelines in order to identify
-interactions:
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guidelines/interactions \
-      --data guideline_group_id=HT-OA
-
-``` {frame="none"}
-[interaction(http://anonymous.org/data/ContradictionRecHT-OA-PainkillerRecHT-OA-Diuretic2,Contradictory Norms,[http://anonymous.org/data/RecHT-OA-Diuretic2,http://anonymous.org/data/RecHT-OA-Painkiller],[]),
-interaction(http://anonymous.org/data/ReparableTransitionRecHT-OA-Diuretic2RecHT-OA-Diuretic,Reparable Transition,[http://anonymous.org/data/RecHT-OA-Diuretic,http://anonymous.org/data/RecHT-OA-Diuretic2],[])]
-```
-
-This time, we have two interaction objects. This second we have already
-seen, but the first now identifies the contradiction shown in Figure
-[2](#HT-OA){reference-type="ref" reference="HT-OA"}. From this
-information, we can deduce further information such as the fact that
-*Painkiller* is, through the fact that *Diuretic2* and *Diuretic* are
-alternatives (repairable transitions), also contradictory with
-*Diuretic*.
-
-If we identify the drugs involved in this inferred contradiction, then
-we can further infer that *Thiazide* (Diuretic) and *Ibuprofen*
-(Painkiller) should not be prescribed together.
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guidelines/drug \
-      --data `guideline_id=http%3A%2F%2Fanonymous.org%2Fdata%2FRecHT-Diuretic&guideline_group_id=HT-OA'
-
-``` {frame="none"}
-http://anonymous.org/data/DrugCatThiazide
-```
-
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/guidelines/drug \
-      --data `guideline_id=http%3A%2F%2Fanonymous.org%2Fdata%2FRecHT-OA-Painkiller&guideline_group_id=HT-OA'
-
-``` {frame="none"}
-http://anonymous.org/data/DrugTIbuprofen
 ```
 
 [^1]: *Postman* (<https://www.getpostman.com/>), neatly wraps CURL
