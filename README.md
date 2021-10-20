@@ -28,7 +28,8 @@ Before installing, [download and install Docker](https://www.docker.com/get-star
 
 ## Running
 
-### Apache Jena Fuseki (Triple Store)
+### Store microservice: Apache Jena Fuseki (Triple Store) (to store TMR-based clinical guidelines in RDF)
+
 Pull images of busybox and stain/jena-fuseki
 
 ```
@@ -50,7 +51,7 @@ docker run -e TDB=2 -e FUSEKI_DATASET_1=careActions -e FUSEKI_DATASET_2=transiti
 
 Navigate to http://localhost:3030, login with the username `admin` and the password [pwd] as set above. The three persistent datasets should show. Alternatively, select Manage Datasets, and create the three (persistent) datasets: careActions, transitions and beliefs.
 
-### TMR reasoner
+### Reasoner microservice: TMR reasoner (first-order logic rules for reasoning on TMR guidelines)
 
 Clone this repository:
 
@@ -88,7 +89,7 @@ Start server on a given port (1234, recommended):
 ?- server(1234).
 ```
 
-### TMRWeb API
+### Interaction microservice: TMRWeb  API
 
 Change to the API folder.
 
@@ -187,6 +188,7 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 ## Authors
 
 Originally produced as part of the [CONSULT project](https://consult.kcl.ac.uk/).
+
 Extended as part of the  [ROAD2H project](https://www.road2h.org/).
 
 <img src="road2h_logo.png" width="150">
