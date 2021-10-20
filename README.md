@@ -1,4 +1,4 @@
-# CIG Processing Service
+# CIG Interaction Service
 
 #### Deployed at
 
