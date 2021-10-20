@@ -14,6 +14,13 @@
 ## Getting Started
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
+Notice this the the CIG authoring microservice architecture as describe on 
+
+`A Microservice Architecture for the Design of Computer-Interpretable Guideline Processing Tools
+Chapman, M. D. & Curcin, V., 2019, 18th IEEE International Conference on Smart Technologies. IEEE Computer Society Press Research output.
+DOIs: https://doi.org/10.1109/EUROCON.2019.8861830`
+
+INTEGRATED with TMR modelling and reasoning tool. Other CIG modelling tools could require distinct Store and Reasoner components.
 
 ### Prerequisites
 
