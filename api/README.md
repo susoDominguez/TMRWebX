@@ -10,9 +10,8 @@ Introduction
 
 This document summarises how to interact with the ROAD2H guideline interaction
 service, TMRwebX, which packages TMR [@Zamborlini2016] as a web service,
-allowing for the representation of clinical recommendations, and identification of their interactions,
-specifically drug administration recommendations, in an
-interoperable manner.
+allowing for the representation of clinical guidelines as a set of recommendations in an interoperable manner. 
+Additionally, it provides as set of logic rules to identify potential interactions -alternative, repetition, contradiction, repairable- among these guidelines.
 
 Scenario
 ========
@@ -21,24 +20,25 @@ Scenario
 *Diuretic*.[]{label="HT"}](CIG-HT.png){#HT width="0.8\linewidth"}
 
 Figure [1](#HT){reference-type="ref" reference="HT"} shows two
-hypertension recommendations. This is also a type of alternative known as a
-*repairable transition*, because the actions undertaken by one recommendation
+hypertension recommendations. This is also a type of interaction known as a
+*repairable transition*, because the actions undertaken by one recommendation 
+(in this case I recommendation to avoid a care action, yet it may be required to adminsiter it regardless)
 can be reversed by performing the actions associated with the other. In
 text form, these guidelines might read '*To reduce a patient's blood
 pressure, administer Thiazide. Similarly, to avoid exacerbating a
 patient's blood pressure, avoid the administration of Ibuprofen.*'
 
 In the example detailed in this document, our aim is to represent these
-guidelines using the semantic format used by TMR, and to then use a
+recommendations using the semantic format used by TMR, and to then use a
 computational implementation of TMR to identify the repairable
 transition shown, features which are both offered by TMRwebX. This then
 serves as an example for how to use TMRwebX to create new guideline sets,
 and identify interactions between the constituent guidelines.
 
 In Figure [1](#HT){reference-type="ref" reference="HT"}, the second
-guideline, Reduce Blood Pressure, will be referred to using the ID
+recommendation, Reduce Blood Pressure, will be referred to using the ID
 *Diuretic*; the first, Avoid High Blood Pressure, using the ID
-*Diuretic2*; and the guidelines as a collection using the ID *HT*.
+*Diuretic2*; and the recommendations as a guideline using the ID *HT*.
 
 Implementation
 ==============
@@ -46,11 +46,14 @@ Implementation
 TMRwebX is a RESTful web service, which accepts HTTP POST requests.
 Therefore, to construct our semantic representation, and to then
 interrogate this implementation, requests will be issued to this
-service, using the *CURL* command[^1]. Examples are given throughout the
-document, and should always be accompanied by the following `header`
+service, using the *CURL* command[^1]. 
+Examples are given throughout the document, and should always be accompanied by the following `header`
 information:
 
       --header `Content-Type: application/x-www-form-urlencoded'
+      
+Also notice the URL is localhost as we have deployed the app locally for providing this examples.
+
 
 Example representation process {#example}
 ==============================
@@ -70,36 +73,79 @@ Drugs
 To define a drug, we might start by representing a general category of
 drugs. Here, we create a dummy category *Thiazide* for *Diuretic*:
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/drug/category/add \
-      --header `Content-Type: application/x-www-form-urlencoded'\
-      --data `drug_category_id=Thiazide`
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/careAction/drug/category/add' \
+      --data-urlencode 'drugCat_id=Thiazide' \
+      --data-urlencode 'drugCat_label=Thiazide' \
+      --data-urlencode 'action_label=Thiazide' \
+
 
 When we define a category, we can also specify which drugs are in this
 category (in this case only Thiazide), and general properties of the
 drugs in this category, but this falls outside the scope of this
 example.
 
-     subsumed_drug_ids=Aspirin%2C%20Ibuprofren&grouping_criteria_ids=SitNonSteroidalDrug%2C%20TrAntinflammatory`
+      --data-urlencode 'subsumed_drug_ids=Aspirin%2C%20Ibuprofren' \
+      --data-urlencode 'grouping_criteria_ids=SitNonSteroidalDrug%2C%20TrAntinflammatory' \
+     
+Moreover, we could add clinical codes for ICD10, UMLS or SNOMED CT code schemes 
+(below, and for the rest of the example) we  use  dummy code 000 for all three cases)
+
+      --data-urlencode 'snomedCodes=000' \
+      --data-urlencode 'icd10Codes=000' \
+      --data-urlencode 'umlsCodes=000'
 
 Given this category, we can now define the actual *Diuretic* drug, and
-state that it is part of this category. We can also state individual
-relationship to other drugs (in this case not one we have priorly
+state that it is part of this category. We can also state an individual
+subsuming relationship to another drug type (in this case not one we have priorly
 represented):
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/drug/individual/add \
-      --data`drug_id=Thiazide&drug_category_id=Thiazide&subsumed_drug_id=Bendroflumethiazide'
+    curl --location --request POST 'http://localhost:8888/tmrweb/careAction/drug/individual/add' \
+      --data-urlencode 'drug_id=Thiazide' \
+      --data-urlencode 'drug_label=Thiazide' \
+      --data-urlencode 'subsumed_drug_id=Bendroflumethiazide' \
+      --data-urlencode 'action_label=Thiazide' \
+
 
 We follow a similar approach for *Diuretic2*, which pertains to the drug
-Ibuprofen and in this instance does not have a category:
+Ibuprofen and in this instance there is no subsuming drug type relation:
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/drug/individual/add \
-      --data drug_id=Ibuprofen
+    curl --location --request POST 'http://localhost:8888/tmrweb/careAction/drug/individual/add' \
+      --data-urlencode 'drug_id=Ibuprofen' \
+      --data-urlencode 'drug_label=Ibuprofen' \
+      --data-urlencode 'action_label=Ibuprofen' \
 
 We have now defined the drugs shown in Figure
 [1](#HT){reference-type="ref" reference="HT"}.
+
+Aditionally, one can add non-drug types (non-drug care actions) like, pulmonary rehabilitation (or a CT scan, etc).
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/careAction/nondrug/individual/add' \
+      --data-urlencode 'nonDrug_id=LngRehab' \
+      --data-urlencode 'nonDrug_label=LngRehab' \
+      --data-urlencode 'nonDrugAct_label=administer pulmonary rehabilitation' \
+      
+To check available drug types and categories
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/careActions/drugs/get' \
+      
+Similarly, to check available non-drug types
+
+      http://localhost:8888/tmrweb/careActions/nonDrugs/get
+      
+To delete a drug type or drug category, we must insert all the relevant data that must be discarded.
+For instance, the following code deletes the ALL knowledge we have on the drug type Thiazide
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/careAction/individual/delete' \
+      --data-urlencode 'drug_id=Thiazide' \
+      --data-urlencode 'drug_label=Thiazide' \
+      --data-urlencode 'subsumed_drug_id=Aspirin%2C%20Ibuprofren' \
+      --data-urlencode 'grouping_criteria_ids=SitNonSteroidalDrug%2C%20TrAntinflammatory' \
+      --data-urlencode 'action_label=Thiazide' \
+      --data-urlencode 'icd10Codes=000' \
+      --data-urlencode 'snomedCodes=000' \
+      --data-urlencode 'atcCodes=000' \
+      --data-urlencode 'umlsCodes=000'
 
 Situation
 ---------
@@ -107,18 +153,34 @@ Situation
 We next define the situations a patient might find themselves in, in
 respect of their vitals, which in the case of *HT* is varying levels of
 blood pressure (Figure [1](#HT){reference-type="ref" reference="HT"}).
-Specifically we define the state in which a patient has normal blood
-pressure, and the state in which a patient has high blood pressure. We
-can also add additional information such as the clinical codes that
+Specifically, we define the state in which a patient has normal blood
+pressure, and the state in which a patient has high blood pressure. 
+We can also add additional information such as the clinical codes that
 might be used to reference such states in an EHR:
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/situation/add \
-      --data`situation_id=NormalBP&situation_label=Blood%20pressure%20is%20normal'
+    curl --location --request POST 'http://localhost:8888/tmrweb/transition/situation/add' \
+      --data-urlencode 'situation_id=NormalBP' \
+      --data-urlencode 'stateOfproperty=normal' \
+      --data-urlencode 'situation_label=Blood%20pressure%20is%20normal' \
+      --data-urlencode 'umlsCodes=null' \
+      --data-urlencode 'snomedCodes=null' \
+      --data-urlencode 'icd10Codes=null'
 
-    curl --request POST \
-      --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/situation/add \
-      --data`situation_id=HighBP&situation_label=Blood%20pressure%20is%20high&umlsCodes=C0020538%2C%20C3843080'
+    curl --location --request POST 'http://localhost:8888/tmrweb/transition/situation/add' \
+      --data-urlencode 'situation_id=HighBP' \
+      --data-urlencode 'stateOfproperty=high' \
+      --data-urlencode 'situation_label=Blood%20pressure%20is%20high' \
+      --data-urlencode 'umlsCodes=C0020538%2C%20C3843080' \
+      
+Similarly as with drug types, situations can also be deleted via an endpoint ending on `/tmrweb/transition/situation/add`
+
+One can query the database to get all available knowledge on a situation, by using its given situation id or the URI created when adding it to the database
+
+      curl --location --request POST 'http://localhost:8888/tmrweb/transition/situation/all/get' \
+      --data-urlencode 'situation_uri=http://anonymous.org/data/SitNormalBP' \
+      
+      curl --location --request POST 'http://localhost:8888/tmrweb/transition/situation/all/get' \
+      --data-urlencode 'situation_id=NormalBP'
 
 Transition
 ----------
@@ -134,8 +196,11 @@ Figure [1](#HT){reference-type="ref" reference="HT"}.
     curl --request POST \
       --url https://consult.hscr.kcl.ac.uk/tmrweb/transition/add \
       --data`transition_id=DecreaseBP&prior_situation_id=HighBP&post_situation_id=NormalBP'
+      
+Measured clinical property
+--------
 
-Beliefs
+Causation Beliefs
 -------
 
 Finally, we combine our drug information (Section
