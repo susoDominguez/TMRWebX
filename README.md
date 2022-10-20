@@ -56,7 +56,7 @@ Navigate to http://localhost:3030, login with the username `admin` and the passw
 Clone this repository:
 
 ```
-git clone https://github.kcl.ac.uk/k1214757/TMRWebX.git
+git clone https://github.com/susoDominguez/TMRWebX.git
 ```
 
 Change into the backend directory:
@@ -68,7 +68,7 @@ cd backend
 Clone the TMR repository:
 
 ```
-git clone https://github.kcl.ac.uk/k1214757/TMR.git
+git clone https://github.com/susoDominguez/TMR-CIG-COPD.git
 ```
 
 Enter Prolog environment, and include address of Fuseki server as environment variable:
