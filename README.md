@@ -137,6 +137,69 @@ npm start
 
 The server runs by default on port 8888.
 
+## Load TMR vocabulary
+
+go to 
+
+```
+http://localhost:3030/
+```
+
+where 3030 is the fuseki port.
+
+Load TMR data contained in directory 
+
+```
+TMR-CIG-COPD/
+```
+
+from the cloned repository as follows.
+
+click on dataset icon and select 
+
+```
+/careActions
+```
+dataset. Go to 
+
+```
+Upload files
+```
+tab and click on 
+
+```
+select files
+```
+
+then search for, and select,
+
+```
+TMRWebX/backend/TMR-CIG-COPD/careActions.trig
+```
+
+then click on 
+
+```
+Upload now
+```
+
+Similarly for datasets
+
+```
+/beliefs /transitions /CIG_COPD
+```
+
+where the files are in
+
+```
+TMRWebX/backend/TMR-CIG-COPD/beliefs-shorten.trig
+
+TMRWebX/backend/TMR-CIG-COPD/transitions.trig
+
+TMRWebX/backend/TMR-CIG-COPD/guidelines/CIG-COPD_shorten.trig
+```
+
+respectively.
 ## Usage
 
 See [documentation](api/README.md).
