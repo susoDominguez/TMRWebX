@@ -10,3 +10,8 @@ LICENSE
 CIG-HT-OA.png
 CIG-HT.png
 .env
+*.jpeg
+logs/
+*.md
+.cache
+*.txt
