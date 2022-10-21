@@ -122,9 +122,12 @@ touch .env
 Add the following information to this environment file using a text editor:
 
 ```
-FUSEKI_PASSWORD="[Password]"
+FUSEKI_PASSWORD=[Password]
 JENA_HOST=localhost
+JENA_PORT=3030
 PROLOG_HOST=localhost
+PROLOG_PORT=1234
+PORT=8888
 ```
 
 Where [Password] is the password you created for the triple store earlier.
