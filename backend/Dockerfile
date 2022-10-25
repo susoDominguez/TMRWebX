@@ -1,5 +1,8 @@
-FROM swipl
+FROM swipl:latest
+#RUN apt update -y && \
+#    apt install -y git
 WORKDIR /usr/server/backend/
+#RUN git clone --depth=1 --branch=master https://github.com/susoDominguez/TMR-CIG-COPD.git ./
 #production
 ENV FUSEKI_HOST_PORT=http://fuseki:3030/
 COPY . .
