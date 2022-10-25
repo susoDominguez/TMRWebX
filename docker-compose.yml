@@ -77,7 +77,7 @@ services:
     networks: 
       - cig_handler
     environment:
-      - FUSEKI_HOST_PORT=http://fuseki:3030/
+      - FUSEKI_HOST_PORT=http://store_service:3030/
     depends_on: 
       - store_app
 volumes:
