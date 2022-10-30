@@ -2,9 +2,8 @@ FROM swipl:latest
 #RUN apt update -y && \
 #    apt install -y git
 WORKDIR /usr/server/backend/
-#RUN git clone --depth=1 --branch=master https://github.com/susoDominguez/TMR-CIG-COPD.git ./
-#production
-ENV FUSEKI_HOST_PORT=http://fuseki:3030/
+ARG HOST_PORT=3030
+ENV FUSEKI_HOST_PORT=http://fuseki:${FUSEKI_PORT:-${HOST_PORT}}/
 COPY . .
 #clone tmr repo with ontologies
 
