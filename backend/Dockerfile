@@ -2,8 +2,13 @@ FROM swipl:latest
 #RUN apt update -y && \
 #    apt install -y git
 WORKDIR /usr/server/backend/
-ARG HOST_PORT=3030
-ENV FUSEKI_HOST_PORT=http://fuseki:${FUSEKI_PORT:-${HOST_PORT}}/
+
+#ARG buildtime_FUSEKI_PORT=3030
+#ARG buildtime_FUSEKI_HOST=fuseki
+
+#ENV HOST=${FUSEKI_HOST:-${buildtime_FUSEKI_HOST}}
+#ENV PORT=${FUSEKI_PORT:-${buildtime_FUSEKI_PORT}}
+#ENV FUSEKI_HOST_PORT=http://${HOST}:${PORT}/
 COPY . .
 #clone tmr repo with ontologies
 
