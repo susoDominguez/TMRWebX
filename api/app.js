@@ -7,7 +7,7 @@ const logger = require('./config/winston');
 const { handleError, ErrorHandler } = require('./lib/errorHandler.js');
 //const bodyParser = require('body-parser')
 
-// Environment constiables
+// Environment consts
 require('dotenv').config()
 
 const guidelineRouter = require('./routes/guideline');
