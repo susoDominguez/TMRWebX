@@ -4,3 +4,5 @@ logs/
 *.md
 .cache
 *.txt
+backend/tmr/
+backend/TMR-CIG-COPD/
