@@ -599,6 +599,8 @@ class Sparql_Util {
 	//path: interactions,drugeffects etc.., data=parameters for querying
 	static callPrologServer(path, data, callback) {
 
+		logger.info(`call prolog server has path ${path} and data ${data}`);
+
 		//path to swi-prolog server
 		const URL = "http://" + config.PROLOG_HOST + ":" + config.PROLOG_PORT + "/" + path;
 

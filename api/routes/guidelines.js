@@ -23,7 +23,7 @@ router.post("/interactions", function (req, res, next) {
 
   let postData = require("querystring").stringify({
     //Jena dataset name
-    guideline_id: cigId,
+    guideline_id: cigId
   });
 
   logger.info(
@@ -33,7 +33,7 @@ router.post("/interactions", function (req, res, next) {
   utils
     .callPrologServerAsync("interactions", postData)
     .then((data) => {
-      //logger.info("data sent to grammar parser is: " + data);
+      logger.info("data sent to grammar parser is: " + data);
 
       //use grammar to parse response into a JSON object
       const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar), {
