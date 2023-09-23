@@ -943,7 +943,7 @@ function getStatementData(recURI, guidelineData) {
 
   let headVars = guidelineData.head.vars;
   let bindingsList = guidelineData.results.bindings;
-  logger.debug(bindingsList.length);
+  //logger.debug(bindingsList.length);
 
   for (const index in bindingsList) {
     //results object
