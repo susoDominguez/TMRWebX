@@ -5,7 +5,7 @@ const utils = require('../lib/utils');
 
 router.post('/get', function(req, res) {
 
-  utils.sparqlGetNamedGraphsFromObject("beliefs", "tmr:CausationBelief", function(err, uris) {
+  utils.sparqlGetNamedGraphsFromObject("statements", "tmr:ClinicalStatement", function(err, uris) {
 
     res.send(uris);
 

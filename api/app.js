@@ -13,10 +13,12 @@ require('dotenv').config()
 const guidelineRouter = require('./routes/guideline');
 const careActionRouter = require('./routes/careAction');
 const beliefRouter = require('./routes/belief');
+const statementRouter = require('./routes/statement');
 const transitionRouter = require('./routes/transition');
 const guidelinesRouter = require('./routes/guidelines');
 const careActionsRouter = require('./routes/careActions');
 const beliefsRouter = require('./routes/beliefs');
+const statementsRouter = require('./routes/statements');
 const transitionsRouter = require('./routes/transitions');
 
 const app = express();
@@ -39,10 +41,12 @@ router.get('/', function(req, res, next) {
 router.use('/guideline', guidelineRouter);
 router.use('/careAction', careActionRouter);
 router.use('/belief', beliefRouter);
+router.use('/statement', statementRouter);
 router.use('/transition', transitionRouter);
 router.use('/guidelines', guidelinesRouter);
 router.use('/careActions', careActionsRouter);
 router.use('/beliefs', beliefsRouter);
+router.use('/statements', statementsRouter);
 router.use('/transitions', transitionsRouter);
 
 app.use('/tmrweb', router);

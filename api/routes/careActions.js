@@ -10,7 +10,7 @@ const utils = require('../lib/utils');
 //get all drug types URIS
 router.post('/drugs/get', function(req, res, next) {
 
-  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType", function(err, list) {
+  utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:DrugType", function(err, list) {
 
     if(err) {
       res.status(404).send(list);
@@ -24,7 +24,7 @@ router.post('/drugs/get', function(req, res, next) {
 //Get all non drug types URIs
 router.post('/nonDrugs/get', function(req, res, next) {
 
-  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType", function(err, list) {
+  utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:NonDrugType", function(err, list) {
 
     if(err) {
       res.status(404).send(list);
@@ -40,7 +40,7 @@ router.post('/nonDrugs/get', function(req, res, next) {
 //Get all vaccine types URIs
 router.post('/vaccines/get', function(req, res, next) {
 
-  utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType", function(err, list) {
+  utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:VaccineType", function(err, list) {
     if(err) {
       res.status(404).send(list);
       return;
