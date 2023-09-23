@@ -13,14 +13,14 @@
 
 % Base ontologies.
 
-loadBaseOntologies() :-
+loadBaseOntologies :-
   rdf_load('TMR-CIG-COPD/schema/model.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/vocab/'), graph('http://anonymous.org/vocab')]),
   rdf_load('TMR-CIG-COPD/schema/model4I3.0.ttl', [format('turtle'), register_namespaces(false),base_uri('http://anonymous.org/vocab4i/'), graph('http://anonymous.org/vocab4i')]).
 
 
 % User ontologies, at Jena endpoint.
 
-loadOntologies() :-
+loadOntologies :-
   getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
   atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_DRUGS_URL),
   rdf_load(FUSEKI_DRUGS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CareAction&DrugTypes')]),
@@ -29,7 +29,7 @@ loadOntologies() :-
   atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_BELIEFS_URL),
   rdf_load(FUSEKI_BELIEFS_URL, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]).
   
-unloadOntologies() :-
+unloadOntologies :-
   rdf_unload_graph('http://anonymous.org/CareAction&DrugTypes'),
   rdf_unload_graph('http://anonymous.org/Transition&SituationTypes'),
   rdf_unload_graph('http://anonymous.org/CausationBeliefs-Nanopub').

@@ -5,7 +5,7 @@ const xmlReader = require('xml-reader');
 const xmlQuery = require('xml-query');
 const { ErrorHandler } = require('./errorHandler.js');
 const config = require('../lib/config');
-const guidelines = require('../lib/guidelines');
+const guidelines = require('./namespace_PREFIX.js');
 const logger = require('../config/winston');
 const { INSERT } = require('../lib/config');
 
@@ -69,8 +69,8 @@ class Sparql_Util {
 		 DROP SILENT GRAPH ` + graph_uri + ` ;
 		 DROP SILENT GRAPH ` + graph_uri + `_provenance ; 
 		 DROP SILENT GRAPH ` + graph_uri + `_publicationinfo ;
-		 DELETE  SILENT { `+ graph_uri + ` vocab:isPartOf ?subguideline } WHERE 
-		 { `+ graph_uri + ` vocab:isPartOf ?subguideline } `
+		 DELETE  SILENT { `+ graph_uri + ` tmr:isPartOf ?subguideline } WHERE 
+		 { `+ graph_uri + ` tmr:isPartOf ?subguideline } `
 
 		let prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + sparqlUpdate
 		const URL = "http://" + config.JENA_HOST + ":" + config.JENA_PORT + "/" + dataset_id + "/update";
@@ -224,9 +224,9 @@ class Sparql_Util {
 			headGraphs = 
 				 `\nGRAPH <` + nanoHead + `> { ?j  ?k ?l } ` ;
 
-			graphDescrDel += `\nGRAPH <` + nanoAssert + `> { <`+ nanoAssert +`> vocab:partOf data:`+ cigFrom +` } `;
+			graphDescrDel += `\nGRAPH <` + nanoAssert + `> { <`+ nanoAssert +`> tmr:partOf data:`+ cigFrom +` } `;
 			
-			graphDescrIns += `\nGRAPH <` + nanoAssert + `> { <`+ nanoAssert +`> vocab:partOf data:`+ cigTo +` } `;
+			graphDescrIns += `\nGRAPH <` + nanoAssert + `> { <`+ nanoAssert +`> tmr:partOf data:`+ cigTo +` } `;
 
 
 		insertGraphsData = `\nINSERT {` + headGraphs + assertGraphs + graphDescrIns + nanopubGraphs + provGraphs + `} \nWHERE { SERVICE <` + cigFromUrl + `> { ` + headGraphs + assertGraphs + nanopubGraphs + provGraphs + ` } } ; `;
@@ -300,14 +300,14 @@ class Sparql_Util {
 	    WHERE { 
 
 		   GRAPH   `+ recAssertURI + `  {
-			`+ recAssertURI + ` a  vocab:ClinicalRecommendation . 
+			`+ recAssertURI + ` a  tmr:ClinicalRecommendation . 
 			`+ recAssertURI + ` rdfs:label ?text .
-			`+ recAssertURI + ` vocab:aboutExecutionOf ?actAdmin .
-			`+ recAssertURI + ` vocab:basedOn ?cbUri .
-			`+ recAssertURI + ` vocab:strength ?strength .
-			?cbUri vocab:contribution ?contrib .
-			OPTIONAL { `+ recAssertURI + ` vocab:extractedFrom ?extractedFrom . } .
-			OPTIONAL { `+ recAssertURI + ` vocab:partOf ?partOf . } .
+			`+ recAssertURI + ` tmr:aboutExecutionOf ?actAdmin .
+			`+ recAssertURI + ` tmr:basedOn ?cbUri .
+			`+ recAssertURI + ` tmr:strength ?strength .
+			?cbUri tmr:contribution ?contrib .
+			OPTIONAL { `+ recAssertURI + ` tmr:extractedFrom ?extractedFrom . } .
+			OPTIONAL { `+ recAssertURI + ` tmr:partOf ?partOf . } .
 			}
 
 			GRAPH   `+ recProvURI + `  {
@@ -318,23 +318,23 @@ class Sparql_Util {
 
 			SERVICE `+ cbUrl + ` {
 				GRAPH  ?cbUri {
-					?cbUri a  vocab:CausationBelief . 
-					?cbUri vocab:frequency ?freq .
-					?cbUri vocab:strength ?evidence .
-				  ?actAdmin vocab:causes ?TrUri .
+					?cbUri a  tmr:CausationBelief . 
+					?cbUri tmr:frequency ?freq .
+					?cbUri tmr:strength ?evidence .
+				  ?actAdmin tmr:causes ?TrUri .
 				}
 			}
 
 			SERVICE `+ TrUrl + ` { 
-				?TrUri a vocab:TransitionType .
-				?TrUri vocab:affects ?PropUri .
-				?TrUri vocab:derivative ?deriv .
-				?TrUri vocab:hasTransformableSituation ?sitFromId .
-				?TrUri vocab:hasExpectedSituation ?sitToId .
-				?PropUri  a  vocab:TropeType .
+				?TrUri a tmr:TransitionType .
+				?TrUri tmr:affects ?PropUri .
+				?TrUri tmr:derivative ?deriv .
+				?TrUri tmr:hasTransformableSituation ?sitFromId .
+				?TrUri tmr:hasExpectedSituation ?sitToId .
+				?PropUri  a  tmr:TropeType .
 				?PropUri rdfs:label ?propTxt .
-				?sitFromId a vocab:SituationType .
-				?sitToId a vocab:SituationType .
+				?sitFromId a tmr:SituationType .
+				?sitToId a tmr:SituationType .
 				?sitFromId rdfs:label ?sitFromLabel .
 				?sitToId rdfs:label ?sitToLabel .
 			}
@@ -348,7 +348,7 @@ class Sparql_Util {
 				?actId a ?actType .
 				?actId rdfs:label ?actLabel .
 				FILTER (?actType != owl:NamedIndividual &&
-					 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
+					 (?Of = tmr:administrationOf || ?Of = tmr:applicationOf) &&
 					 ?adminT != owl:NamedIndividual) .
 			}
 	   }
@@ -378,25 +378,25 @@ class Sparql_Util {
 	?actId ?adminLabel ?actType ?actLabel 
 	WHERE {
 		GRAPH  `+ belief_Uri + ` {
-		 `+ belief_Uri + ` a  vocab:CausationBelief . 
-		 `+ belief_Uri + ` vocab:frequency ?freq .
-		 `+ belief_Uri + ` vocab:strength ?strength .
-		  ?actAdmin vocab:causes ?TrUri .
+		 `+ belief_Uri + ` a  tmr:CausationBelief . 
+		 `+ belief_Uri + ` tmr:frequency ?freq .
+		 `+ belief_Uri + ` tmr:strength ?strength .
+		  ?actAdmin tmr:causes ?TrUri .
 		 }
 		SERVICE `+ TrUrl + ` { 
-			?TrUri a vocab:TransitionType ;
+			?TrUri a tmr:TransitionType ;
 					a owl:NamedIndividual ;
-				 vocab:hasTransformableSituation ?sitFromId ;
-				 vocab:hasExpectedSituation ?sitToId ;
-			     vocab:affects ?propUri ;
-				 vocab:derivative ?deriv .
-			?propUri  a  vocab:TropeType ;
+				 tmr:hasTransformableSituation ?sitFromId ;
+				 tmr:hasExpectedSituation ?sitToId ;
+			     tmr:affects ?propUri ;
+				 tmr:derivative ?deriv .
+			?propUri  a  tmr:TropeType ;
 				a owl:NamedIndividual ;
 			 		rdfs:label ?propTxt .			        
-			?sitFromId a vocab:SituationType ;
+			?sitFromId a tmr:SituationType ;
 				a owl:NamedIndividual ;
 				rdfs:label ?sitFromLabel .
-			?sitToId a vocab:SituationType ;
+			?sitToId a tmr:SituationType ;
 				a owl:NamedIndividual ;
 				rdfs:label ?sitToLabel .
 			
@@ -410,7 +410,7 @@ class Sparql_Util {
 			?actId a ?actType .
 			?actId rdfs:label ?actLabel .
 			FILTER (?actType != owl:NamedIndividual &&
-				 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
+				 (?Of = tmr:administrationOf || ?Of = tmr:applicationOf) &&
 				 ?adminT != owl:NamedIndividual) .
 		}
 	}
@@ -436,9 +436,9 @@ class Sparql_Util {
 			?actId a owl:NamedIndividual.
 			?actId a ?actType.
 			?actId rdfs:label ?actLabel.
-			?actId vocab:snomedCode  ?snomed.
+			?actId tmr:snomedCode  ?snomed.
 			FILTER (?actType != owl:NamedIndividual &&
-				 (?Of = vocab:administrationOf || ?Of = vocab:applicationOf) &&
+				 (?Of = tmr:administrationOf || ?Of = tmr:applicationOf) &&
 				 ?adminT != owl:NamedIndividual).
 		}
 		`;
@@ -456,15 +456,15 @@ class Sparql_Util {
 
 		let query = `SELECT DISTINCT  ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?propTxt ?propUri ?deriv
 		WHERE {
-			`+ TrUri + ` a vocab:TransitionType .
-			`+ TrUri + ` vocab:affects ?propUri .
-			`+ TrUri + ` vocab:derivative ?deriv.
-			`+ TrUri + ` vocab:hasTransformableSituation ?sitFromId .
-			`+ TrUri + ` vocab:hasExpectedSituation ?sitToId .
-			?PropUri  a  vocab:TropeType .
+			`+ TrUri + ` a tmr:TransitionType .
+			`+ TrUri + ` tmr:affects ?propUri .
+			`+ TrUri + ` tmr:derivative ?deriv.
+			`+ TrUri + ` tmr:hasTransformableSituation ?sitFromId .
+			`+ TrUri + ` tmr:hasExpectedSituation ?sitToId .
+			?PropUri  a  tmr:TropeType .
 			?PropUri rdfs:label ?propTxt .
-			?sitFromId a vocab:SituationType .
-			?sitToId a vocab:SituationType .
+			?sitFromId a tmr:SituationType .
+			?sitToId a tmr:SituationType .
 			?sitFromId rdfs:label ?sitFromLabel .
 			?sitToId rdfs:label ?sitToLabel .
 		}
@@ -587,7 +587,7 @@ class Sparql_Util {
 		let query = `
 		SELECT DISTINCT ?g
 		WHERE {
-			?g vocab:isPartOf ?sg
+			?g tmr:isPartOf ?sg
 			`+ filterString + `
 		}
 		`;

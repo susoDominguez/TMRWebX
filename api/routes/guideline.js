@@ -4,7 +4,7 @@ const request = require("request");
 const bodyParser = require("body-parser");
 
 const config = require("../lib/config");
-const guidelines = require("../lib/guidelines");
+const guidelines = require("../lib/namespace_PREFIX");
 const utils = require("../lib/utils");
 const { handleError, ErrorHandler } = require("../lib/errorHandler");
 const logger = require("../config/winston");
