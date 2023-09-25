@@ -717,7 +717,7 @@ function getRecData(recURI, guidelineData){
       let headVar = headVars[pos];
 
       //check there is a corresponding binding, if not, next head var
-      if (!bindingObj.hasOwnProperty(headVar)) continue;
+      if (!(headVar && bindingObj.hasOwnProperty(headVar)) ) continue;
 
       //otherwise, retrieve value
       let value = bindingObj[headVar].value;
@@ -969,7 +969,7 @@ function getStatementData(recURI, guidelineData) {
       let headVar = headVars[pos];
 
       //check there is a corresponding binding, if not, next head var
-      if (!bindingObj.hasOwnProperty(headVar)) continue;
+      if (!(headVar && bindingObj.hasOwnProperty(headVar)) ) continue;
 
       //otherwise, retrieve value
       let value = bindingObj[headVar].value;

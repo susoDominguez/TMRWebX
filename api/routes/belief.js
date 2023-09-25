@@ -180,7 +180,7 @@ router.post("/all/get/", function (req, res, next) {
           let headVar = vars[pos];
 
           //check there is a corresponding binding, if not, next head var
-          if (!bindings.hasOwnProperty(headVar)) continue;
+          if (!(headVar && bindings.hasOwnProperty(headVar)) ) continue;
 
           //otherwise, retrieve value
           let value = bindings[headVar].value;

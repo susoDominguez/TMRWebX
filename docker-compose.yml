@@ -13,7 +13,7 @@ services:
     #build: 
       #context: ./fuseki/
       #dockerfile: Dockerfile
-    image: stain/jena-fuseki 
+    image: stain/jena-fuseki:4.0.0 
     container_name: store_service
     restart: unless-stopped
     ports: 

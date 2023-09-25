@@ -217,6 +217,7 @@ class Sparql_Util {
    * @param {(Error, [])} callback callback returns empty array if err found
    */
   static sparqlQuery(dataset_id, query, callback) {
+
     const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query;
     const url =
       "http://" +
@@ -228,7 +229,7 @@ class Sparql_Util {
       "/query";
 
     request.post(
-      url,
+      encodeURI(url),
       {
         headers: {
           Authorization:
@@ -280,8 +281,9 @@ class Sparql_Util {
    */
   static sparqlJSONQuery(dataset_id, query, callback) {
     //logger.debug(`SPRQL query is ${query}`);
-
     const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query;
+
+  
     const url =
       "http://" +
       config.JENA_HOST +
@@ -308,7 +310,7 @@ class Sparql_Util {
       if (error || (response && response.statusCode !== 200)) {
         logger.error(
           "SPARQL query failed: " +
-            response +
+            JSON.stringify(response) +
             ". Error: " +
             error +
             ". Body: " +
@@ -322,7 +324,7 @@ class Sparql_Util {
         callback(
           new ErrorHandler(
             response ? response.statusCode : 500,
-            `Error: ${error} . Body: ${body}`
+            `Error: ${JSON.stringify(error)} . Body: ${JSON.stringify(body)}`
           ),
           null
         );
@@ -514,69 +516,35 @@ class Sparql_Util {
       "/query>";
 
     let query =
-      `
-		SELECT DISTINCT ?text ?actAdmin ?cbUri ?strength ?contrib ?sourceOfRec ?partOf
+		`SELECT DISTINCT ?text ?actAdmin ?cbUri ?strength ?contrib ?sourceOfRec ?partOf
 						?freq ?evidence ?TrUri ?PropUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
 						?adminT ?actId ?adminLabel ?actType ?actLabel  
 	    WHERE { 
-
-		   GRAPH   ` +
-      recAssertURI +
-      `  {
-			` +
-      recAssertURI +
-      ` a  tmr:ClinicalRecommendation . 
-			` +
-      recAssertURI +
-      ` rdfs:label ?text .
-			` +
-      recAssertURI +
-      ` tmr:aboutExecutionOf ?actAdmin .
-			` +
-      recAssertURI +
-      ` tmr:basedOn ?cbUri .
-			` +
-      recAssertURI +
-      ` tmr:strength ?strength .
+		   GRAPH ${recAssertURI} {
+        ${recAssertURI} a  tmr:ClinicalRecommendation ; 
+                       rdfs:label ?text ;
+                       tmr:aboutExecutionOf ?actAdmin ;
+                       tmr:basedOn ?cbUri ;
+                       tmr:strength ?strength .
 			?cbUri tmr:contribution ?contrib .
-			OPTIONAL { ` +
-      recAssertURI +
-      ` tmr:extractedFrom ?extractedFrom . } .
-			OPTIONAL { ` +
-      recAssertURI +
-      ` tmr:partOf ?partOf . } .
+			OPTIONAL { ${recAssertURI} tmr:extractedFrom ?extractedFrom . } 
+			OPTIONAL { ${recAssertURI} tmr:partOf ?partOf . } 
 			}
-
-			GRAPH   ` +
-      recProvURI +
-      `  {
-				` +
-      recProvURI +
-      ` a  <http://www.w3.org/ns/oa#Annotation> . 
-				` +
-      recProvURI +
-      `  <http://www.w3.org/ns/oa#hasBody> ` +
-      recAssertURI +
-      ` .
-				` +
-      recAssertURI +
-      ` prov:wasDerivedFrom ?sourceOfRec .
-				}
-
-			SERVICE ` +
-      cbUrl +
-      ` {
+			GRAPH ${recProvURI} {
+        ${recProvURI} a  oa:Annotation ; 
+                      oa:hasBody    ${recAssertURI} . 
+        OPTIONAL { ${recAssertURI} tmr:partOf ?partOf . }
+      ${recAssertURI} prov:wasDerivedFrom ?sourceOfRec .
+			} 
+			SERVICE ${cbUrl} {
 				GRAPH  ?cbUri {
 					?cbUri a  tmr:CausationBelief . 
 					?cbUri tmr:frequency ?freq .
 					?cbUri tmr:strength ?evidence .
 				  ?actAdmin tmr:causes ?TrUri .
 				}
-			}
-
-			SERVICE ` +
-      TrUrl +
-      ` { 
+			} 
+			SERVICE ${TrUrl} { 
 				?TrUri a tmr:TransitionType .
 				?TrUri tmr:affects ?PropUri .
 				?TrUri tmr:derivative ?deriv .
@@ -588,11 +556,8 @@ class Sparql_Util {
 				?sitToId a tmr:SituationType .
 				?sitFromId rdfs:label ?sitFromLabel .
 				?sitToId rdfs:label ?sitToLabel .
-			}
-
-			SERVICE ` +
-      actUrl +
-      ` {
+			} 
+			SERVICE ${actUrl} {
 				?actAdmin a owl:NamedIndividual .
 				?actAdmin a ?adminT .
 				?actAdmin	?Of ?actId .
@@ -600,12 +565,10 @@ class Sparql_Util {
 				?actId a owl:NamedIndividual .
 				?actId a ?actType .
 				?actId rdfs:label ?actLabel .
-				FILTER (?actType != owl:NamedIndividual &&
-					 (?Of = tmr:administrationOf || ?Of = tmr:applicationOf) &&
-					 ?adminT != owl:NamedIndividual) .
-			}
-	   }
-	   `;
+				FILTER (?actType != owl:NamedIndividual && ( ?Of = tmr:administrationOf || ?Of = tmr:applicationOf) && ?adminT != owl:NamedIndividual ) .
+			} 
+ 	   }`;
+
 
     this.sparqlJSONQuery(cigId, query, callback);
   }
@@ -670,8 +633,7 @@ class Sparql_Util {
     (GROUP_CONCAT(DISTINCT ?stOn;   SEPARATOR=",") AS ?orgNmsSt)
     (GROUP_CONCAT(DISTINCT ?stOj;   SEPARATOR=",") AS ?orgJursSt)
     (GROUP_CONCAT(DISTINCT ?provhasSource;   SEPARATOR=",") AS ?provHasSources)
-	  WHERE { 
-       GRAPH ${recHeadURI} {
+	  WHERE { GRAPH ${recHeadURI} {
         ${recHeadURI} a np:Nanopublication ;
             np:hasAssertion ${recAssertURI} ;
             np:hasProvenance ${recProvURI} ;
@@ -774,12 +736,7 @@ class Sparql_Util {
       trDsId +
       "/query>";
 
-    let query = `
-      SELECT DISTINCT 
-      ?cbUri ?contrb ?actAdmin ?label ?precond  ?strength ?partOf ?extractedFrom 
-      ?adminLabel ?actId ?of ?actLabel ?precondLbl ?sctPrecond  
-      ?freq ?evidence ?TrUri ?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
-      ?sctDrg ?sctPreSit ?sctPostSit ?sctProp ?generatedTime ?attributedTo 
+    let query = ` SELECT DISTINCT ?cbUri ?contrb ?actAdmin ?label ?precond ?strength ?partOf ?extractedFrom ?adminLabel ?actId ?of ?actLabel ?precondLbl ?sctPrecond ?freq ?evidence ?TrUri ?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel ?sctDrg ?sctPreSit ?sctPostSit ?sctProp ?generatedTime ?attributedTo 
       (GROUP_CONCAT(DISTINCT ?derived;   SEPARATOR=",") AS ?derivedFrom)
       (GROUP_CONCAT(DISTINCT ?derivedCB;   SEPARATOR=",") AS ?derivedFromCB)
       (GROUP_CONCAT(DISTINCT ?hasSourceCB;   SEPARATOR=",") AS ?hasSourcesCB)

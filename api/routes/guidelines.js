@@ -10,6 +10,13 @@ const { ErrorHandler } = require("../lib/errorHandler");
 //const e = require("express");
 //const { throws } = require("assert");
 
+//filter out TMR types when unnecesary for the triggered router 
+function filterTMRtype(RecUris) {
+  if(!Array.isArray(RecUris)) return RecUris;
+   let result = RecUris.filter( uri => !(uri ===  "http://anonymous.org/tmr/ClinicalRecommendation" || uri ===  "http://anonymous.org/tmr/GoodPracticeRecommendation"));
+   return result;
+ }
+
 router.post("/interactions", function (req, res, next) {
   if (!req.body.cig_id) {
     res.status(406).send({ error: "cig_id param missing" });
@@ -83,13 +90,14 @@ router.post("/rec/get", function (req, res, next) {
       cigId,
       "tmr:ClinicalRecommendation",
       function (err, RecUris) {
-        err ? res.status(400).end() : res.send(RecUris);
+        err ? res.status(400).end() : res.send(filterTMRtype(RecUris));
       }
     );
   } else {
     res.status(400).end();
   }
 });
+
 
 /**
  * add nanopub graphs from one existing CIG to another
@@ -190,10 +198,10 @@ router.post("/cig/get", function (req, res, next) {
       "tmr:ClinicalRecommendation",
       "tmr:GoodPracticeRecommendation",
     ])
-    .then(async (uriList) => {
+    .then( async (uriList) => {
+
       try {
         let promises = uriList.map( async (recURI) => {
-        
           if (recURI.startsWith(`http://anonymous.org/tmr/data/GPRec`)) {
             return utils
               .getRecStmntDataAsync(
@@ -254,12 +262,14 @@ router.post("/cig/get", function (req, res, next) {
                   }
                 }
               });
-          } 
+          }
 
-          return {};
+          return null;
         }); //end of map
 
         let recJsonResult = await Promise.all(promises);
+        //filter out array items of form {}
+        recJsonResult = recJsonResult.filter( (item) => item !== null );
 
         return res.status(200).json(recJsonResult);
       } catch (error) {
@@ -309,7 +319,8 @@ function getRecJsonData(recURI, guidelineData) {
 
   let headVars = guidelineData.head.vars;
   let bindingsList = guidelineData.results.bindings;
-  //logger.debug(bindingsList.length);
+
+  //logger.debug(JSON.stringify(headVars));
 
   for (const index in bindingsList) {
     //results object
@@ -366,7 +377,7 @@ function getRecJsonData(recURI, guidelineData) {
       let headVar = headVars[pos];
 
       //check there is a corresponding binding, if not, next head var
-      if (!bindingObj.hasOwnProperty(headVar)) continue;
+      if (!(headVar && bindingObj.hasOwnProperty(headVar))) continue;
 
       //otherwise, retrieve value
       let value = bindingObj[headVar].value;
@@ -618,7 +629,7 @@ function getStatementData(recURI, guidelineData) {
       let headVar = headVars[pos];
 
       //check there is a corresponding binding, if not, next head var
-      if (!bindingObj.hasOwnProperty(headVar)) continue;
+      if (!(headVar && headVar in bindingObj)) continue;
 
       //otherwise, retrieve value
       let value = bindingObj[headVar].value;
