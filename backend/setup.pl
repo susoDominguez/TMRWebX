@@ -14,8 +14,8 @@
 % Base ontologies.
 
 loadBaseOntologies :-
-  rdf_load('TMR-CIG-COPD/schema/model.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/tmr/'), graph('http://anonymous.org/tmr')]),
-  rdf_load('TMR-CIG-COPD/schema/model4I3.0.ttl', [format('turtle'), register_namespaces(false),base_uri('http://anonymous.org/tmr4i/'), graph('http://anonymous.org/tmr4i')]).
+  rdf_load('TMR-CIG-COPD/schema/model.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/tmr/'), graph('http://anonymous.org/tmr')]).
+  %rdf_load('TMR-CIG-COPD/schema/model4I3.0.ttl', [format('turtle'), register_namespaces(false),base_uri('http://anonymous.org/tmr4i/'), graph('http://anonymous.org/tmr4i')]).
 
 
 % User ontologies, at Jena endpoint.
@@ -28,7 +28,7 @@ loadOntologies :-
   rdf_load(FUSEKI_TRANSITIONS_URL, [format('nquads'), register_namespaces(false),base_uri('http://anonymous.org/tmr/data/'), graph('http://anonymous.org/Transition&SituationTypes')]),
   atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_BELIEFS_URL),
   rdf_load(FUSEKI_BELIEFS_URL, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/tmr/data/'), graph('http://anonymous.org/CausationBeliefs-Nanopub')]),
-  atom_concat(FUSEKI_HOST_PORT, "beliefs", FUSEKI_STATEMENTS_URL),
+  atom_concat(FUSEKI_HOST_PORT, "statements", FUSEKI_STATEMENTS_URL),
   rdf_load(FUSEKI_STATEMENTS_URL, [format('nquads'), register_namespaces(false), base_uri('http://anonymous.org/tmr/data/'), graph('http://anonymous.org/Statements-Nanopub')]).
 
 unloadOntologies :-
