@@ -10,6 +10,8 @@ const { ErrorHandler } = require("../lib/errorHandler");
 //const e = require("express");
 //const { throws } = require("assert");
 
+ const sctUri = `http://snomed.info/sct`;
+
 //filter out TMR types when unnecesary for the triggered router 
 function filterTMRtype(RecUris) {
   if(!Array.isArray(RecUris)) return RecUris;
@@ -293,15 +295,19 @@ function getRecJsonData(recURI, guidelineData) {
     type: {
       sctId: "306807008",
       display: "Recommendation to start drug treatment (procedure)",
+      system : sctUri
     },
     careActionType: {
       id: undefined,
       requestType: 0, //for drug treatments
       code: undefined,
-      display: undefined,
-      drugLabel: undefined,
+      label: undefined,
+      drug: {
       sctId: undefined,
+      display: undefined,
+      system: undefined,
       hasComponents: undefined,
+      }
     },
     causationBeliefs: [],
     derivedFrom: undefined,
@@ -313,6 +319,7 @@ function getRecJsonData(recURI, guidelineData) {
   let precond = {
     id: undefined,
     sctId: undefined,
+    system: undefined,
     display: undefined,
     composedOf: undefined,
   };
@@ -342,6 +349,7 @@ function getRecJsonData(recURI, guidelineData) {
         effect: undefined,
         property: {
           sctId: undefined,
+          system: undefined,
           display: undefined,
           code: undefined,
           id: undefined,
@@ -353,6 +361,7 @@ function getRecJsonData(recURI, guidelineData) {
             value: {
               stateOfProp: undefined,
               sctId: undefined,
+              system: undefined,
               display: undefined,
               code: undefined,
             },
@@ -363,6 +372,7 @@ function getRecJsonData(recURI, guidelineData) {
             value: {
               stateOfProp: undefined,
               sctId: undefined,
+              system: undefined,
               display: undefined,
               code: undefined,
             },
@@ -420,6 +430,7 @@ function getRecJsonData(recURI, guidelineData) {
           break;
         case "sctProp":
           cbData.transition.property.sctId = value;
+          cbData.transition.property.system = sctUri ;
           break;
         case "PropUri":
           cbData.transition.property.id = value;
@@ -449,7 +460,8 @@ function getRecJsonData(recURI, guidelineData) {
           cbData.transition.situationTypes[0].value.stateOfProp = value;
           break;
         case "sctPreSit":
-          cbData.transition.situationTypes[0].value.sctId = value;
+          cbData.transition.situationTypes[0].value.sctId = value ;
+          cbData.transition.situationTypes[0].value.system = sctUri ;
           break;
         case "sitToLabel":
           cbData.transition.situationTypes[1].value.display = value;
@@ -459,6 +471,7 @@ function getRecJsonData(recURI, guidelineData) {
           break;
         case "sctPostSit":
           cbData.transition.situationTypes[1].value.sctId = value;
+          cbData.transition.situationTypes[1].value.system = sctUri ;
           break;
         case "deriv":
           temp = value.split("/");
@@ -468,7 +481,7 @@ function getRecJsonData(recURI, guidelineData) {
       }
 
       //take the first binding object and
-      //create the outer content of recoomend minus CBs
+      //create the outer content of recommend minus CBs
       if (index < 1) {
         switch (headVar) {
           //precondition
@@ -530,17 +543,18 @@ function getRecJsonData(recURI, guidelineData) {
             recData.careActionType.code = temp;
             break;
           case "adminLabel":
-            recData.careActionType.display = value;
+            recData.careActionType.label = value;
             break;
           case "actLabel":
-            recData.careActionType.drugLabel = value;
+            recData.careActionType.drug.display = value;
             break;
           case "components":
             temp = value.split(",");
             recData.careActionType.hasComponents = temp;
             break;
           case "sctDrg":
-            recData.careActionType.sctId = value;
+            recData.careActionType.drug.sctId = value;
+            recData.careActionType.drug.system = sctUri;
             break;
           case "of":
             //extract code
@@ -549,16 +563,18 @@ function getRecJsonData(recURI, guidelineData) {
             //check for therapy
             if (temp === "applicationOf") {
               recData.careActionType.requestType = 1;
-              recData.type.sctId = "304541006";
+              recData.type.sctId = "304541006" ;
+              recData.type.system = sctUri ;
               recData.type.display =
-                "Recommendation to perform treatment (procedure)";
+                "Recommendation to perform treatment (procedure)" ;
             }
             //check for vaccine
             if (temp === "inoculationOf") {
               recData.careActionType.requestType = 2;
-              (recData.type.sctId = "830152006"),
-                (recData.type.display =
-                  "Recommendation regarding vaccination (procedure)");
+              recData.type.system = sctUri ;
+              recData.type.sctId = "830152006",
+              recData.type.display =
+                  "Recommendation regarding vaccination (procedure)";
             }
             break;
         }
@@ -584,6 +600,7 @@ function getStatementData(recURI, guidelineData) {
     type: {
       sctId: "223464006",
       display: "Procedure education (procedure)",
+      system : sctUri
     },
     derivedFrom: undefined,
     hasSource: undefined,
@@ -598,6 +615,7 @@ function getStatementData(recURI, guidelineData) {
     id: undefined,
     sctId: undefined,
     display: undefined,
+    system : undefined,
     composedOf: undefined,
   };
 
@@ -675,6 +693,7 @@ function getStatementData(recURI, guidelineData) {
             break;
           case "sctPrecond":
             precond.sctId = value;
+            precond.system = sctUri;
             break;
           case "precondLbl":
             precond.display = value;

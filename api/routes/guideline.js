@@ -228,6 +228,7 @@ function action(req, res, insertOrDelete) {
         );
       } else {
         //didnt work. send first status back
+        logger.error(err);
         res.status(status);
       }
     }
@@ -363,7 +364,7 @@ function action_gprec(req, res, insertOrDelete) {
     `_publicationinfo {
       ` +
     id +
-    `_nanopub
+    `_head
             prov:generatedAtTime  "2020-03-01"^^xsd:dateTime ;
             prov:wasAttributedTo  data:` +
     req.body.author +
@@ -530,6 +531,7 @@ router.post("/rec/all/get/", function (req, res, next) {
 });
 
 router.post("/gprec/all/get/", function (req, res, next) {
+  
   var id = req.body.cig_id.trim();
   var idCig;
 
@@ -544,7 +546,7 @@ router.post("/gprec/all/get/", function (req, res, next) {
 
   const recURI = req.body.uri
     ? req.body.uri.trim()
-    : tmrDataUri + "GPRec" + id + "-" + req.body.id.trim();
+    : req.body.id ?   `${tmrDataUri}GPRec${id}-${req.body.id.trim()}` : undefined ;
 
   utils.getRecStmntData(
     idCig,
@@ -553,24 +555,24 @@ router.post("/gprec/all/get/", function (req, res, next) {
     "transitions",
     "careActions",
     function (err, guidelineData) {
-      if (err) return next(new ErrorHandler(500, err));
-      //for submission
-      let data = {};
+        if (err) return next(new ErrorHandler(500, err));
+        //for submission
+        let data = {};
 
-      //if  data found in Object (we check), begin
-      if (
-        guidelineData &&
-        guidelineData.constructor === Object &&
-        Object.entries(guidelineData).length != 0
-      ) {
-        try { 
-          data = getStatementData(recURI, guidelineData);
-        } catch(err) {
-          throw new ErrorHandler(500, err);
+        //if  data found in Object (we check), begin
+        if (
+          guidelineData &&
+          guidelineData.constructor === Object &&
+          Object.entries(guidelineData).length != 0
+        ) {
+          try { 
+            data = getStatementData(recURI, guidelineData);
+          } catch(err) {
+            throw new ErrorHandler(500, err);
+          }
         }
+        res.send(data);
       }
-      res.send(data);
-    }
   );
 });
 

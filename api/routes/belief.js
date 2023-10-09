@@ -150,8 +150,7 @@ router.post("/all/get/", function (req, res, next) {
       //otherwise
 
       var cbData = {
-        id: id,
-        author: "JesusDominguez",
+        id: id
       };
       var actData = {};
       var TrData = {

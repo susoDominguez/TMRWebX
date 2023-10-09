@@ -123,9 +123,9 @@ router.post("/all/get/", function (req, res, next) {
   //statement_URI
   utils.getStatementData(
     "statements",
-    req.body.statement_URI
-      ? "<" + req.body.statement_URI + ">"
-      : "data:ST" + req.body.statement_URI,
+    req.body.uri = req.body.uri
+        ? "<" + req.body.uri + ">"
+        : req.body.id ? "<http://anonymous.org/tmr/data/" + req.body.id + ">" : undefined,
     function (err, statementData) {
       if (
         err ||
@@ -139,8 +139,7 @@ router.post("/all/get/", function (req, res, next) {
       //otherwise
       try {
         var stData = {
-          id: req.body.statement_URI,
-          author: "JDA",
+          id: req.body.uri
         };
 
         var vars = statementData.head.vars;
@@ -155,17 +154,17 @@ router.post("/all/get/", function (req, res, next) {
 
             //for each heading, add a field
             switch (vars[varPos]) {
-              case "hasStatementText":
-                stData.statement = value;
+              case "statementText":
+                stData.hasText = value;
                 break;
               case "organizationName":
-                stData.organizationName = value;
+                stData.organizationName = Array.isArray(value) ? value : [value] ;
                 break;
-              case "OrganizationJurisdiction":
-                stData.jurisdiction = value;
+              case "jurisdiction":
+                stData.hasJurisdiction = Array.isArray(value) ? value : [value] ;
                 break;
               case "statementTitle":
-                stData.hasStatementTitle = value;
+                stData.hasTitle = value;
                 break;
             }
           }

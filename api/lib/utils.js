@@ -280,7 +280,7 @@ class Sparql_Util {
    * @param {(Error, JSON)} callback callback function
    */
   static sparqlJSONQuery(dataset_id, query, callback) {
-    //logger.debug(`SPRQL query is ${query}`);
+   // logger.debug(`SPRQL query is ${query}`);
     const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query;
 
   
@@ -329,7 +329,7 @@ class Sparql_Util {
           null
         );
       } else {
-        //logger.debug("body of sparql result" + JSON.stringify(body));
+        logger.debug("body of sparql result" + JSON.stringify(body));
         callback(null, JSON.parse(body));
       }
     });
@@ -611,79 +611,67 @@ class Sparql_Util {
       "/" +
       TrDsId +
       "/query>";
-    const actUrl =
-      "<http://" +
-      config.JENA_HOST +
-      ":" +
-      config.JENA_PORT +
-      "/" +
-      actDsId +
-      "/query>";
 
     let query = `
 		SELECT DISTINCT 
-    ?stUri ?label ?sourceCB ?stTxt ?partOf ?extractedFrom ?stTtl 
+      ?stUri ?label ?sourceCB ?stTxt ?partOf ?extractedFrom ?stTtl 
       ?sctPrecond ?precondLbl ?generatedTime ?attributedTo ?provAttributedTo
     (GROUP_CONCAT(DISTINCT ?derived;   SEPARATOR=",") AS ?derivedFrom)
     (GROUP_CONCAT(DISTINCT ?hasSource;   SEPARATOR=",") AS ?hasSources)
     (GROUP_CONCAT(DISTINCT ?derivedSt;   SEPARATOR=",") AS ?derivedFromSt)
     (GROUP_CONCAT(DISTINCT ?hasSourceSt;   SEPARATOR=",") AS ?hasSourcesSt)
-    (GROUP_CONCAT(DISTINCT ?oj;   SEPARATOR=",") AS ?orgJurs)
-    (GROUP_CONCAT(DISTINCT ?on;   SEPARATOR=",") AS ?orgNms)
     (GROUP_CONCAT(DISTINCT ?stOn;   SEPARATOR=",") AS ?orgNmsSt)
     (GROUP_CONCAT(DISTINCT ?stOj;   SEPARATOR=",") AS ?orgJursSt)
     (GROUP_CONCAT(DISTINCT ?provhasSource;   SEPARATOR=",") AS ?provHasSources)
-	  WHERE { GRAPH ${recHeadURI} {
-        ${recHeadURI} a np:Nanopublication ;
-            np:hasAssertion ${recAssertURI} ;
-            np:hasProvenance ${recProvURI} ;
-            np:hasPublicationInfo ${recPubInfoURI} .
+	  WHERE { 
+      GRAPH ${recHeadURI} {
+        ${recHeadURI} a nanopub:Nanopublication ;
+            nanopub:hasAssertion ${recAssertURI} ;
+            nanopub:hasProvenance ${recProvURI} ;
+            nanopub:hasPublicationInfo ${recPubInfoURI} .
       }
       GRAPH ${recProvURI} {
         ${recProvURI} rdf:type oa:Annotation ;
-                    oa:hasBody ${recAssertURI} .
-        ${recAssertURI} prov:wasDerivedFrom ?derived ;
-       OPTIONAL { ${recAssertURI}    prov:wasAttributedTo  ?provAttributedTo . }
+                      oa:hasBody ${recAssertURI} .
+        ${recAssertURI} prov:wasDerivedFrom ?derived .
        OPTIONAL {  ${recProvURI}      oa:hasTarget  [  oa:hasSource ?provHasSource ] . }
       }
       GRAPH ${recPubInfoURI} {
         ${recHeadURI} prov:generatedAtTime ?generatedTime ;
-            prov:wasAttributedTo  ?attributedTo .
+                    prov:wasAttributedTo  ?attributedTo .
       }
-		   GRAPH ${recAssertURI} {
-          ${recAssertURI} a  tmr:GoodPracticeRecommendation ;
-              rdfs:label ?label ;
+      GRAPH ${recAssertURI} {
+         ${recAssertURI} a  tmr:GoodPracticeRecommendation ;
+                       rdfs:label ?label .
          {   ${recAssertURI}   tmr:aboutNotificationOf ?stUri . 
-          SERVICE ${stmntUrl} {
-            GRAPH  ?stUri {
-              ?stUri a  tmr:ClinicalStatement ;
-              tmr:hasStatementText ?stTxt ;
-              tmr:hasStatementTitle ?stTtl ;
-              tmr:OrganizationJurisdiction ?stOj ;
-                    tmr:OrganizationName ?stOn .   
-            }
+            SERVICE ${stmntUrl} {
+              GRAPH  ?stUri {
+                ?stUri a  tmr:ClinicalStatement ;
+                     tmr:statementText ?stTxt ;
+                      tmr:statementTitle ?stTtl ;
+                      tmr:organizationJurisdiction ?stOj ;
+                      tmr:organizationName ?stOn .   
+              }
             GRAPH ?stUriProv {
-              ?stUriProv oa:hasBody ?stUri ;
-                    rdf:type oa:Annotation .  
+             ?stUriProv oa:hasBody ?stUri ;
+                       rdf:type oa:Annotation .  
              OPTIONAL { ?stUriProv  oa:hasTarget  [  oa:hasSource ?hasSourceSt ] .} 
-             OPTIONAL {    ?stUri prov:wasDerivedFrom ?derivedSt .}
+             OPTIONAL { ?stUri prov:wasDerivedFrom ?derivedSt . }
             }
           }
-        }
-          OPTIONAL { ${recAssertURI} tmr:OrganizationJurisdiction ?oj ;
-                                   tmr:OrganizationName ?on . }
-          OPTIONAL { ${recAssertURI} tmr:extractedFrom ?extractedFrom . } 
-          OPTIONAL { ${recAssertURI} tmr:partOf ?partOf  . } 
-          OPTIONAL { ${recAssertURI} tmr:hasFilterSituation ?precond .
-            SERVICE ${TrUrl} {  
-              ?precond  rdf:type  owl:NamedIndividual  ;
-                       rdfs:label ?precondLbl  .
-              OPTIONAL { ?precond  tmr:snomedCode ?sctPrecond . }
-            }
-          } 
-        }
-	   } GROUP BY ?stUri ?label  ?sourceCB ?stTxt ?partOf ?extractedFrom ?stTtl 
-      ?sctPrecond ?precondLbl ?generatedTime ?attributedTo ?provAttributedTo
+         OPTIONAL { ${recAssertURI} tmr:extractedFrom ?extractedFrom . } 
+         OPTIONAL { ${recAssertURI} tmr:partOf ?partOf  . } 
+         OPTIONAL { ${recAssertURI} tmr:hasFilterSituation ?precond .
+           SERVICE ${TrUrl} {  
+             ?precond  rdf:type  owl:NamedIndividual  ;
+                      rdfs:label ?precondLbl  .
+             OPTIONAL { ?precond  tmr:snomedCode ?sctPrecond . }
+           }
+         }
+       } 
+      }
+	  } GROUP BY ?stUri ?label  ?sourceCB ?stTxt ?partOf ?extractedFrom ?stTtl 
+          ?sctPrecond ?precondLbl ?generatedTime ?attributedTo ?provAttributedTo
 	   `;
 
     this.sparqlJSONQuery(cigId, query, callback);
@@ -736,7 +724,7 @@ class Sparql_Util {
       trDsId +
       "/query>";
 
-    let query = ` SELECT DISTINCT ?cbUri ?contrb ?actAdmin ?label ?precond ?strength ?partOf ?extractedFrom ?adminLabel ?actId ?of ?actLabel ?precondLbl ?sctPrecond ?freq ?evidence ?TrUri ?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel ?sctDrg ?sctPreSit ?sctPostSit ?sctProp ?generatedTime ?attributedTo 
+    let query = ` SELECT DISTINCT ?cbUri ?contrb ?actAdmin ?label ?precond ?strength ?partOf ?extractedFrom ?adminLabel ?actId ?actType ?of ?actLabel ?precondLbl ?sctPrecond ?freq ?evidence ?TrUri ?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel ?sctDrg ?sctPreSit ?sctPostSit ?sctProp ?generatedTime ?attributedTo 
       (GROUP_CONCAT(DISTINCT ?derived;   SEPARATOR=",") AS ?derivedFrom)
       (GROUP_CONCAT(DISTINCT ?derivedCB;   SEPARATOR=",") AS ?derivedFromCB)
       (GROUP_CONCAT(DISTINCT ?hasSourceCB;   SEPARATOR=",") AS ?hasSourcesCB)
@@ -744,23 +732,24 @@ class Sparql_Util {
       (GROUP_CONCAT(DISTINCT ?hasSource;   SEPARATOR=",") AS ?hasSources)
 	     WHERE { 
         GRAPH ${recHeadURI} {
-          ${recHeadURI} a np:Nanopublication ;
-              np:hasAssertion ${recAssertURI} ;
-              np:hasProvenance ${recProvURI} ;
-              np:hasPublicationInfo ${recPubInfoURI} .
+          ${recHeadURI} a nanopub:Nanopublication ;
+              nanopub:hasAssertion ${recAssertURI} ;
+              nanopub:hasProvenance ${recProvURI} ;
+              nanopub:hasPublicationInfo ${recPubInfoURI} .
         }
         GRAPH ${recAssertURI} {
           ${recAssertURI} a  tmr:ClinicalRecommendation ;
           {     ${recAssertURI}  tmr:aboutExecutionOf ?actAdmin . 
             SERVICE ${actUrl} {
               ?actAdmin rdf:type owl:NamedIndividual ;
-              ?of ?actId ;
-              rdfs:label ?adminLabel. 
-              ?actId a owl:NamedIndividual.
-              ?actId rdfs:label ?actLabel.
+                         ?of ?actId ;
+                         rdfs:label ?adminLabel . 
+              ?actId a owl:NamedIndividual ;
+                     a ?actType ;
+                     rdfs:label ?actLabel ;
               OPTIONAL { ?actId tmr:snomedCode  ?sctDrg . }
               OPTIONAL { ?actId tmr:hasComponent  ?hasComponent . }
-              FILTER ( ?of = tmr:administrationOf || ?of = tmr:applicationOf || ?of = tmr:inoculationOf ) .
+              FILTER (?actType != owl:NamedIndividual && ( ?Of = tmr:administrationOf || ?Of = tmr:applicationOf) && ?adminT != owl:NamedIndividual ) .
             }
           }
           ${recAssertURI}     tmr:strength ?strength ;
@@ -809,21 +798,21 @@ class Sparql_Util {
           OPTIONAL { ${recAssertURI} tmr:partOf ?partOf . } 
             ?cbUri tmr:contribution ?contrb .
         }
+        GRAPH ${recPubInfoURI} {
+          ${recHeadURI} prov:generatedAtTime ?generatedTime ;
+              prov:wasAttributedTo  ?attributedTo .
+				}
         GRAPH ${recProvURI} {
           ${recProvURI} rdf:type oa:Annotation ;
                     oa:hasBody ${recAssertURI} ;
          OPTIONAL {  ${recProvURI}   oa:hasTarget  [  oa:hasSource ?hasSource ] } 
           ${recAssertURI} prov:wasDerivedFrom ?derived ;
 				}
-        GRAPH ${recPubInfoURI} {
-          ${recHeadURI} prov:generatedAtTime ?generatedTime ;
-              prov:wasAttributedTo  ?attributedTo .
-				}
     } GROUP BY ?cbUri ?contrb ?actAdmin ?label ?precond ?sourceCB 
-      ?strength ?partOf ?extractedFrom ?adminLabel ?actId ?of ?sctPrecond
+      ?strength ?partOf ?extractedFrom ?adminLabel ?actId ?actType ?of ?sctPrecond
       ?actId ?adminLabel  ?actLabel ?precondLbl ?sctDrg ?sctPreSit ?sctPostSit ?sctProp 
-      ?freq ?evidence ?TrUri ?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel ?generatedTime ?attributedTo
-	   `;
+      ?freq ?evidence ?TrUri ?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
+      ?generatedTime ?attributedTo `;
 
     this.sparqlJSONQuery(cigId, query, callback);
   }
@@ -918,33 +907,20 @@ class Sparql_Util {
    * @param {string} sta_Uri
    * @param {(Error, JSON)} callback
    */
-  static getStatementData(datasetId, sta_Uri, callback) {
-    let query =
-      `
-	SELECT DISTINCT 
-	?statementTitle ?statementText ?organizationName ?jurisdiction
-	WHERE {
-		GRAPH  ` +
-      sta_Uri +
-      ` {
-		 ` +
-      sta_Uri +
-      ` a  tmr:ClinicalStatement . 
-		 ` +
-      sta_Uri +
-      ` tmr:OrganizationName ?organizationName .
-		 ` +
-      sta_Uri +
-      ` tmr:OrganizationJurisdiction ?jurisdiction .
-		 ` +
-      sta_Uri +
-      ` tmr:hasStatementTitle ?statementTitle .
-		 ` +
-      sta_Uri +
-      ` tmr:hasStatementText ?statementText .
-		 }
-	}
-	`;
+  static getStatementData(datasetId, sta_uri, callback) {
+    if(!sta_uri) throw new ErrorHandler(500, `statement URI is missing.`)
+    let query = `
+	    SELECT DISTINCT 
+	    ?statementTitle ?statementText ?organizationName ?jurisdiction
+	    WHERE {
+		    GRAPH ${sta_uri} {
+           ${sta_uri}  a  tmr:ClinicalStatement ;
+                 tmr:organizationName ?organizationName ;
+                 tmr:organizationJurisdiction ?jurisdiction ;
+                 tmr:statementTitle ?statementTitle ;
+                 tmr:statementText ?statementText .
+		        }
+	  } `;
     this.sparqlJSONQuery(datasetId, query, callback);
   }
 
@@ -1160,3 +1136,8 @@ class Sparql_Util {
 }
 
 module.exports = Sparql_Util;
+
+/***
+ * 
+
+ */

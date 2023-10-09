@@ -10,11 +10,13 @@
 :- rdf_prefix(oa, 'http,//www.w3.org/ns/oa#').
 :- rdf_prefix(prov, 'http://www.w3.org/ns/prov#').
 :- rdf_prefix(nanopub, 'http://www.nanopub.org/nschema#').
+:- rdf_prefix(owl2, 'http://www.w3.org/2006/012/owl2#' ) .
+
 
 % Base ontologies.
 
 loadBaseOntologies :-
-  rdf_load('TMR-CIG-COPD/schema/model.ttl', [format('turtle'), register_namespaces(false), base_uri('http://anonymous.org/tmr/'), graph('http://anonymous.org/tmr')]).
+  rdf_load('TMR-CIG-COPD/schema/modelTmr4Iv3.1.trig', [format('trig'), register_namespaces(false), base_uri('http://anonymous.org/tmr/'), graph('http://anonymous.org/tmr')]).
   %rdf_load('TMR-CIG-COPD/schema/model4I3.0.ttl', [format('turtle'), register_namespaces(false),base_uri('http://anonymous.org/tmr4i/'), graph('http://anonymous.org/tmr4i')]).
 
 
