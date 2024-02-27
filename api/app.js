@@ -8,7 +8,7 @@ const { handleError, ErrorHandler } = require('./lib/errorHandler.js');
 //const bodyParser = require('body-parser')
 
 // Environment consts
-require('dotenv').config()
+require('dotenv').config();
 
 const guidelineRouter = require('./routes/guideline');
 const careActionRouter = require('./routes/careAction');
@@ -50,6 +50,11 @@ router.use('/statements', statementsRouter);
 router.use('/transitions', transitionsRouter);
 
 app.use('/tmrweb', router);
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.log('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Application specific logging, throwing an error, or other logic here
+});
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

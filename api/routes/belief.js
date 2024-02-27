@@ -4,6 +4,7 @@ const logger = require("../config/winston");
 const config = require("../lib/config");
 const { ErrorHandler } = require("../lib/errorHandler");
 const utils = require("../lib/utils");
+const prefix = "http://anonymous.org/tmr/data/";
 
 function action(req, res, insertOrDelete) {
   //data id for this belief
@@ -128,7 +129,6 @@ router.post("/delete", function (req, res) {
 });
 
 router.post("/all/get/", function (req, res, next) {
-  const prefix = "http://anonymous.org/tmr/data/";
   const id = req.body.uri ? req.body.uri : prefix + req.body.id;
 
   //belief URI
@@ -150,21 +150,47 @@ router.post("/all/get/", function (req, res, next) {
       //otherwise
 
       var cbData = {
-        id: id
+        id: id,
+        careActionType: undefined,
+        probability: undefined,
+        transition: undefined,
+        evidence: undefined
       };
-      var actData = {};
+      var actData = {
+        "display": undefined,
+        "requestType": undefined,
+        "drugLabel": undefined,
+        "code": undefined,
+        "sctId": undefined
+      };
       var TrData = {
+        id: undefined,
+        effect:undefined,
+        property: {
+          code: undefined,
+          display: undefined,
+          sctId: undefined
+        },
         situationTypes: [
           {
             type: "hasTransformableSituation",
-            value: {},
+            id: undefined,
+            value: {
+              code: undefined,
+              display: undefined,
+              sctId: undefined
+            }
           },
           {
             type: "hasExpectedSituation",
-            value: {},
+            id: undefined,
+            value: {
+              code: undefined,
+              display: undefined,
+              sctId: undefined
+            }
           },
-        ],
-        property: {},
+        ]
       };
 
       var vars = beliefData.head.vars;
@@ -210,6 +236,12 @@ router.post("/all/get/", function (req, res, next) {
                type = value.slice(30);
               TrData.situationTypes[1].value.code = type;
               break;
+            case "sitFromSctId":
+              TrData.situationTypes[0].value.sctId = value;
+            case "sitToSctId":
+                TrData.situationTypes[1].value.sctId = value;
+            case "propSctId":
+                TrData.property.sctId = value;
             case "propUri":
               //extract code
                type = value.slice(30);
