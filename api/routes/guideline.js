@@ -1,11 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const request = require("request");
+//const axios = require("axios");
 const bodyParser = require("body-parser");
-const Promise = require("bluebird");
+//const Promise = require("bluebird");
 const config = require("../lib/config");
 const guidelines = require("../lib/prefixes");
-const utils = Promise.promisifyAll(require("../lib/utils"));
+const utils = require("../lib/utils");
 const { handleError, ErrorHandler } = require("../lib/errorHandler");
 const logger = require("../config/winston");
 const {
@@ -20,69 +20,39 @@ const {
   filter_TMR_rec_type,
   setUri,
 } = require("../lib/router_functs/guideline_functs.js");
-//const e = require("express");
-
+const { error } = require("console");
 
 /**
  * Create a persistent or in-memory CIG and return label of CIG
  */
-router.post("/dataset/create", bodyParser.json(), function (req, res, next) {
-  let id = req.body.cig_id ? req.body.cig_id : new Date().toISOString();
+router.post(
+  "/dataset/create",
+  bodyParser.json(),
+  async function (req, res, next) {
+    let id = req.body.cig_id ? req.body.cig_id : new Date().toISOString();
 
-  cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
+    let cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
 
-  const dbType = req.body.IsPersistent ? `tdb` : `mem`;
+    const dbType = req.body.IsPersistent ? `tdb` : `mem`;
 
-  request.post(
-    {
-      url:
-        "http://" +
-        config.JENA_HOST +
-        ":" +
-        config.JENA_PORT +
-        "/$/datasets?dbType=" +
-        dbType +
-        "&dbName=" +
-        cigId,
-      headers: {
-        Authorization:
-          "Basic " +
-          new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
-      },
-    },
-    function (error, response, body) {
-      //send error and end
-      if (error) {
-        res.status(404).send({ error: error });
-        return;
-      }
 
-      if (!req.body.description) {
-        req.body.description = `Guideline ` + cigId;
-      }
+    let description = req.body.description ?? `Guideline ${cigId}`;
 
-      const description = `data:${cigId} rdf:type tmr:ClinicalGuideline, owl:NamedIndividual ;
-                         rdfs:label '''${req.body.description}'''@en .`;
+    const content = ` data:${cigId} rdf:type tmr:ClinicalGuideline, owl:NamedIndividual ;
+                        rdfs:label '''${description}'''@en . ` ;
 
-      utils.sparqlUpdateAsync(
-        cigId,
-        description,
-        config.INSERT,
-        function (err, status) {
-          if (err)
-            return next(
-              new ErrorHandler(
-                status,
-                `sparql has returned an error when creating clinical guideline dataset.`
-              )
-            );
-          //otherwise
-          res.json({ cig_id: cigId });
-        }
-      );
-    }
-  );
-}); //checked!
+    let sprql_query = `INSERT DATA { ${content} } `;
+
+    utils
+      .sparqlDatasetUpdate(false, cigId, dbType)
+      .then(({status, data}) => utils.sparqlUpdate(cigId, sprql_query))
+      .then(({ status, data }) => status < 300 ? res.status(status).json({cigId : cigId}) : res.status(status).send(data))
+      .catch( ({status, err}) => {
+        logger.error(`Error "/dataset/create" with CIG id ${id} : ${err}`);
+        return res.status(status).send(err);
+      });
+  }
+);
 
 /**
  * Delete a persistent or in-memory CIG
@@ -90,46 +60,21 @@ router.post("/dataset/create", bodyParser.json(), function (req, res, next) {
 router.post("/dataset/delete", function (req, res, next) {
   let id = req.body.cig_id;
 
-  if (!id)
-    return next(
-      new ErrorHandler(
-        400,
-        `guideline could not be deleted due to internal error.`
-      )
-    );
+  if (!id) return res.status(404).send('Missing CIG Id parameter.')
   //otherwise
 
   const cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
 
-  request.delete(
-    {
-      url:
-        "http://" +
-        config.JENA_HOST +
-        ":" +
-        config.JENA_PORT +
-        "/$/datasets/" +
-        cigId,
-      headers: {
-        Authorization:
-          "Basic " +
-          new Buffer("admin:" + config.FUSEKI_PASSWORD).toString("base64"),
-      },
-    },
-    function (error, response, body) {
-      if (error) {
-        logger.error(`error when deleting cig ${cigId}. Response is ${JSON.stringify(response)}. Error is ${JSON.stringify(error)}`);
-        res.status(400).send(error);
-      } else {
-        res.sendStatus(200);
-      }
-    }
-  );
-});//checked!
+  utils
+      .sparqlDatasetUpdate(true, cigId)
+      .then( ({status, data}) => res.status(status).send(data))
+      .catch( ({status, err}) => res.status(status).send(err));
+
+}); //checked!
 
 router.post("/gprec/add", function (req, res, next) {
   action_gprec(req, res, config.INSERT);
-});//unchecked!
+}); //unchecked!
 
 router.post("/gprec/delete", function (req, res, next) {
   var id = req.body.cig_id;
@@ -153,7 +98,7 @@ router.post("/gprec/delete", function (req, res, next) {
       logger.error(err);
       return res.status(500);
     });
-});//unchecked!
+}); //unchecked!
 
 router.post("/rec/add", function (req, res, next) {
   action_rec(req, res, config.INSERT);
@@ -197,9 +142,7 @@ router.post("/subguideline/delete", function (req, res, next) {
   actionSubguideline(req, res, config.DELETE);
 });
 
-
 ////////////////////////
-
 
 router.post("/careAction/get", async function (req, res, next) {
   var postData = "";
@@ -234,33 +177,40 @@ router.post("/careAction/get", async function (req, res, next) {
   }
 });
 
-
 router.post("/rec/all/get/", async function (req, res, next) {
   //checks
-  if(!(req.body.uri || req.body.id)) {
-    logger.error(`missing parameter for recommendation in endpoint /rec/all/get.`);
+  if (!(req.body.uri || req.body.id)) {
+    logger.error(
+      `missing parameter for recommendation in endpoint /rec/all/get.`
+    );
     return res.sendStatus(404);
   }
 
-  if(! req.body.cig_id) {
-    logger.error(`missing parameters in endpoint /rec/all/get. Rec URI is ${req.body.uri}.`);
+  if (!req.body.cig_id) {
+    logger.error(
+      `missing parameters in endpoint /rec/all/get. Rec URI is ${req.body.uri}.`
+    );
     return res.sendStatus(404);
-  };
+  }
 
   let idCig, cig;
-    //separate lable id from dataset id
-    if (req.body.cig_id.startsWith(`CIG-`)) {
-      idCig = req.body.cig_id.trim();
-      //remove it
-      cig = req.body.cig_id.trim().substring(`CIG-`.length);
-    } else {
-      cig = req.body.cig_id;
-      idCig = `CIG-` + req.body.cig_id;
-    }
+  //separate lable id from dataset id
+  if (req.body.cig_id.startsWith(`CIG-`)) {
+    idCig = req.body.cig_id.trim();
+    //remove it
+    cig = req.body.cig_id.trim().substring(`CIG-`.length);
+  } else {
+    cig = req.body.cig_id;
+    idCig = `CIG-` + req.body.cig_id;
+  }
 
-  const recURI = req.body.uri? req.body.uri.trim() : req.body.id.startsWith(`Rec`) ? `${tmrDataUri}/${req.body.id.trim()}` : `${tmrDataUri}/Rec${cig} -${req.body.id.trim()}`;
+  const recURI = req.body.uri
+    ? req.body.uri.trim()
+    : req.body.id.startsWith(`Rec`)
+    ? `${tmrDataUri}/${req.body.id.trim()}`
+    : `${tmrDataUri}/Rec${cig} -${req.body.id.trim()}`;
 
-   logger.debug(`rec uri is ${recURI} and cig id is ${idCig}.`);
+  logger.debug(`rec uri is ${recURI} and cig id is ${idCig}.`);
 
   let knowledge_rec;
   try {
@@ -362,7 +312,9 @@ router.post("/gprec/all/get/", async function (req, res, next) {
       return res.status(status).json(st_json);
     }
   } else {
-    logger.error(`no knowledge fetched from CIG ${cigId}  and GP recommendation URI ${recURI}.`)
+    logger.error(
+      `no knowledge fetched from CIG ${cigId}  and GP recommendation URI ${recURI}.`
+    );
     return res.sendStatus(500);
   }
 });
@@ -370,24 +322,29 @@ router.post("/gprec/all/get/", async function (req, res, next) {
 /**
  * get URIs of all Recommendations in a given CIG
  */
-router.post("/rec/get", function (req, res, next) {
-  if (req.body.cig_id) {
-    var cigId = req.body.cig_id;
-
-    cigId = cigId.startsWith(`CIG-`) ? cigId : `CIG-` + cigId;
-    try {
-      utils.sparqlGetSubjectAllNamedGraphsAsync(
-        cigId,
-        "tmr:ClinicalRecommendation",
-        function (err, RecUris) {
-          err ? res.status(400).end() : res.status(200).json(RecUris);
-        }
+router.post("/rec/get", async function (req, res) {
+  try {
+    let { cig_id } = req.body;
+    if (!cig_id)
+      throw new ErrorHandler(
+        400,
+        "Router /rec/get: no cig_id parameter provided."
       );
-    } catch (error) {
-      logger.error(error);
-    }
-  } else {
-    res.status(400).end();
+
+    let rec_uris = await utils.sparqlGetSubjectAllNamedGraphsAsync(
+      cig_id.startsWith(`CIG-`) ? cig_id : `CIG-` + cig_id,
+      "tmr:ClinicalRecommendation"
+    );
+    if (!rec_uris || (Array.isArray(rec_uris) && rec_uris.length < 1))
+      throw new ErrorHandler(
+        400,
+        "Router /rec/get Error: no Rec URIs retrieved."
+      );
+
+    return res.status(200).json(rec_uris);
+  } catch (err) {
+    logger.error(JSON.stringify(err.message));
+    return res.status(err.statusCode).end();
   }
 }); //checked
 
@@ -422,16 +379,16 @@ router.post("/dataset/add", async function (req, res, next) {
   //list of recommendations to be copied from a dataset
   let recList = new Array();
 
-
   let { cig_from } = req.body;
   let { cig_to } = req.body;
 
-  //check both datasets are given
-  if ( !(cig_from && cig_to) ) {
+  logger.debug(`cig_from is ${cig_from} and cig_to is ${cig_to}`);
 
+  //check both datasets are given
+  if (!(cig_from && cig_to)) {
     logger.error(
       `Error: parameters cig_from and cig_to cannot be empty when adding data from one dataset to another. cig_from is ${
-         cig_from || null
+        cig_from || null
       }; cig_to is ${cig_to || null}.`
     );
 
@@ -442,7 +399,6 @@ router.post("/dataset/add", async function (req, res, next) {
       }; cig_to is ${cig_to || null}.`,
     });
   }
-
 
   //get postfix Id of dataset (e.g., COPD in CIG-COPD)
   let cig_from_id = cig_from.startsWith(tmrDataUri + "CIG-")
@@ -456,7 +412,9 @@ router.post("/dataset/add", async function (req, res, next) {
   cig_to = setUri(cig_to, "CIG", false, false);
 
   //are identifiers correctly construed?
-  logger.debug(`identifiers for datasets are ${cig_from} with ${cig_from_id}, and also ${cig_to}`);
+  logger.debug(
+    `identifiers for datasets are ${cig_from} with ${cig_from_id}, and also ${cig_to}`
+  );
 
   //subguideline and recommendations
   let { subguidelines } = req.body;
@@ -509,7 +467,7 @@ router.post("/dataset/add", async function (req, res, next) {
       );
 
       //check construed URIs
-      logger.debug(`filterSubgString is ${filterSubgString}`)
+      logger.debug(`filterSubgString is ${filterSubgString}`);
 
       try {
         //select nanopub URIs from subguidelines
@@ -539,16 +497,22 @@ router.post("/dataset/add", async function (req, res, next) {
     //act on recommendations
     //add recommendations identified in the CDS request call
     if (recommendations) {
-      recommendations.split(",").forEach((recId) => recList.push(setUri(recId.trim(),`Rec${cig_from_id}`,true)));
+      recommendations
+        .split(",")
+        .forEach((recId) =>
+          recList.push(setUri(recId.trim(), `Rec${cig_from_id}`, true))
+        );
     }
     ///////////
   } //endOf else
 
   //remove potential repeated identifiers
-  recList = Array.from(new Set(recList)) ;
+  recList = Array.from(new Set(recList));
 
   //what is on the list of recommendations?
-  logger.debug(`the list of recommendations identifiers is ${JSON.stringify(recList)}`);
+  logger.debug(
+    `the list of recommendations identifiers is ${JSON.stringify(recList)}`
+  );
 
   try {
     //for each assertion URI, add the rest of the related nano graphs
@@ -565,12 +529,10 @@ router.post("/dataset/add", async function (req, res, next) {
     });
 
     //
-    await Promise.all(promises).catch(err => logger.error(err));
+    await Promise.all(promises).catch((err) => logger.error(err));
 
     return res.status(204).end();
-
   } catch (error) {
-
     logger.error(
       `Error when adding graphs from dataset ${cig_from} to dataset ${cig_to}. The error is ${JSON.stringify(
         error
@@ -582,7 +544,7 @@ router.post("/dataset/add", async function (req, res, next) {
       error: error,
     });
   }
-});//checked
+}); //checked
 
 //TODO: check it is operating for multiple CBs and GPRecs
 /**
@@ -618,8 +580,7 @@ router.post("/dataset/all/get", async function (req, res, next) {
       "tmr:GoodPracticeRecommendation",
     ]);
 
-     logger.debug(`uriList is ${uriList}`);
-
+    logger.debug(`uriList is ${uriList}`);
   } catch (error) {
     logger.error(
       `Error in utils.sparqlGetSubjectAllNamedGraphsAsync sent from endpoint /cig/get : ${JSON.stringify(
@@ -645,7 +606,6 @@ router.post("/dataset/all/get", async function (req, res, next) {
 
     //for each uri in list, fetch knowledge from dataset
     for (let index = 0; index < uriList.length; index++) {
-
       const uri_rec = uriList[index];
 
       //if it is a TMR rec

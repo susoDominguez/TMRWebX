@@ -74,15 +74,84 @@ function actionSubguideline(req, res, insertOrDelete) {
   );
 }
 
-function get_rec_data(recURI, guidelineData) {
+/*
+function (err, actionResults) {
+  if (err) {
+    res.status(404).send(err);
+    return;
+  }
+
+  let data = {};
+  let vars = actionResults.head.vars;
+  let bindings = actionResults.results.bindings[0];
+
+  //format data by looping through head vars
+  for (let pos in vars) {
+    //variable name
+    let headVar = vars[pos];
+
+    //check there is a corresponding binding, if not, next head var
+    if (!(headVar && bindings.hasOwnProperty(headVar))) continue;
+
+    //otherwise, retrieve value
+    let value = bindings[headVar].value;
+
+    //for each heading, add a field
+    switch (headVar) {
+      case "actId":
+        data.id = value;
+        break;
+      case "adminLabel":
+        data.display = value;
+        break;
+      case "actType":
+        //extract code
+        let type = value.slice(25);
+        data.code = type;
+        data.requestType = 0; //for drug related types
+        //check for therapy
+        if (type.startsWith("NonDrugT")) {
+          data.requestType = 1;
+        } else {
+          //check for vaccine
+          if (type.startsWith("VaccineT")) {
+            data.requestType = 2;
+          }
+        }
+        break;
+      case "actLabel":
+        data.drugLabel = value;
+        data.sct_trm = value;
+        break;
+      case "snomed":
+        data.snomedCode = value;
+        data.sct_id = value;
+        break;
+      case "sameAs":
+        data.sameAs = value.split(", ");
+        break;
+      case "hasGroupingCriteria":
+        data.hasGroupingCriteria = value.split(", ");
+        break;
+      case "subsumes":
+        data.subsumes = value.split(", ");
+        break;
+    }
+  }
+
+  res.send(data);
+}
+*/
+
+function get_rec_data(recURI, guidelineData, type) {
   //recommendation template object
   let recData = {
     id: recURI,
     partOf: undefined, //combined dataset or original
     extractedFrom: undefined, //original dataset
     type: {
-      sctId: "306807008",
-      display: "Recommendation to start drug treatment (procedure)",
+      sctId: ( type === 'nonDrugType' ? "304541006" : type === 'vaccineType' ? '830152006' : "306807008" ),
+      display: ( type === 'nonDrugType' ? "Recommendation to perform treatment (procedure)" : type === 'vaccineType' ? 'Recommendation regarding vaccination (procedure)' : "Recommendation to start drug treatment (procedure)" ),
     },
     careActionType: {
       id: undefined,
@@ -519,7 +588,7 @@ function get_statement_data(recURI, guidelineData) {
   return recData;
 }
 
-function get_rec_json_data(recURI, guidelineData) {
+function get_rec_json_data(recURI, guidelineData,type) {
   //recommendation template object
   let recData = {
     id: recURI,
@@ -527,9 +596,8 @@ function get_rec_json_data(recURI, guidelineData) {
     extractedFrom: undefined, //original dataset
     label: undefined,
     type: {
-      sctId: "306807008",
-      display: "Recommendation to start drug treatment (procedure)",
-      system: sctUri,
+      sctId: ( type === 'nonDrugType' ? "304541006" : type === 'vaccineType' ? '830152006' : "306807008" ),
+      display: ( type === 'nonDrugType' ? "Recommendation to perform treatment (procedure)" : type === 'vaccineType' ? 'Recommendation regarding vaccination (procedure)' : "Recommendation to start drug treatment (procedure)" ),
     },
     derivedFrom: undefined,
     hasSource: undefined,
@@ -1143,6 +1211,76 @@ function filter_TMR_rec_type(RecUris) {
   return result;
 }
 
+
+function careAction_rdf2json(head_vars, bindings) {
+
+  let data = {};
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+
+    //check there is a corresponding binding, if not, next head var
+    if (!(headVar && bindings.hasOwnProperty(headVar))) continue;
+
+    //otherwise, retrieve value
+    let value = bindings[headVar].value;
+
+    //for each heading, add a field
+    switch (headVar) {
+      case "actId":
+        data.id = value;
+        break;
+      case "adminLabel":
+        data.display = value;
+        break;
+      case "actType":
+        //extract code
+        let type = value.slice(25);
+        data.code = type;
+        data.requestType = 0; //for drug related types
+        //check for therapy
+        if (type.startsWith("NonDrugT")) {
+          data.requestType = 1;
+        } else {
+          //check for vaccine
+          if (type.startsWith("VaccineT")) {
+            data.requestType = 2;
+          } else {
+            //check for care actions combination
+            if(type.startsWith("CombT")) {
+              data.requestType = 3;
+            }
+          }
+        }
+        break;
+      case "actLabel":
+        data.drugLabel = value;
+        data.sct_trm = value;
+        break;
+      case "snomed":
+        data.snomedCode = value;
+        data.sct_id = value;
+        break;
+      case "sameAs":
+        data.sameAs = value.split(", ");
+        break;
+      case "hasGroupingCriteria":
+        data.hasGroupingCriteria = value.split(", ");
+        break;
+      case "subsumes":
+        data.subsumes = value.split(", ");
+        break;
+      case "hasComponents":
+        data.hasComponents = value.split(", ");
+        break;
+    }
+  }//endOf loop
+logger.debug(data)
+  return data
+}
+
 module.exports = {
   filter_TMR_rec_type,
   action_gprec,
@@ -1155,5 +1293,6 @@ module.exports = {
   actionSubguideline,
   tmrDataUri,
   sctUri,
-  setUri
+  setUri,
+  careAction_rdf2json
 };

@@ -32,7 +32,7 @@ router.post("/interactions", function (req, res, next) {
   );
 
   utils
-    .callPrologServerAsync("interactions", postData)
+    .callPrologServer("interactions", postData)
     .then((data) => {
       logger.info("data sent to grammar parser is: " + data);
 

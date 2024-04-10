@@ -4,7 +4,7 @@ http-errors
 morgan
 npm
 pug
-request
+axios
 n3
 dotenv
 xml-reader
@@ -16,3 +16,5 @@ moo
 bluebird
 body-parser
 nodemon
+axios
+jsonata

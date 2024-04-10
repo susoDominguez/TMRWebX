@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const request = require('request');
+//const request = require('request');
 
 const config = require('../lib/config');
 //const guidelines = require('../lib/prefixes');
