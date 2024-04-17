@@ -199,12 +199,17 @@ module.exports = {
    */
   sparqlDatasetUpdate : async function (isDel, cigId, dbType) {
     //add URL to axios config
-    let url = isDel ? '/$/datasets/'+cigId : '/$/datasets?dbType='+dbType+'&dbName='+cigId ;
+    let url = isDel ? '/$/datasets/'+cigId  : '/$/datasets?dbType='+dbType+'&dbName='+cigId ;
     
+    let response =  {
+      status: 500,
+      data: ""
+    };
+
     try {
         let ax = await axios({
         method: isDel? 'delete' : 'post',
-        url: jena_baseUrl+url,
+        url: jena_baseUrl + url,
         //baseUrl: jena_baseUrl,
         timeout: 1000,
         auth: {
@@ -212,7 +217,7 @@ module.exports = {
           password: config.FUSEKI_PASSWORD,
         }
       });
-      logger(`axio response is ${JSON.stringify(ax)}`)
+      logger.debug(`axio response is ${JSON.stringify(ax)}`)
       return ax;
     } catch (error) {
     if (error.response) {
@@ -235,7 +240,10 @@ module.exports = {
       status: error.response.status,
       data: `Error: ${error.response.data}`,
     };
-  }},
+  } finally {
+    return response;
+  }
+},
 
   /**
    *
@@ -243,7 +251,12 @@ module.exports = {
    * @param {string} content SPARQL query content
    */
   sparqlUpdate: async function (dataset_id, content) {
-    let prefixAndSparqlUpdate = guidelines.PREFIXES + "\n" + content;
+    let response =  {
+      status: 500,
+      data: ""
+    }
+
+    let prefixAndSparqlUpdate = qs.stringify({ update: guidelines.PREFIXES + "\n" + content });
 
     //add UR to axios config
     let url = `${jena_baseUrl}/${dataset_id}/update`;
@@ -259,13 +272,14 @@ module.exports = {
     try {
       let data = await axios_instance.post(
         url,
-        qs.stringify({ update: prefixAndSparqlUpdate }),
+        prefixAndSparqlUpdate,
         fuseki_headers
       );
-      return {
-        status: data.status,
-        data: data.data ? data.data : data.statusText,
-      };
+      logger.debug(`data is ${JSON.stringify(data)}`)
+      
+      response.status = data.status;
+      response.data = data.data ? data.data : data.statusText;
+
     } catch (error) {
       if (error.response) {
         // The request was made and the server responded with a status code
@@ -283,11 +297,11 @@ module.exports = {
         logger.debug("Error", error.message);
       }
       logger.debug(error.config);
-      return {
-        status: error.response.status,
-        data: `Error: ${error.response.data}`,
-      };
+     
+        response.status = error.response.status || 500;
+        response.data = error.response.data ? `Error: ${error.response.data}` : `Error found.`;
     }
+    return response;
   },
 
   /**

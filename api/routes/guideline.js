@@ -28,9 +28,10 @@ const { error } = require("console");
 router.post(
   "/dataset/create",
   bodyParser.json(),
-  async function (req, res, next) {
+  async function (req, res) {
+    //if not id given, use DATE
     let id = req.body.cig_id ? req.body.cig_id : new Date().toISOString();
-
+    //add prefix if not given
     let cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
 
     const dbType = req.body.IsPersistent ? `tdb` : `mem`;
@@ -43,13 +44,16 @@ router.post(
 
     let sprql_query = `INSERT DATA { ${content} } `;
 
-    utils
-      .sparqlDatasetUpdate(false, cigId, dbType)
-      .then(({status, data}) => utils.sparqlUpdate(cigId, sprql_query))
-      .then(({ status, data }) => status < 300 ? res.status(status).json({cigId : cigId}) : res.status(status).send(data))
-      .catch( ({status, err}) => {
-        logger.error(`Error "/dataset/create" with CIG id ${id} : ${err}`);
-        return res.status(status).send(err);
+    //logger.debug(sprql_query);
+
+    let update = await utils.sparqlDatasetUpdate(false, cigId, dbType);
+    logger.debug(`create/delete response is ${update}`);
+    ({status, data}) = await utils.sparqlUpdate(cigId, sprql_query);     
+    status < 300 ? res.status(status).json({cigId : cigId}) : res.status(status).send(data))
+        .then(({ status, data }) => 
+        }).catch( ({status, data}) => {
+          logger.error(`Error "/dataset/create" with CIG id ${cigId} : ${data ?? 'nothing'}`);
+          res.status(status).send(data);
       });
   }
 );
@@ -67,8 +71,9 @@ router.post("/dataset/delete", function (req, res, next) {
 
   utils
       .sparqlDatasetUpdate(true, cigId)
-      .then( ({status, data}) => res.status(status).send(data))
-      .catch( ({status, err}) => res.status(status).send(err));
+      .then( data  => res.status(200).send(data))
+      //it could catch a 404 no found. In this context is not an Error
+      .catch( ({status, data}) => res.status(status).send(data));
 
 }); //checked!
 
