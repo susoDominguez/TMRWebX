@@ -117,15 +117,11 @@ router.post("/all/get/", async function (req, res) {
   //no params
   if (!(req.body.uri || req.body.id)) return res.status(406).send('Missing Id or URI parameter.');
 
-  //else
-  const prefix = `http://anonymous.org/tmr/data/`;
-
-
     let {status = 500,head_vars=[], bindings=[]} = await utils.getCareActionData(
       "careActions",
-      req.body.id ? prefix + req.body.id : req.body.uri);
+      req.body.id ? 'data:'+ req.body.id : null, req.body.uri?req.body.uri:null);
 
-    let data = auxFunct.careAction_rdf2json(head_vars, bindings); //TODO:
+    let data = careAction_rdf2json(head_vars, bindings); //TODO:
 
     return res.status(status).json(data);
 });
@@ -224,7 +220,7 @@ function drugAdminActDef(type, id, englishLabel) {
       : "DrugAdministrationType"
   }, owl:NamedIndividual ;
                       rdfs:label "administer ${englishLabel} "@en ;
-                      vocab:${type === "CombCareT"? 'combinedParticipationOf':'administrationOf'} data:${type + id} `;
+                      vocab:${type === "CombCareT"? 'combinedParticipationOf': 'VacT'? 'inoculationOf': 'administrationOf'} data:${type + id} `;
 
   return drugAdministration;
 }

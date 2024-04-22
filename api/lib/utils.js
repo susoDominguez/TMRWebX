@@ -517,10 +517,10 @@ module.exports = {
   /**
    *
    * @param {string} dataset_id
+   * @param {string} id
    * @param {string} uri
-   * @param {(Error, JSON)} callback
    */
-  getCareActionData: async function (dataset_id, uri) {
+  getCareActionData: async function (dataset_id, id, uri) {
     let query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed 
       (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
       (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
@@ -534,11 +534,11 @@ module.exports = {
 			?actId a owl:NamedIndividual.
 			?actId a ?actType.
 			?actId rdfs:label ?actLabel.
-			?actId tmr:snomedCode  ?snomed.
+			OPTIONAL { ?actId tmr:snomedCode  ?snomed. }
       OPTIONAL { ?actId tmr:hasGroupingCriteria  ?criterion . }
       OPTIONAL { ?actId owl:sameAs ?same . } 
 			FILTER ( ?actType != owl:NamedIndividual &&
-				 ( ?Of = tmr:administrationOf || ?Of = tmr:applicationOf || ?Of = tmr:inoculationOf ) &&
+				 ( ?Of = tmr:administrationOf || ?Of = tmr:applicationOf || ?Of = tmr:combinedParticipationOf ) &&
 				 ?adminT != owl:NamedIndividual ) .
 		} GROUP BY ?actId ?adminLabel ?actType ?actLabel ?snomed
 		`;
