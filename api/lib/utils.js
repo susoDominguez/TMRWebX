@@ -1,5 +1,5 @@
 const n3 = require("n3");
-const axios = require("axios");
+const axios = require("axios").default;
 const jsonata = require("jsonata");
 const qs = require("qs");
 const parser = new n3.Parser();
@@ -31,11 +31,18 @@ let reasoner_config = {
     ).toString("base64")}`,
   },
 };
-const jena_baseUrl = `http://${config.JENA_HOST}:${config.JENA_PORT}`;
+
+const jena_baseUrl = `http://${config.JENA_HOST || '127.0.0.1'}:${config.JENA_PORT || '3030'}`;
+const basic_auth = {
+  username: config.FUSEKI_USER,
+  password: config.FUSEKI_PASSWORD,
+};
+
 const fuseki_headers = {
   // 'Content-Type' : 'application/sparql-update'
   "Content-Type": "application/x-www-form-urlencoded",
 };
+
 const fuseki_headers_json_accept = {
   // 'Content-Type' : 'application/sparql-update'
   "Content-Type": "application/x-www-form-urlencoded",
@@ -73,10 +80,7 @@ async function sparqlQuery(dataset_id, query) {
   //sparql query
   const axios_instance = axios.create({
     timeout: 1000,
-    auth: {
-      username: config.FUSEKI_USER,
-      password: config.FUSEKI_PASSWORD,
-    },
+    auth: basic_auth,
   });
 
   try {
@@ -195,55 +199,72 @@ async function sparqlJSONQuery(dataset_id, query) {
 
 module.exports = {
   /**
-   * 
+   *
+   * @param {boolean} isDel is CRUD DELETE operation? otherwise it is POST
+   * @param {string} cigId identifier of CIG
+   * @param {string | undefined} dbType type of database memory (permanent or temporary)
+   * @returns
    */
-  sparqlDatasetUpdate : async function (isDel, cigId, dbType) {
+  sparqlDatasetUpdate: async function (isDel, cigId, dbType) {
+
     //add URL to axios config
-    let url = isDel ? '/$/datasets/'+cigId  : '/$/datasets?dbType='+dbType+'&dbName='+cigId ;
-    
-    let response =  {
+    let url = isDel
+      ? "/$/datasets/" + cigId
+      : "/$/datasets?dbType=" + dbType + "&dbName=" + cigId;
+
+    let response = {
       status: 500,
-      data: ""
+      data: "",
     };
 
     try {
-        let ax = await axios({
-        method: isDel? 'delete' : 'post',
+
+      let {data, status, statusText='OK'} = await axios({
+        method: isDel? 'delete':'post',
         url: jena_baseUrl + url,
-        //baseUrl: jena_baseUrl,
-        timeout: 1000,
-        auth: {
-          username: config.FUSEKI_USER,
-          password: config.FUSEKI_PASSWORD,
-        }
+        auth: basic_auth,
+        headers: fuseki_headers
       });
-      logger.debug(`axio response is ${JSON.stringify(ax)}`)
-      return ax;
+
+      logger.debug(`axio response is ${JSON.stringify(data?data:statusText)}`);
+
+      //add values to response
+      response.status = status;
+      response.data = data? data:statusText;
+      return response;
+
     } catch (error) {
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      logger.debug(error.response.data);
-      logger.debug(error.response.status);
-      logger.debug(error.response.headers);
-    } else if (error.request) {
-      // The request was made but no response was received
-      // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-      // http.ClientRequest in node.js
-      logger.debug(error.request);
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      logger.debug("Error", error.message);
-    }
-    logger.debug(error.config);
-    return {
-      status: error.response.status,
-      data: `Error: ${error.response.data}`,
-    };
-  } finally {
-    return response;
-  }
-},
+     // logger.error(error.toJSON());
+
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        logger.debug(error.response.data);
+        logger.debug(error.response.status);
+        logger.debug(error.response.headers);
+
+        //add values to response object
+        response.data = error.response.data;
+        response.status = error.response.status;
+      } else if (error.request) {
+        // The request was made but no response was received
+        // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
+        // http.ClientRequest in node.js
+        logger.debug(error.request);
+        response.data = error.request;
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        logger.debug("Error", error.message);
+
+        //add values to response object
+        response.data = error.message;
+      }
+
+      logger.debug(error.config);
+      return response;
+    } 
+
+  },
 
   /**
    *
@@ -251,57 +272,63 @@ module.exports = {
    * @param {string} content SPARQL query content
    */
   sparqlUpdate: async function (dataset_id, content) {
-    let response =  {
+    let response = {
       status: 500,
-      data: ""
-    }
+      data: "",
+    };
 
-    let prefixAndSparqlUpdate = qs.stringify({ update: guidelines.PREFIXES + "\n" + content });
-
-    //add UR to axios config
-    let url = `${jena_baseUrl}/${dataset_id}/update`;
-
-    const axios_instance = axios.create({
-      timeout: 1000,
-      auth: {
-        username: config.FUSEKI_USER,
-        password: config.FUSEKI_PASSWORD,
-      },
+    let prefixAndSparqlUpdate = ({
+      update: guidelines.PREFIXES + "\n" + content,
     });
 
-    try {
-      let data = await axios_instance.post(
-        url,
-        prefixAndSparqlUpdate,
-        fuseki_headers
-      );
-      logger.debug(`data is ${JSON.stringify(data)}`)
-      
-      response.status = data.status;
-      response.data = data.data ? data.data : data.statusText;
+    logger.debug(prefixAndSparqlUpdate);
 
-    } catch (error) {
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        logger.debug(error.response.data);
-        logger.debug(error.response.status);
-        logger.debug(error.response.headers);
-      } else if (error.request) {
-        // The request was made but no response was received
-        // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-        // http.ClientRequest in node.js
-        logger.debug(error.request);
-      } else {
-        // Something happened in setting up the request that triggered an Error
-        logger.debug("Error", error.message);
-      }
-      logger.debug(error.config);
-     
-        response.status = error.response.status || 500;
-        response.data = error.response.data ? `Error: ${error.response.data}` : `Error found.`;
-    }
-    return response;
+    //add UR to axios config
+    let url = `${jena_baseUrl}/${dataset_id}`;
+    let params = prefixAndSparqlUpdate;
+    let config = {
+      auth: basic_auth,
+      headers: fuseki_headers
+    };
+
+    try {
+      let {data, status, statusText='OK'} = await axios.post(url,params,config);
+
+      logger.debug(`data is ${JSON.stringify(data?data:statusText)}`);
+
+      response.status = status;
+      response.data = data.data ? data.data : data.statusText;
+      return response;
+      } catch (error) {
+        // logger.error(error.toJSON());
+   
+         if (error.response) {
+           // The request was made and the server responded with a status code
+           // that falls out of the range of 2xx
+           logger.debug(error.response.data);
+           logger.debug(error.response.status);
+           logger.debug(error.response.headers);
+   
+           //add values to response object
+           response.data = error.response.data;
+           response.status = error.response.status;
+         } else if (error.request) {
+           // The request was made but no response was received
+           // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
+           // http.ClientRequest in node.js
+           logger.debug(error.request);
+           response.data = error.request;
+         } else {
+           // Something happened in setting up the request that triggered an Error
+           logger.debug("Error", error.message);
+   
+           //add values to response object
+           response.data = error.message;
+         }
+   
+         logger.debug(error.config);
+         return response;
+       } 
   },
 
   /**
@@ -412,7 +439,7 @@ module.exports = {
 		SELECT ?s
 		WHERE { ?s ?a ${instance} } `;
 
-    return  sparqlQuery(dataset_id, query);
+    return sparqlQuery(dataset_id, query);
   },
   /**
    *
@@ -494,7 +521,6 @@ module.exports = {
    * @param {(Error, JSON)} callback
    */
   getCareActionData: async function (dataset_id, uri) {
-
     let query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed 
       (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
       (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)

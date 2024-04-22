@@ -45,18 +45,15 @@ router.post(
     let sprql_query = `INSERT DATA { ${content} } `;
 
     //logger.debug(sprql_query);
+    return utils.sparqlDatasetUpdate(false, cigId,dbType).then(({data, status}) => {
+      if(status < 400){
+        utils.sparqlUpdate(cigId,sprql_query).then((status='200', data) => res.status(200).json({cig_id: cigId}));
+      } else {
+       res.status(status).json(data);
+      }
+    }).catch( ({data='',status}) => res.status(status).send(data));
 
-    let update = await utils.sparqlDatasetUpdate(false, cigId, dbType);
-    logger.debug(`create/delete response is ${update}`);
-    ({status, data}) = await utils.sparqlUpdate(cigId, sprql_query);     
-    status < 300 ? res.status(status).json({cigId : cigId}) : res.status(status).send(data))
-        .then(({ status, data }) => 
-        }).catch( ({status, data}) => {
-          logger.error(`Error "/dataset/create" with CIG id ${cigId} : ${data ?? 'nothing'}`);
-          res.status(status).send(data);
-      });
-  }
-);
+  });
 
 /**
  * Delete a persistent or in-memory CIG
@@ -69,11 +66,7 @@ router.post("/dataset/delete", function (req, res, next) {
 
   const cigId = id.startsWith(`CIG-`) ? id : `CIG-` + id;
 
-  utils
-      .sparqlDatasetUpdate(true, cigId)
-      .then( data  => res.status(200).send(data))
-      //it could catch a 404 no found. In this context is not an Error
-      .catch( ({status, data}) => res.status(status).send(data));
+  return utils.sparqlDatasetUpdate(true, cigId).then(({data, status='200'}) => res.status(status).end()).catch( ({data='',status}) => res.status(status).send(data));
 
 }); //checked!
 

@@ -17,5 +17,8 @@ module.exports = {
 		prefix tmr4i: <http://anonymous.org/vocab4i/> 
 		prefix nanopub: <http://www.nanopub.org/nschema#> 
 		prefix prov:  <http://www.w3.org/ns/prov#> 
+		prefix tmrdata:  <http://anonymous.org/tmr/data/> 
+		prefix tmrvocab:  <http://anonymous.org/tmr/vocab> 
+		prefix tmrvocab4i: <http://anonymous.org/vocab4i/> 
 		   `
 };
