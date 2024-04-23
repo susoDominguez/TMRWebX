@@ -1211,74 +1211,89 @@ function filter_TMR_rec_type(RecUris) {
   return result;
 }
 
+/**
+ * 
+ * @param {array} head_vars 
+ * @param {object} binding 
+ */
+function get_care_action(head_vars, binding) {
+ logger.debug(head_vars)
+ logger.debug(binding)
 
-function careAction_rdf2json(head_vars, bindings) {
-
-  let data = {};
+  let careAction = {};
 
   //format rdf by looping through head vars
   for (let pos in head_vars) {
     //variable name
     let headVar = head_vars[pos];
-
+    logger.debug(`headVar is ${headVar}`)
     //check there is a corresponding binding, if not, next head var
-    if (!(headVar && bindings.hasOwnProperty(headVar))) continue;
+    if (!binding.hasOwnProperty(headVar)) continue;
 
     //otherwise, retrieve value
-    let value = bindings[headVar].value;
-
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`)
     //for each heading, add a field
     switch (headVar) {
       case "actId":
-        data.id = value;
+        careAction.id = value;
         break;
       case "adminLabel":
-        data.display = value;
+        careAction.display = value;
         break;
       case "actType":
         //extract code
-        let type = value.slice(25);
-        data.code = type;
-        data.requestType = 0; //for drug related types
+        let type ="";
+        logger.debug(value)
+        if(value.startsWith('http://anonymous.org/vocab/')){
+           type = value.slice(27);
+        } else {
+          //http://anonymous.org/tmr/vocab/DrugType
+          type = value.slice(31);
+        }
+        careAction.code = type;
+        careAction.requestType = 0; //for individual or category drugs that are not vaccines
         //check for therapy
         if (type.startsWith("NonDrugT")) {
-          data.requestType = 1;
+          careAction.requestType = 1;
         } else {
           //check for vaccine
           if (type.startsWith("VaccineT")) {
-            data.requestType = 2;
+            careAction.requestType = 2;
           } else {
             //check for care actions combination
             if(type.startsWith("CombT")) {
-              data.requestType = 3;
+              careAction.requestType = 3;
             }
           }
         }
         break;
       case "actLabel":
-        data.drugLabel = value;
-        data.sct_trm = value;
+        careAction.drugLabel = value;
+        careAction.sct_trm = value;
         break;
       case "snomed":
-        data.snomedCode = value;
-        data.sct_id = value;
+        careAction.snomedCode = value;
+        careAction.sct_id = value;
         break;
       case "sameAs":
-        data.sameAs = value.split(", ");
+        careAction.sameAs = value.split(", ");
         break;
       case "hasGroupingCriteria":
-        data.hasGroupingCriteria = value.split(", ");
+        careAction.hasGroupingCriteria = value.split(", ");
         break;
       case "subsumes":
-        data.subsumes = value.split(", ");
+        careAction.subsumes = value.split(", ");
         break;
-      case "hasComponents":
-        data.hasComponents = value.split(", ");
+      case "components":
+        careAction.hasComponents = value.split(", ");
         break;
     }
   }//endOf loop
-logger.debug(data)
-  return data
+
+  if (!careAction.hasOwnProperty('snomedCode'))  careAction.sct_trm = undefined;
+
+  return careAction
 }
 
 module.exports = {
@@ -1294,5 +1309,5 @@ module.exports = {
   tmrDataUri,
   sctUri,
   setUri,
-  careAction_rdf2json
+  get_care_action
 };

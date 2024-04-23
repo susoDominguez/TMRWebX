@@ -117,13 +117,16 @@ router.post("/all/get/", async function (req, res) {
   //no params
   if (!(req.body.uri || req.body.id)) return res.status(406).send('Missing Id or URI parameter.');
 
-    let {status = 500,head_vars=[], bindings=[]} = await utils.getCareActionData(
-      "careActions",
-      req.body.id ? 'data:'+ req.body.id : null, req.body.uri?req.body.uri:null);
-
-    let data = careAction_rdf2json(head_vars, bindings); //TODO:
-
+    let {status ,head_vars, bindings} = await utils.getCareActionData("careActions", 'ActAdminister'+req.body.id, req.body.uri);
+  if(status < 400) {
+    let data = auxFunct.get_care_action(head_vars, bindings[0]);
     return res.status(status).json(data);
+  } else {
+    return res.status(status).end();
+  }
+
+
+     
 });
 
 /*
@@ -169,7 +172,7 @@ router.post('/all/get/', function(req, res) {
 
 async function postDrugs(careActData, insertOrDelete, type, id) { 
 
-  const del_str = ` data:${type} ?p ?o . data:ActAdminister${id} ?p1 ?o1 . `;
+  const del_str = ` data:${type+id} ?p ?o . `;
 
   let content = insertOrDelete === config.INSERT ? careActData : del_str;
   
@@ -220,7 +223,7 @@ function drugAdminActDef(type, id, englishLabel) {
       : "DrugAdministrationType"
   }, owl:NamedIndividual ;
                       rdfs:label "administer ${englishLabel} "@en ;
-                      vocab:${type === "CombCareT"? 'combinedParticipationOf': 'VacT'? 'inoculationOf': 'administrationOf'} data:${type + id} `;
+                      vocab:${type === "CombCareT"? 'combinedParticipationOf': type == 'VacT'? 'inoculationOf': 'administrationOf'} data:${type + id} `;
 
   return drugAdministration;
 }

@@ -89,29 +89,13 @@ async function sparqlQuery(dataset_id, query) {
       qs.stringify({ query: prefixAndSparqlQuery }),
       fuseki_headers
     );
-
-    let response = { status: status, data: undefined, head_vars: undefined };
-
-    //if one head var then one list of items otherwise lists of paired rdfs s.t. each list is 1-2-1 with head vars
-    let bindings_list;
-    if (Array.isArray(data.head.vars)) {
-      if (data.head.vars.length == 1) {
-        //return in one go
-        const expr_singleton = jsonata("results.bindings.**.value");
-        response.data = await expr_singleton.evaluate(data);
-      } else {
-        response.head_vars = data.head.vars;
-        bindings_list = new Array(response.head_vars.length);
-        for (let index = 0; index < response.head_vars.length; index++) {
-          const expression = jsonata(`results.bindings[${index}].**.value`);
-          const result = await expression.evaluate(data);
-          bindings_list.push(result);
-        }
-        response.data = bindings_list;
-      }
-    }
+    
+    let response = { status: status, bindings: [], head_vars: [] };
+    if(data.hasOwnProperty('head') && data.head.hasOwnProperty('vars')) response.head_vars = data.head.vars;
+    if(data.hasOwnProperty('results') && data.results.hasOwnProperty('bindings')) response.bindings = data.results.bindings;
 
     return response;
+
   } catch (error) {
     if (error.response) {
       // The request was made and the server responded with a status code
@@ -130,8 +114,7 @@ async function sparqlQuery(dataset_id, query) {
     }
     logger.debug(error.config);
     return {
-      status: error.response.status ? error.response.status : 500,
-      data: `Error: ${error.response.data}`,
+      status: 500, bindings: [], head_vars: []
     };
   }
 }
@@ -379,7 +362,7 @@ module.exports = {
     let query = `
     SELECT DISTINCT ?rec
     WHERE {
-   ?rec tmr:isPartOf ?sg
+   ?rec vocab:isPartOf ?sg
    FILTER( ${filterString} ) } `;
 
     return sparqlQuery(dataset_id, query);
@@ -466,8 +449,8 @@ module.exports = {
     let query = `
       SELECT DISTINCT ?s
       WHERE {
-        data:${dataset_id}  rdf:type  tmr:ClinicalGuideline , owl:NamedIndividual .
-        ?s tmr:isPartOf  data:${dataset_id} . 
+        data:${dataset_id}  rdf:type  vocab:ClinicalGuideline , owl:NamedIndividual .
+        ?s vocab:isPartOf  data:${dataset_id} . 
         GRAPH ?s {
           ?s rdf:type ?p . 
           FILTER(${filterString}).
@@ -489,23 +472,23 @@ module.exports = {
 		WHERE {
 			` +
       TrUri +
-      ` a tmr:TransitionType .
+      ` a vocab:TransitionType .
 			` +
       TrUri +
-      ` tmr:affects ?propUri .
+      ` vocab:affects ?propUri .
 			` +
       TrUri +
-      ` tmr:derivative ?deriv.
+      ` vocab:derivative ?deriv.
 			` +
       TrUri +
-      ` tmr:hasTransformableSituation ?sitFromId .
+      ` vocab:hasTransformableSituation ?sitFromId .
 			` +
       TrUri +
-      ` tmr:hasExpectedSituation ?sitToId .
-			?PropUri  a  tmr:TropeType .
+      ` vocab:hasExpectedSituation ?sitToId .
+			?PropUri  a  vocab:TropeType .
 			?PropUri rdfs:label ?propTxt .
-			?sitFromId a tmr:SituationType .
-			?sitToId a tmr:SituationType .
+			?sitFromId a vocab:SituationType .
+			?sitToId a vocab:SituationType .
 			?sitFromId rdfs:label ?sitFromLabel .
 			?sitToId rdfs:label ?sitToLabel .
 		}
@@ -517,31 +500,36 @@ module.exports = {
   /**
    *
    * @param {string} dataset_id
-   * @param {string} id
-   * @param {string} uri
+   * @param {string | undefined} id
+   * @param {string | undefined} uri
    */
   getCareActionData: async function (dataset_id, id, uri) {
+    let atom = id ? `data:${id}` : `<${uri}>`;
+
     let query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed 
       (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
       (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
       (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
+      (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
 		WHERE {
-			<${uri}> a owl:NamedIndividual ;
+			 ${atom} a owl:NamedIndividual ;
 			  a ?adminT ;
 				?Of ?actId ;
-			  rdfs:label ?adminLabel.
-     OPTIONAL { <${uri}> tmr:subsumes ?subsumption . }  
-			?actId a owl:NamedIndividual.
-			?actId a ?actType.
-			?actId rdfs:label ?actLabel.
-			OPTIONAL { ?actId tmr:snomedCode  ?snomed. }
-      OPTIONAL { ?actId tmr:hasGroupingCriteria  ?criterion . }
+			  rdfs:label ?adminLabel .
+     OPTIONAL { ${atom} vocab:subsumes ?subsumption . }  
+     OPTIONAL { ${atom} vocab:hasComponent ?component . }  
+			?actId a owl:NamedIndividual .
+			?actId a ?actType .
+			?actId rdfs:label ?actLabel .
+			OPTIONAL { ?actId vocab:snomedCode  ?snomed . }
+      OPTIONAL { ?actId vocab:hasGroupingCriteria  ?criterion . }
       OPTIONAL { ?actId owl:sameAs ?same . } 
 			FILTER ( ?actType != owl:NamedIndividual &&
-				 ( ?Of = tmr:administrationOf || ?Of = tmr:applicationOf || ?Of = tmr:combinedParticipationOf ) &&
+				 ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedParticipationOf || ?Of = vocab:inoculationOf ) &&
 				 ?adminT != owl:NamedIndividual ) .
 		} GROUP BY ?actId ?adminLabel ?actType ?actLabel ?snomed
 		`;
+    logger.debug(query);
 
     return sparqlQuery(dataset_id, query);
   },
@@ -558,11 +546,11 @@ module.exports = {
 	    ?statementTitle ?statementText ?organizationName ?jurisdiction
 	    WHERE {
 		    GRAPH ${sta_uri} {
-           ${sta_uri}  a  tmr:ClinicalStatement ;
-                 tmr:organizationName ?organizationName ;
-                 tmr:organizationJurisdiction ?jurisdiction ;
-                 tmr:statementTitle ?statementTitle ;
-                 tmr:statementText ?statementText .
+           ${sta_uri}  a  vocab:ClinicalStatement ;
+                 vocab:organizationName ?organizationName ;
+                 vocab:organizationJurisdiction ?jurisdiction ;
+                 vocab:statementTitle ?statementTitle ;
+                 vocab:statementText ?statementText .
 		        }
 	  } `;
     return sparqlJSONQuery(datasetId, query);
@@ -606,14 +594,14 @@ module.exports = {
       ` {
        ` +
       belief_Uri +
-      ` a  tmr:CausationBelief . 
+      ` a  vocab:CausationBelief . 
        ` +
       belief_Uri +
-      ` tmr:frequency ?freq .
+      ` vocab:frequency ?freq .
        ` +
       belief_Uri +
-      ` tmr:strength ?strength .
-        ?actAdmin tmr:causes ?TrUri .
+      ` vocab:strength ?strength .
+        ?actAdmin vocab:causes ?TrUri .
        }
       SERVICE ` +
       actUrl +
@@ -626,24 +614,24 @@ module.exports = {
         ?actId a ?actType .
         ?actId rdfs:label ?actLabel .
         FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
-           (?of = tmr:administrationOf || ?of = tmr:applicationOf || ?of = tmr:inoculationOf ) ) .
+           (?of = vocab:administrationOf || ?of = vocab:applicationOf || ?of = vocab:inoculationOf ) ) .
       }
         SERVICE ` +
       TrUrl +
       ` { 
-        ?TrUri a tmr:TransitionType ;
+        ?TrUri a vocab:TransitionType ;
             a owl:NamedIndividual ;
-           tmr:hasTransformableSituation ?sitFromId ;
-           tmr:hasExpectedSituation ?sitToId ;
-             tmr:affects ?propUri ;
-           tmr:derivative ?deriv .
-        ?propUri  a  tmr:TropeType ;
+           vocab:hasTransformableSituation ?sitFromId ;
+           vocab:hasExpectedSituation ?sitToId ;
+             vocab:affects ?propUri ;
+           vocab:derivative ?deriv .
+        ?propUri  a  vocab:TropeType ;
           a owl:NamedIndividual ;
              rdfs:label ?propTxt .			        
-        ?sitFromId a tmr:SituationType ;
+        ?sitFromId a vocab:SituationType ;
           a owl:NamedIndividual ;
           rdfs:label ?sitFromLabel .
-        ?sitToId a tmr:SituationType ;
+        ?sitToId a vocab:SituationType ;
           a owl:NamedIndividual ;
           rdfs:label ?sitToLabel .
       }
@@ -719,14 +707,14 @@ module.exports = {
             prov:wasAttributedTo  ?attributedTo .
       }
       GRAPH ${recAssertURI} {
-          ${recAssertURI} a  tmr:ClinicalRecommendation ;
-               tmr:aboutExecutionOf ?actAdmin ;
-               tmr:strength ?strength ;
+          ${recAssertURI} a  vocab:ClinicalRecommendation ;
+               vocab:aboutExecutionOf ?actAdmin ;
+               vocab:strength ?strength ;
                rdfs:label ?text ;
-               tmr:basedOn ?cbUri .
-            ?cbUri tmr:contribution ?contrib .
-            ${recAssertURI} tmr:partOf ?partOf .  
-        OPTIONAL { ${recAssertURI} tmr:extractedFrom ?extractedFrom . } 
+               vocab:basedOn ?cbUri .
+            ?cbUri vocab:contribution ?contrib .
+            ${recAssertURI} vocab:partOf ?partOf .  
+        OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
       }
       SERVICE ${actUrl} {
         ?actAdmin a owl:NamedIndividual .
@@ -736,8 +724,8 @@ module.exports = {
         ?actId a owl:NamedIndividual .
         ?actId a ?actType .
         ?actId rdfs:label ?actLabel .
-        OPTIONAL { ?actId tmr:snomedCode  ?sctDrg . }
-        OPTIONAL { ?actId tmr:hasComponent  ?hasComponent . 
+        OPTIONAL { ?actId vocab:snomedCode  ?sctDrg . }
+        OPTIONAL { ?actId vocab:hasComponent  ?hasComponent . 
           ?hasComponent  a owl:NamedIndividual ;
                         a ?compAdminT ;
                         ?compOf ?compActId ;
@@ -745,14 +733,14 @@ module.exports = {
           ?compActId a owl:NamedIndividual ;
                      a ?compActType ;
                      rdfs:label ?compActLabel . }
-        FILTER (?actType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = tmr:administrationOf || ?Of = tmr:applicationOf)) .
+        FILTER (?actType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf)) .
       }
       SERVICE ${cbUrl} {
         GRAPH  ?cbUri {
-          ?cbUri a  tmr:CausationBelief ; 
-                 tmr:frequency ?freq ;
-                 tmr:strength ?evidence .
-          ?actAdminCb tmr:causes ?TrUri .
+          ?cbUri a  vocab:CausationBelief ; 
+                 vocab:frequency ?freq ;
+                 vocab:strength ?evidence .
+          ?actAdminCb vocab:causes ?TrUri .
         }
         GRAPH ?cbProvUri {
           ?cbProvUri  a  oa:Annotation ; 
@@ -761,22 +749,22 @@ module.exports = {
         } 
       } 
       SERVICE ${trUrl} { 
-        ?TrUri a tmr:TransitionType ;
-              tmr:affects ?PropUri ;
-              tmr:derivative ?deriv ;
-              tmr:hasTransformableSituation ?sitFromId ;
-              tmr:hasExpectedSituation ?sitToId .
-        ?PropUri  a  tmr:TropeType ;
+        ?TrUri a vocab:TransitionType ;
+              vocab:affects ?PropUri ;
+              vocab:derivative ?deriv ;
+              vocab:hasTransformableSituation ?sitFromId ;
+              vocab:hasExpectedSituation ?sitToId .
+        ?PropUri  a  vocab:TropeType ;
                     rdfs:label ?propLabel .
-        ?sitFromId a tmr:SituationType ;
+        ?sitFromId a vocab:SituationType ;
                         rdfs:label ?sitFromLabel .
-        ?sitToId a tmr:SituationType ;
+        ?sitToId a vocab:SituationType ;
                      rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitFromId tmr:snomedCode ?sitFromSctId .   
-          ?PropUri  tmr:snomedCode ?propSctId	.	
-          ?sitToId tmr:snomedCode ?sitToSctId . }
-        OPTIONAL { ?sitFromId tmr:stateOf ?sitFromStateOf . 
-            ?sitToId tmr:stateOf ?sitToStateOf . }
+        OPTIONAL { ?sitFromId vocab:snomedCode ?sitFromSctId .   
+          ?PropUri  vocab:snomedCode ?propSctId	.	
+          ?sitToId vocab:snomedCode ?sitToSctId . }
+        OPTIONAL { ?sitFromId vocab:stateOf ?sitFromStateOf . 
+            ?sitToId vocab:stateOf ?sitToStateOf . }
       }
     }
        `;
@@ -849,16 +837,16 @@ module.exports = {
                       prov:wasAttributedTo  ?attributedTo .
         }
         GRAPH ${recAssertURI} {
-           ${recAssertURI} a  tmr:GoodPracticeRecommendation ;
+           ${recAssertURI} a  vocab:GoodPracticeRecommendation ;
                          rdfs:label ?label .
-           {   ${recAssertURI}   tmr:aboutNotificationOf ?stUri . 
+           {   ${recAssertURI}   vocab:aboutNotificationOf ?stUri . 
               SERVICE ${stmntUrl} {
                 GRAPH  ?stUri {
-                  ?stUri a  tmr:ClinicalStatement ;
-                       tmr:statementText ?stTxt ;
-                        tmr:statementTitle ?stTtl ;
-                        tmr:organizationJurisdiction ?stOj ;
-                        tmr:organizationName ?stOn .   
+                  ?stUri a  vocab:ClinicalStatement ;
+                       vocab:statementText ?stTxt ;
+                        vocab:statementTitle ?stTtl ;
+                        vocab:organizationJurisdiction ?stOj ;
+                        vocab:organizationName ?stOn .   
                 }
               GRAPH ?stUriProv {
                ?stUriProv oa:hasBody ?stUri ;
@@ -867,13 +855,13 @@ module.exports = {
                OPTIONAL { ?stUri prov:wasDerivedFrom ?derivedSt . }
               }
             }
-           OPTIONAL { ${recAssertURI} tmr:extractedFrom ?extractedFrom . } 
-           OPTIONAL { ${recAssertURI} tmr:partOf ?partOf  . } 
-           OPTIONAL { ${recAssertURI} tmr:hasFilterSituation ?precond .
+           OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
+           OPTIONAL { ${recAssertURI} vocab:partOf ?partOf  . } 
+           OPTIONAL { ${recAssertURI} vocab:hasFilterSituation ?precond .
              SERVICE ${TrUrl} {  
                ?precond  rdf:type  owl:NamedIndividual  ;
                         rdfs:label ?precondLbl  .
-               OPTIONAL { ?precond  tmr:snomedCode ?sctPrecond . }
+               OPTIONAL { ?precond  vocab:snomedCode ?sctPrecond . }
              }
            }
          } 
@@ -933,43 +921,43 @@ module.exports = {
 						?adminT ?actId ?adminLabel ?actType ?actLabel  ?sitFromSctId ?sitToSctId
 	    WHERE { 
 		   GRAPH ${recAssertURI} {
-        ${recAssertURI} a  tmr:ClinicalRecommendation ; 
+        ${recAssertURI} a  vocab:ClinicalRecommendation ; 
                        rdfs:label ?text ;
-                       tmr:aboutExecutionOf ?actAdmin ;
-                       tmr:basedOn ?cbUri ;
-                       tmr:strength ?strength .
-			?cbUri tmr:contribution ?contrib .
-			OPTIONAL { ${recAssertURI} tmr:extractedFrom ?extractedFrom . } 
-			OPTIONAL { ${recAssertURI} tmr:partOf ?partOf . } 
+                       vocab:aboutExecutionOf ?actAdmin ;
+                       vocab:basedOn ?cbUri ;
+                       vocab:strength ?strength .
+			?cbUri vocab:contribution ?contrib .
+			OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
+			OPTIONAL { ${recAssertURI} vocab:partOf ?partOf . } 
 			}
 			GRAPH ${recProvURI} {
         ${recProvURI} a  oa:Annotation ; 
                       oa:hasBody    ${recAssertURI} . 
-        OPTIONAL { ${recAssertURI} tmr:partOf ?partOf . }
+        OPTIONAL { ${recAssertURI} vocab:partOf ?partOf . }
       ${recAssertURI} prov:wasDerivedFrom ?sourceOfRec .
 			} 
 			SERVICE ${cbUrl} {
 				GRAPH  ?cbUri {
-					?cbUri a  tmr:CausationBelief . 
-					?cbUri tmr:frequency ?freq .
-					?cbUri tmr:strength ?evidence .
-				  ?actAdmin tmr:causes ?TrUri .
+					?cbUri a  vocab:CausationBelief . 
+					?cbUri vocab:frequency ?freq .
+					?cbUri vocab:strength ?evidence .
+				  ?actAdmin vocab:causes ?TrUri .
 				}
 			} 
 			SERVICE ${TrUrl} { 
-				?TrUri a tmr:TransitionType .
-				?TrUri tmr:affects ?PropUri .
-				?TrUri tmr:derivative ?deriv .
-				?TrUri tmr:hasTransformableSituation ?sitFromId .
-				?TrUri tmr:hasExpectedSituation ?sitToId .
-				?PropUri  a  tmr:TropeType .
+				?TrUri a vocab:TransitionType .
+				?TrUri vocab:affects ?PropUri .
+				?TrUri vocab:derivative ?deriv .
+				?TrUri vocab:hasTransformableSituation ?sitFromId .
+				?TrUri vocab:hasExpectedSituation ?sitToId .
+				?PropUri  a  vocab:TropeType .
 				?PropUri rdfs:label ?propTxt .
-				?sitFromId a tmr:SituationType .
-				?sitToId a tmr:SituationType .
+				?sitFromId a vocab:SituationType .
+				?sitToId a vocab:SituationType .
 				?sitFromId rdfs:label ?sitFromLabel .
 				?sitToId rdfs:label ?sitToLabel .
-        ?sitFromId tmr:snomedCode ?sitFromSctId .
-				?sitToId tmr:snomedCode ?sitToSctId .
+        ?sitFromId vocab:snomedCode ?sitFromSctId .
+				?sitToId vocab:snomedCode ?sitToSctId .
 			} 
 			SERVICE ${actUrl} {
 				?actAdmin a owl:NamedIndividual .
@@ -979,7 +967,7 @@ module.exports = {
 				?actId a owl:NamedIndividual .
 				?actId a ?actType .
 				?actId rdfs:label ?actLabel .
-				FILTER (?actType != owl:NamedIndividual && ( ?Of = tmr:administrationOf || ?Of = tmr:applicationOf) && ?adminT != owl:NamedIndividual ) .
+				FILTER (?actType != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf) && ?adminT != owl:NamedIndividual ) .
 			} 
  	   }`;
 
