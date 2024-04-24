@@ -5,6 +5,7 @@ const router = express.Router();
 const config = require('../lib/config');
 //const guidelines = require('../lib/prefixes');
 const utils = require('../lib/utils');
+const auxFunct = require('../lib/router_functs/guideline_functs')
 const { ErrorHandler } = require('../lib/errorHandler');
 
 router.post('/property/add', async function(req, res, next) {
@@ -20,116 +21,6 @@ router.post('/property/delete', async function(req, res, next) {
   let {data, status} = await postTransition(req.body.id, config.DELETE, 'Prop');
 
   return res.status(status).send(data);
-
-});
-
-router.post('/all/get/', function(req, res, next) {
-
-  const data = 'http://anonymous.org/tmr/data/';
-  
-  const id = req.body.uri ? "<"+req.body.uri+">" : "<"+ data + req.body.id+">";
-
-    utils.getTransitionData("transitions",id, function(err, transitionData) {
-
-      if(err) {
-        res.status(404).send(transitionData);
-        return;
-      }
-
-      //if  data found in Object (we check), begin
-      if(transitionData.constructor === Object && Object.entries(transitionData).length != 0) {
-
-      var data = { id: id  ,
-                    situationTypes: [
-                      {
-                        "type": "hasTransformableSituation",
-                        "value": {}
-                      },
-                      {
-                        "type": "hasExpectedSituation",
-                        "value": {}
-                      }
-                    ],
-                    property: {} };
-
-      var vars = transitionData.head.vars;
-      var bindings = transitionData.results.bindings;
-      
-      //format data by looping through results
-      for(let pos in bindings){
-
-        var bind = bindings[pos];
-
-        for(var varPos in vars){
-
-          var value = bind[vars[varPos]].value;
-
-          //for each heading, add a field
-          switch (vars[varPos]) {
-            case "sitFromId":
-              data.situationTypes[0].id = value;
-              //extract code
-              var type = value.slice(30);
-              data.situationTypes[0].value.code= type;
-              break;
-            case "sitToId":
-              data.situationTypes[1].id = value;
-              //extract code
-              var type = value.slice(30);
-              data.situationTypes[1].value.code= type;
-              break;
-            case "propUri":
-              //extract code
-              var type = value.slice(30);
-              data.property.code = type;
-              break;
-            case "sitFromLabel":
-              data.situationTypes[0].value.display =  value;
-              break;
-            case "sitToLabel":
-              data.situationTypes[1].value.display = value;
-              break;
-            case "propTxt":
-              data.property.display = value;
-              break;
-            case "deriv":
-              var type = value.slice(25);
-              data.effect = type;
-              break;
-          }
-        }
-    }
-    res.send(data);
-      } else {
-        res.send({});
-      }
-      
-    });
-
-});
-
-router.post( '/situation/all/get/', function(req, res, next) {
-
-  utils.sparqlGetPreds_Objcts("transitions", ( req.body.uri ? "<"+req.body.uri+">" : "data:Sit"+req.body.id), 
-   function(err, situationData) {
-    if(err){
-      next(new ErrorHandler(500, err));
-    } else {
-      res.send(situationData);
-    }
-
-  });
-});
-
-router.post('/property/all/get/', function(req, res, next) {
-
-  utils.sparqlGetPreds_Objcts("transitions", ( req.body.property_URI ? "<"+req.body.property_URI+">" : "data:Prop"+req.body.property_id ), 
-    function(err,propertyData) {
-
-    res.send(propertyData);
-
-  });
-
 
 });
 
@@ -187,6 +78,24 @@ router.post('/delete', async function(req, res, next) {
 
 });
 
+/// GET 
+router.post('/all/get/', async function(req, res, next) {
+
+  const id = req.body.id ? "data:Tr"+req.body.id : "<"+req.body.uri+">" ;
+
+  let {status,head_vars,bindings} = await utils.getTransitionData("transitions", id);
+
+  if(status < 400 && bindings.length > 0) {
+    let data = auxFunct.get_transition_object(head_vars, bindings[0]);
+    return res.status(status).json(data);
+  } else {
+    return res.status(status).json({});
+  }
+
+});
+
+
+
 async function postTransition(transitionData, insertOrDelete, type = '') {
 
   const del_str = ` data:${type+transitionData} ?p ?o . `;
@@ -206,7 +115,8 @@ async function postTransition(transitionData, insertOrDelete, type = '') {
 
 function action(req, res, insertOrDelete) {
 
-  const transition = `data:Tr` + req.body.id + ` rdf:type vocab:TransitionType, owl:NamedIndividual ;
+  //, owl:NamedIndividual 
+  const transition = `data:Tr` + req.body.id + ` rdf:type vocab:TransitionType ;
                   vocab:hasTransformableSituation data:Sit` + req.body.pre_situation_id + ` ;
                   vocab:hasExpectedSituation data:Sit` + req.body.post_situation_id + ` ;
                   vocab:derivative   vocab:` + req.body.derivative + ` ;
@@ -268,7 +178,7 @@ function actionSituation(req) {
 
     situationDef += `;`;
 
-    req.body.snomedCodes.split(",").forEach(function(code) {
+    req.body.snomedCode.split(",").forEach(function(code) {
 
       situationDef += `
       vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
@@ -304,6 +214,32 @@ function actionSituationComplex(req) {
   } else {
     throw ErrorHandler(500, `list of situations missing`);
   }
+
+  if ( req.body.icd10Code ) {
+    compoundList += `;`;
+                
+    req.body.icd10Codes.split(",").forEach(function(code) {
+                
+      compoundList += `
+        vocab:icd10Code   "` + code.trim() + `"^^xsd:string ;`
+                
+    });
+      //this removes the last semicolon
+      compoundList = compoundList.substring(0, compoundList.length - 1);
+}
+
+if ( req.body.snomedCode ) {
+  compoundList += `;`;
+              
+  req.body.snomedCode.split(",").forEach(function(code) {
+              
+    compoundList += `
+      vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
+              
+  });
+    //this removes the last semicolon
+    compoundList = compoundList.substring(0, compoundList.length - 1);
+}
 
   compoundList += `.`
 

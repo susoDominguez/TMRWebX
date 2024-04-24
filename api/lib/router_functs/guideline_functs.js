@@ -1,36 +1,39 @@
 const Promise = require("bluebird");
 const utils = Promise.promisifyAll(require("../utils.js"));
 const logger = require("../../config/winston.js");
+const jsonata = require("jsonata");
 //const { ErrorHandler } = require("../lib/errorHandler");
 
-const tmrDataUri = "http://anonymous.org/tmr/data/";
+const tmrDataUri = "http://anonymous.org/data/";
 const tmrDataUri_short = "data:";
 const sctUri = `http://snomed.info/sct/`;
 
 /**
- * 
+ *
  * @param {String} label label representing the knowledge as a full URI or a shortened version
  * @param {String} prefix prefix to add to label
  * @param {Boolean} fullUri set the label argument as a full URI? otherwise, just the identifying section of the URI
  */
-function setUri(label, prefix, fullUri, shortenedURI){
-
+function setUri(label, prefix, fullUri, shortenedURI) {
   //if its already full URI, return
-  if(label.includes(tmrDataUri)) return label;
-  
+  if (label.includes(tmrDataUri)) return label;
+
   let output = "";
 
   //if it is not full URI neither has the expected prefix, add prefix
-  if(prefix && !label.startsWith(prefix))  output = prefix + "-";
+  if (prefix && !label.startsWith(prefix)) output = prefix + "-";
 
   //add the label to the final output
   output += label;
- 
 
   //construe URI
-  output = fullUri ? (tmrDataUri + output) : shortenedURI ? (tmrDataUri_short + output) : output ;
+  output = fullUri
+    ? tmrDataUri + output
+    : shortenedURI
+    ? tmrDataUri_short + output
+    : output;
 
-  return output
+  return output;
 }
 
 function actionSubguideline(req, res, insertOrDelete) {
@@ -150,8 +153,18 @@ function get_rec_data(recURI, guidelineData, type) {
     partOf: undefined, //combined dataset or original
     extractedFrom: undefined, //original dataset
     type: {
-      sctId: ( type === 'nonDrugType' ? "304541006" : type === 'vaccineType' ? '830152006' : "306807008" ),
-      display: ( type === 'nonDrugType' ? "Recommendation to perform treatment (procedure)" : type === 'vaccineType' ? 'Recommendation regarding vaccination (procedure)' : "Recommendation to start drug treatment (procedure)" ),
+      sctId:
+        type === "nonDrugType"
+          ? "304541006"
+          : type === "vaccineType"
+          ? "830152006"
+          : "306807008",
+      display:
+        type === "nonDrugType"
+          ? "Recommendation to perform treatment (procedure)"
+          : type === "vaccineType"
+          ? "Recommendation regarding vaccination (procedure)"
+          : "Recommendation to start drug treatment (procedure)",
     },
     careActionType: {
       id: undefined,
@@ -588,7 +601,7 @@ function get_statement_data(recURI, guidelineData) {
   return recData;
 }
 
-function get_rec_json_data(recURI, guidelineData,type) {
+function get_rec_json_data(recURI, guidelineData, type) {
   //recommendation template object
   let recData = {
     id: recURI,
@@ -596,8 +609,18 @@ function get_rec_json_data(recURI, guidelineData,type) {
     extractedFrom: undefined, //original dataset
     label: undefined,
     type: {
-      sctId: ( type === 'nonDrugType' ? "304541006" : type === 'vaccineType' ? '830152006' : "306807008" ),
-      display: ( type === 'nonDrugType' ? "Recommendation to perform treatment (procedure)" : type === 'vaccineType' ? 'Recommendation regarding vaccination (procedure)' : "Recommendation to start drug treatment (procedure)" ),
+      sctId:
+        type === "nonDrugType"
+          ? "304541006"
+          : type === "vaccineType"
+          ? "830152006"
+          : "306807008",
+      display:
+        type === "nonDrugType"
+          ? "Recommendation to perform treatment (procedure)"
+          : type === "vaccineType"
+          ? "Recommendation regarding vaccination (procedure)"
+          : "Recommendation to start drug treatment (procedure)",
     },
     derivedFrom: undefined,
     hasSource: undefined,
@@ -628,7 +651,6 @@ function get_rec_json_data(recURI, guidelineData,type) {
 
   let headVars = guidelineData.head.vars;
   let bindingsList = guidelineData.results.bindings;
-
 
   for (const index in bindingsList) {
     //results object
@@ -1212,13 +1234,13 @@ function filter_TMR_rec_type(RecUris) {
 }
 
 /**
- * 
- * @param {array} head_vars 
- * @param {object} binding 
+ *
+ * @param {array} head_vars
+ * @param {object} binding
  */
 function get_care_action(head_vars, binding) {
- logger.debug(head_vars)
- logger.debug(binding)
+  //logger.debug(head_vars)
+  //logger.debug(binding)
 
   let careAction = {};
 
@@ -1226,13 +1248,13 @@ function get_care_action(head_vars, binding) {
   for (let pos in head_vars) {
     //variable name
     let headVar = head_vars[pos];
-    logger.debug(`headVar is ${headVar}`)
+    logger.debug(`headVar is ${headVar}`);
     //check there is a corresponding binding, if not, next head var
     if (!binding.hasOwnProperty(headVar)) continue;
 
     //otherwise, retrieve value
     let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`)
+    logger.debug(`binding value is ${value}`);
     //for each heading, add a field
     switch (headVar) {
       case "actId":
@@ -1243,10 +1265,10 @@ function get_care_action(head_vars, binding) {
         break;
       case "actType":
         //extract code
-        let type ="";
-        logger.debug(value)
-        if(value.startsWith('http://anonymous.org/vocab/')){
-           type = value.slice(27);
+        let type = "";
+        logger.debug(value);
+        if (value.startsWith("http://anonymous.org/vocab/")) {
+          type = value.slice(27);
         } else {
           //http://anonymous.org/tmr/vocab/DrugType
           type = value.slice(31);
@@ -1262,7 +1284,7 @@ function get_care_action(head_vars, binding) {
             careAction.requestType = 2;
           } else {
             //check for care actions combination
-            if(type.startsWith("CombT")) {
+            if (type.startsWith("CombT")) {
               careAction.requestType = 3;
             }
           }
@@ -1289,11 +1311,122 @@ function get_care_action(head_vars, binding) {
         careAction.hasComponents = value.split(", ");
         break;
     }
-  }//endOf loop
+  } //endOf loop
 
-  if (!careAction.hasOwnProperty('snomedCode'))  careAction.sct_trm = undefined;
+  if (!careAction.hasOwnProperty("snomedCode")) careAction.sct_trm = undefined;
 
-  return careAction
+  return careAction;
+}
+
+function get_transition_object(head_vars, binding) {
+
+  logger.debug(head_vars)
+  logger.debug(binding)
+
+  let data_prefix_length = 'http://anonymous.org/data/'.length;
+  let vocab_prefix_length = 'http://anonymous.org/vocab/'.length;
+
+  var data = {
+    id: undefined,
+    situationTypes: [
+      {
+        type: "hasTransformableSituation",
+        id: undefined,
+        value: {
+          code: undefined,
+          display:undefined,
+          system: undefined
+        },
+      },
+      {
+        type: "hasExpectedSituation",
+        id: undefined,
+        value: {
+          code: undefined,
+          display:undefined,
+          system: undefined
+        },
+      },
+    ],
+    property: {
+      id: undefined,
+      display: undefined,
+      code: undefined,
+      system: undefined
+    },
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+    //for each heading, add a field
+
+    //for each heading, add a field
+    switch (headVar) {
+      case "TrId":
+        data.id = value;
+        break;
+      case "sitFromId":
+        data.situationTypes[0].id = value;
+        //extract code
+        var type = value.slice(data_prefix_length);
+        data.situationTypes[0].value.code ??= type;
+        break;
+      case "sitToId":
+        data.situationTypes[1].id = value;
+        //extract code
+        var type = value.slice(data_prefix_length);
+        data.situationTypes[1].value.code ??= type;
+        break;
+      case "propUri":
+        //extract code
+        data.property.id = value;
+        var type = value.slice(data_prefix_length);
+        data.property.code ??= type;
+        break;
+      case "sitFromLabel":
+        data.situationTypes[0].value.display = value;
+        break;
+      case "sitToLabel":
+        data.situationTypes[1].value.display = value;
+        break;
+      case "propLabel":
+        data.property.display = value;
+        break;
+      case "deriv":
+        var type = value.slice(vocab_prefix_length);
+        data.effect = type;
+        break;
+      case 'sitFromIdSCT':
+        data.situationTypes[0].value.code = value;
+        data.situationTypes[0].value.system = sctUri;
+        break;
+      case 'sitToIdSCT':
+        data.situationTypes[1].value.code = value;
+        data.situationTypes[1].value.system = sctUri;
+        break;
+      case 'propUriSCT':
+        data.property.code = value;
+        data.property.system = sctUri;
+        break;
+    }
+  }
+  return data;
+}
+
+async function get_rdf_atom_as_array(bindings){
+  let expr = jsonata('[**.value]');
+  const result = await expr.evaluate(bindings).catch(err => logger.error(err));
+  //logger.debug(result);
+  return result;
 }
 
 module.exports = {
@@ -1309,5 +1442,7 @@ module.exports = {
   tmrDataUri,
   sctUri,
   setUri,
-  get_care_action
+  get_care_action,
+  get_transition_object,
+  get_rdf_atom_as_array
 };

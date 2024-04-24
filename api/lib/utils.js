@@ -1,6 +1,5 @@
 const n3 = require("n3");
 const axios = require("axios").default;
-const jsonata = require("jsonata");
 const qs = require("qs");
 const parser = new n3.Parser();
 //const xmlReader = require("xml-reader");
@@ -32,7 +31,9 @@ let reasoner_config = {
   },
 };
 
-const jena_baseUrl = `http://${config.JENA_HOST || '127.0.0.1'}:${config.JENA_PORT || '3030'}`;
+const jena_baseUrl = `http://${config.JENA_HOST || "127.0.0.1"}:${
+  config.JENA_PORT || "3030"
+}`;
 const basic_auth = {
   username: config.FUSEKI_USER,
   password: config.FUSEKI_PASSWORD,
@@ -89,13 +90,19 @@ async function sparqlQuery(dataset_id, query) {
       qs.stringify({ query: prefixAndSparqlQuery }),
       fuseki_headers
     );
-    
+    logger.debug(data);
+
     let response = { status: status, bindings: [], head_vars: [] };
-    if(data.hasOwnProperty('head') && data.head.hasOwnProperty('vars')) response.head_vars = data.head.vars;
-    if(data.hasOwnProperty('results') && data.results.hasOwnProperty('bindings')) response.bindings = data.results.bindings;
+    if (data.hasOwnProperty("head") && data.head.hasOwnProperty("vars"))
+      response.head_vars = data.head.vars;
+    if (
+      data.hasOwnProperty("results") &&
+      data.results.hasOwnProperty("bindings")
+    )
+      response.bindings = data.results.bindings;
 
     return response;
-
+    
   } catch (error) {
     if (error.response) {
       // The request was made and the server responded with a status code
@@ -114,7 +121,9 @@ async function sparqlQuery(dataset_id, query) {
     }
     logger.debug(error.config);
     return {
-      status: 500, bindings: [], head_vars: []
+      status: 500,
+      bindings: [],
+      head_vars: [],
     };
   }
 }
@@ -189,7 +198,6 @@ module.exports = {
    * @returns
    */
   sparqlDatasetUpdate: async function (isDel, cigId, dbType) {
-
     //add URL to axios config
     let url = isDel
       ? "/$/datasets/" + cigId
@@ -201,23 +209,27 @@ module.exports = {
     };
 
     try {
-
-      let {data, status, statusText='OK'} = await axios({
-        method: isDel? 'delete':'post',
+      let {
+        data,
+        status,
+        statusText = "OK",
+      } = await axios({
+        method: isDel ? "delete" : "post",
         url: jena_baseUrl + url,
         auth: basic_auth,
-        headers: fuseki_headers
+        headers: fuseki_headers,
       });
 
-      logger.debug(`axio response is ${JSON.stringify(data?data:statusText)}`);
+      logger.debug(
+        `axio response is ${JSON.stringify(data ? data : statusText)}`
+      );
 
       //add values to response
       response.status = status;
-      response.data = data? data:statusText;
+      response.data = data ? data : statusText;
       return response;
-
     } catch (error) {
-     // logger.error(error.toJSON());
+      // logger.error(error.toJSON());
 
       if (error.response) {
         // The request was made and the server responded with a status code
@@ -245,8 +257,7 @@ module.exports = {
 
       logger.debug(error.config);
       return response;
-    } 
-
+    }
   },
 
   /**
@@ -260,9 +271,9 @@ module.exports = {
       data: "",
     };
 
-    let prefixAndSparqlUpdate = ({
+    let prefixAndSparqlUpdate = {
       update: guidelines.PREFIXES + "\n" + content,
-    });
+    };
 
     logger.debug(prefixAndSparqlUpdate);
 
@@ -271,47 +282,51 @@ module.exports = {
     let params = prefixAndSparqlUpdate;
     let config = {
       auth: basic_auth,
-      headers: fuseki_headers
+      headers: fuseki_headers,
     };
 
     try {
-      let {data, status, statusText='OK'} = await axios.post(url,params,config);
+      let {
+        data,
+        status,
+        statusText = "OK",
+      } = await axios.post(url, params, config);
 
-      logger.debug(`data is ${JSON.stringify(data?data:statusText)}`);
+      logger.debug(`data is ${JSON.stringify(data ? data : statusText)}`);
 
       response.status = status;
       response.data = data.data ? data.data : data.statusText;
       return response;
-      } catch (error) {
-        // logger.error(error.toJSON());
-   
-         if (error.response) {
-           // The request was made and the server responded with a status code
-           // that falls out of the range of 2xx
-           logger.debug(error.response.data);
-           logger.debug(error.response.status);
-           logger.debug(error.response.headers);
-   
-           //add values to response object
-           response.data = error.response.data;
-           response.status = error.response.status;
-         } else if (error.request) {
-           // The request was made but no response was received
-           // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-           // http.ClientRequest in node.js
-           logger.debug(error.request);
-           response.data = error.request;
-         } else {
-           // Something happened in setting up the request that triggered an Error
-           logger.debug("Error", error.message);
-   
-           //add values to response object
-           response.data = error.message;
-         }
-   
-         logger.debug(error.config);
-         return response;
-       } 
+    } catch (error) {
+      // logger.error(error.toJSON());
+
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        logger.debug(error.response.data);
+        logger.debug(error.response.status);
+        logger.debug(error.response.headers);
+
+        //add values to response object
+        response.data = error.response.data;
+        response.status = error.response.status;
+      } else if (error.request) {
+        // The request was made but no response was received
+        // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
+        // http.ClientRequest in node.js
+        logger.debug(error.request);
+        response.data = error.request;
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        logger.debug("Error", error.message);
+
+        //add values to response object
+        response.data = error.message;
+      }
+
+      logger.debug(error.config);
+      return response;
+    }
   },
 
   /**
@@ -382,21 +397,15 @@ module.exports = {
   },
 
   sparqlGetPreds_Objcts: async function (dataset_id, subject) {
-    let query =
-      `
-  SELECT ?p ?o
+    let query = `
+  SELECT DISTINCT ?p ?o
   WHERE {
-   ` +
-      subject +
-      ` ?p ?o .
+   ?s ?p ?o .
+   FILTER ( ?s = ${subject} ) .
   }
   `;
 
-    return sparqlQuery(dataset_id, query)
-      .then((data) => nList(data, 2))
-      .catch((err) => {
-        throw new ErrorHandler(500, JSON.stringify(err));
-      });
+    return sparqlQuery(dataset_id, query);
   },
 
   sparqlGetResourcesFromNamedGraph: async function (dataset_id, graph) {
@@ -417,10 +426,10 @@ module.exports = {
       });
   },
 
-  sparqlGetSubjectDefaultGraph: async function (dataset_id, instance) {
+  sparqlGetSubjectDefaultGraph: async function (dataset_id, object_instance) {
     let query = `
 		SELECT ?s
-		WHERE { ?s ?a ${instance} } `;
+		WHERE { ?s ?p ${object_instance} } `;
 
     return sparqlQuery(dataset_id, query);
   },
@@ -467,34 +476,27 @@ module.exports = {
    * @param {string} TrUri
    */
   getTransitionData: async function (dataset_id, TrUri) {
-    let query =
-      `SELECT DISTINCT  ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?propTxt ?propUri ?deriv
-		WHERE {
-			` +
-      TrUri +
-      ` a vocab:TransitionType .
-			` +
-      TrUri +
-      ` vocab:affects ?propUri .
-			` +
-      TrUri +
-      ` vocab:derivative ?deriv.
-			` +
-      TrUri +
-      ` vocab:hasTransformableSituation ?sitFromId .
-			` +
-      TrUri +
-      ` vocab:hasExpectedSituation ?sitToId .
-			?PropUri  a  vocab:TropeType .
-			?PropUri rdfs:label ?propTxt .
-			?sitFromId a vocab:SituationType .
-			?sitToId a vocab:SituationType .
-			?sitFromId rdfs:label ?sitFromLabel .
-			?sitToId rdfs:label ?sitToLabel .
-		}
+    let query = ` SELECT DISTINCT  ?TrId ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?deriv ?propLabel ?propUri ?sitFromIdSCT ?sitToIdSCT ?propUriSCT 
+      WHERE {
+      ?TrId a vocab:TransitionType ;
+            vocab:derivative ?deriv ; 
+            vocab:hasTransformableSituation ?sitFromId ;
+            vocab:hasExpectedSituation ?sitToId .
+      FILTER (?TrId = ${TrUri}) . 
+      ?sitFromId a vocab:SituationType ;
+                 rdfs:label ?sitFromLabel .
+      ?sitToId a vocab:SituationType ;
+          rdfs:label ?sitToLabel .
+      OPTIONAL { ?TrId  vocab:affects  ?propUri .
+         ?propUri a  vocab:TropeType ;
+           rdfs:label ?propLabel  } .
+      OPTIONAL { ?sitFromId vocab:snomedCode  ?sitFromIdSCT } .
+      OPTIONAL { ?sitToId vocab:snomedCode  ?sitToIdSCT } .
+      OPTIONAL { ?propUri vocab:snomedCode  ?propUriSCT } .
+      }
 		`;
 
-    return sparqlJSONQuery(dataset_id, query);
+    return sparqlQuery(dataset_id, query);
   },
 
   /**
@@ -529,7 +531,7 @@ module.exports = {
 				 ?adminT != owl:NamedIndividual ) .
 		} GROUP BY ?actId ?adminLabel ?actType ?actLabel ?snomed
 		`;
-    logger.debug(query);
+    //logger.debug(query);
 
     return sparqlQuery(dataset_id, query);
   },
