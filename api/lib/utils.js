@@ -264,7 +264,7 @@ module.exports = {
     };
 
     let prefixAndSparqlUpdate = {
-      update: guidelines.PREFIXES + "\n" + content,
+      update: guidelines.PREFIXES + " \n " + content,
     };
 
     logger.debug(prefixAndSparqlUpdate);

@@ -4,8 +4,8 @@ const logger = require("../../config/winston.js");
 const jsonata = require("jsonata");
 //const { ErrorHandler } = require("../lib/errorHandler");
 
-const tmrDataUri = "http://anonymous.org/data/";
-const tmrDataUri_short = "data:";
+const vocabDataUri = "http://anonymous.org/data/";
+const vocabDataUri_short = "data:";
 const sctUri = `http://snomed.info/sct/`;
 
 /**
@@ -16,7 +16,7 @@ const sctUri = `http://snomed.info/sct/`;
  */
 function setUri(label, prefix, fullUri, shortenedURI) {
   //if its already full URI, return
-  if (label.includes(tmrDataUri)) return label;
+  if (label.includes(vocabDataUri)) return label;
 
   let output = "";
 
@@ -28,9 +28,9 @@ function setUri(label, prefix, fullUri, shortenedURI) {
 
   //construe URI
   output = fullUri
-    ? tmrDataUri + output
+    ? vocabDataUri + output
     : shortenedURI
-    ? tmrDataUri_short + output
+    ? vocabDataUri_short + output
     : output;
 
   return output;
@@ -45,11 +45,11 @@ function actionSubguideline(req, res, insertOrDelete) {
   const description =
     `data:subCIG-` +
     req.body.subGuideline_id +
-    ` rdf:type tmr:subGuideline, owl:NamedIndividual ;
+    ` rdf:type vocab:subGuideline, owl:NamedIndividual ;
                            rdfs:label "` +
     req.body.description +
     `"@en ;
-                           tmr:isSubGuidelineOf  data:CIG-` +
+                           vocab:isSubGuidelineOf  data:CIG-` +
     req.body.guideline_id +
     ` .`;
 
@@ -59,7 +59,7 @@ function actionSubguideline(req, res, insertOrDelete) {
   if (req.body.recs_ids) {
     //nanopublication is part of this subGuideline. contains  pred and object of resource
     const isPartOf =
-      ` tmr:isPartOf   data:subCIG-` + req.body.subGuideline_id + ` .\n`;
+      ` vocab:isPartOf   data:subCIG-` + req.body.subGuideline_id + ` .\n`;
 
     req.body.recs_ids.split(",").forEach(function (recId) {
       recDeclaration +=
@@ -935,7 +935,7 @@ function get_rec_json_data(recURI, guidelineData, type) {
 
 function action_rec(req, res, insertOrDelete) {
   //data id for this rec
-  const id = `data:Rec${req.body.cig_id}-${req.body.rec_id}`;
+  const id = `data:Rec${req.body.cig_id}-${req.body.id}`;
   let sources = "";
   const date = new Date().toJSON();
   //this nanopublication is included in the main  guideline (to be added to default graph)
@@ -952,7 +952,7 @@ function action_rec(req, res, insertOrDelete) {
   }
 
   // Guideline format:
-  const head =
+  const $ =
     id +
     `_head { 
           ` +
@@ -972,20 +972,20 @@ function action_rec(req, res, insertOrDelete) {
 
   const body =
     id +
-    ` {
+    `_assertion {
       ` +
     id +
-    `  a   tmr:ClinicalRecommendation ;
+    `  a   vocab:ClinicalRecommendation ;
               rdfs:label  '''` +
     req.body.label +
     `'''@en ;
-              tmr:aboutExecutionOf  data:ActAdminister` +
+              vocab:aboutExecutionOf  data:ActAdminister` +
     req.body.careAction_id +
     ` ;
-              tmr:partOf            data:CIG-` +
+              vocab:partOf            data:CIG-` +
     req.body.cig_id +
     ` ;
-              tmr:strength          tmr:` +
+              vocab:strength          vocab:` +
     req.body.strength +
     ` .
     }`;
@@ -1023,16 +1023,10 @@ function action_rec(req, res, insertOrDelete) {
     `.
       }`;
 
+      return {id2CIG:id2CIG, query:`GRAPH ${head} GRAPH ${body} GRAPH ${provenance} GRAPH ${publication}`};
   utils.sparqlUpdate(
     "CIG-" + req.body.cig_id,
-    "GRAPH " +
-      head +
-      "\nGRAPH " +
-      body +
-      "\nGRAPH " +
-      provenance +
-      "\nGRAPH " +
-      publication,
+    
     insertOrDelete,
     function (err, status) {
       if (status === 200) {
@@ -1094,7 +1088,7 @@ function insert_precond_in_rec(req, res, insertOrDelete) {
     ` {
       ` +
     recId +
-    ` tmr:hasFilterSituation data:Sit` +
+    ` vocab:hasFilterSituation data:Sit` +
     req.body.precond_id +
     ` .
     }`;
@@ -1120,7 +1114,7 @@ function action_gprec(req, res, insertOrDelete) {
   const id = `data:GPRec` + req.body.cig_id + `-` + req.body.gpRec_id;
 
   //this nanopublication is included in the main  guideline (to be added to default graph)
-  const id2CIG = id + ` tmr:isPartOf data:CIG-` + req.body.cig_id + ` .`;
+  const id2CIG = id + ` vocab:isPartOf data:CIG-` + req.body.cig_id + ` .`;
 
   // Graph format:
   const head =
@@ -1147,12 +1141,12 @@ function action_gprec(req, res, insertOrDelete) {
       ` +
     id +
     `
-              a   tmr:GoodPracticeRecommendation ;
+              a   vocab:GoodPracticeRecommendation ;
               rdfs:label  '''${req.body.gpRec_label}'''@en ;
-              tmr:aboutNotificationOf  data:ST` +
+              vocab:aboutNotificationOf  data:ST` +
     req.body.statement_id +
     ` ;
-              tmr:partOf            data:CIG-` +
+              vocab:partOf            data:CIG-` +
     req.body.cig_id +
     ` ;
   
@@ -1220,14 +1214,14 @@ function action_gprec(req, res, insertOrDelete) {
   );
 }
 
-//filter out TMR types when unnecesary for the triggered router
-function filter_TMR_rec_type(RecUris) {
+//filter out vocab types when unnecesary for the triggered router
+function filter_vocab_rec_type(RecUris) {
   if (!Array.isArray(RecUris)) return RecUris;
   let result = RecUris.filter(
     (uri) =>
       !(
-        uri === "http://anonymous.org/tmr/ClinicalRecommendation" ||
-        uri === "http://anonymous.org/tmr/GoodPracticeRecommendation"
+        uri === "http://anonymous.org/vocab/ClinicalRecommendation" ||
+        uri === "http://anonymous.org/vocab/GoodPracticeRecommendation"
       )
   );
   return result;
@@ -1273,7 +1267,7 @@ function get_care_action(head_vars, binding = []) {
         if (value.startsWith("http://anonymous.org/vocab/")) {
           type = value.slice(27);
         } else {
-          //http://anonymous.org/tmr/vocab/DrugType
+          //http://anonymous.org/vocab/vocab/DrugType
           type = value.slice(31);
         }
         careAction.code = type;
@@ -1601,16 +1595,17 @@ async function get_rdf_atom_as_array(bindings) {
 }
 
 function sparql_drop_named_graphs(ds_id, id) {
-  let head_graph = `data:CB${id}_head`;
-  let assert_graph = `data:CB${id}_assertion`;
-  let prov_graph = `data:CB${id}_provenance`;
-  let pubInfo_graph = `data:CB${id}_publicationinfo`;
+  let head_graph = `data:${id}_head`;
+  let assert_graph = `data:${id}_assertion`;
+  let prov_graph = `data:${id}_provenance`;
+  let pubInfo_graph = `data:${id}_publicationinfo`;
 
   return ` DROP SILENT GRAPH ${head_graph} ;  DROP SILENT GRAPH ${assert_graph} ; DROP SILENT GRAPH ${prov_graph} ; DROP SILENT GRAPH ${pubInfo_graph} `;
 }
 
+
 module.exports = {
-  filter_TMR_rec_type,
+  filter_vocab_rec_type,
   action_gprec,
   insert_precond_in_rec,
   insert_CB_in_rec,
@@ -1619,7 +1614,7 @@ module.exports = {
   get_statement_data,
   get_rec_data,
   actionSubguideline,
-  tmrDataUri,
+  vocabDataUri,
   sctUri,
   setUri,
   get_care_action,

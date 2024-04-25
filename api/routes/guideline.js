@@ -6,13 +6,13 @@ const bodyParser = require("body-parser");
 const config = require("../lib/config");
 const guidelines = require("../lib/prefixes");
 const utils = require("../lib/utils");
+const auxFuncts = require("../lib/router_functs/guideline_functs");
 const { handleError, ErrorHandler } = require("../lib/errorHandler");
 const logger = require("../config/winston");
 const {
   action_gprec,
   insert_precond_in_rec,
   insert_CB_in_rec,
-  action_rec,
   actionSubguideline,
   tmrDataUri,
   get_statement_data,
@@ -21,6 +21,104 @@ const {
   setUri,
 } = require("../lib/router_functs/guideline_functs.js");
 const { error } = require("console");
+
+function action_rec(req) {
+  //data id for this rec
+  const id = `data:Rec${req.body.cig_id}-${req.body.id}`;
+  let sources = "";
+  const date = new Date().toJSON();
+  //this nanopublication is included in the main  guideline (to be added to default graph)
+  const id2CIG = `${id} vocab:isPartOf data:CIG-${req.body.cig_id} .`;
+
+  if (req.body.derivedFrom) {
+    sources = `  prov:wasDerivedFrom  `;
+
+    req.body.derivedFrom.split(",").forEach(function (code) {
+      sources += ` <` + code + `> ,`;
+    });
+    //this removes the last coma
+    sources = sources.substring(0, sources.length - 1);
+  }
+
+  // Guideline format:
+  const head =
+    id +
+    `_head { 
+          ` +
+    id +
+    `_head
+              a     nanopub:Nanopublication ;
+              nanopub:hasAssertion        ` +
+    id +
+    `_assertion ;
+              nanopub:hasProvenance       ` +
+    id +
+    `_provenance ;
+              nanopub:hasPublicationInfo  ` +
+    id +
+    `_publicationinfo .
+    }`;
+
+  const body =
+    id +
+    `_assertion {
+      ` +
+    id +
+    `  a   vocab:ClinicalRecommendation ;
+              rdfs:label  '''` +
+    req.body.label +
+    `'''@en ;
+              vocab:aboutExecutionOf  data:ActAdminister` +
+    req.body.careAction_id +
+    ` ;
+              vocab:partOf            data:CIG-` +
+    req.body.cig_id +
+    ` ;
+              vocab:strength          vocab:` +
+    (req.body.strength ??= 'Should') +
+    ` .
+    }`;
+
+  const provenance =
+    id +
+    `_provenance {
+      ` +
+    id +
+    `_provenance
+      a  oa:Annotation ;
+      oa:hasBody  ` +
+    id +
+    ` ;
+      oa:hasTarget                  [ oa:hasSource <http://hdl.handle.net/10222/43703> ] .
+      ` +
+    id +
+    `
+      ` +
+    sources +
+    ` .
+      }`;
+
+  const publication =
+    id +
+    `_publicationinfo {
+        ` +
+    id +
+    `_head
+        prov:generatedAtTime          '''` +
+    date +
+    `'''^^xsd:dateTime ;
+        prov:wasAttributedTo          data:` +
+    req.body.author +
+    ` .
+      }`;
+
+  return  `INSERT DATA { ${id2CIG} } ; 
+  INSERT DATA { GRAPH ${head} 
+    GRAPH ${body} 
+    GRAPH ${provenance} 
+    GRAPH ${publication} 
+  } `;
+}
 
 /**
  * Create a persistent or in-memory CIG and return label of CIG
@@ -53,7 +151,7 @@ router.post(
       }
     }).catch( ({data='',status}) => res.status(status).send(data));
 
-  });
+});
 
 /**
  * Delete a persistent or in-memory CIG
@@ -98,8 +196,12 @@ router.post("/gprec/delete", function (req, res, next) {
     });
 }); //unchecked!
 
-router.post("/rec/add", function (req, res, next) {
-  action_rec(req, res, config.INSERT);
+router.post("/rec/add", async function (req, res, next) {
+  let query = action_rec(req);
+  logger.debug(query)
+  let {status, data} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
+    
+      res.status(status).json(data);
 });
 
 router.post("/belief/add", function (req, res, next) {
@@ -110,24 +212,14 @@ router.post("/precond/add", function (req, res, next) {
   insert_precond_in_rec(req, res, config.INSERT);
 });
 
-router.post("/rec/delete", function (req, res, next) {
-  var id = req.body.cig_id;
-  var idCig;
-
-  if (id.startsWith(`CIG-`)) {
-    idCig = id;
-    id = id.substring(`CIG-`.length - 1);
-  } else {
-    idCig = `CIG-` + id;
-  }
-
-  const recUri = req.body.rec_uri
-    ? req.body.rec_uri
-    : "data:Rec" + id + "-" + req.body.rec_id;
-
-  utils.sparqlDropGraphs(idCig, recUri, function (err, status) {
-    res.sendStatus(err, status);
-  });
+router.post("/rec/delete", async function (req, res, next) {
+  //droop graphs
+  let query = auxFuncts.sparql_drop_named_graphs(`CIG-${req.body.cig_id}`, `Rec${req.body.cig_id}-${req.body.rec_id}`);
+  let {status, data} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
+  //clear any referencing  on the default graph
+  query = `DELETE { ?s ?p ?o } WHERE { ?s ?p ?o . FILTER (?s = data:Rec${req.body.cig_id}-${req.body.rec_id} || ?o = data:Rec${req.body.cig_id}-${req.body.rec_id} )} `
+  let {status:st, data:dt} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
+  res.status(st).send(dt);
 });
 
 ///create subguideline by referencing assertion  resources which are same as assertion graph names in main guideline

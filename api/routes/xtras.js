@@ -1,30 +1,4 @@
 
-function (error, response, body) {
-  if (!error && response && response.statusCode < 400) {
-    callback(null, 200);
-  } else {
-    let err =
-      "SPARQL update failed at: " +
-      URL +
-      " Query: " +
-      prefixAndSparqlUpdate +
-      ". " +
-      (error ? error : "None") +
-      ". Body: " +
-      (body ? body : "None") +
-      ". Status: " +
-      (response && response.statusCode ? response.statusCode : "401") +
-      ".";
-
-    logger.error(err);
-    //throw new ErrorHandler((response && response.statusCode) ? response.statusCode : "401",
-    //err);
-    callback(
-      error,
-      response && response.statusCode ? response.statusCode : "401"
-    );
-  }
-}
   /**
    *
    * @param {string} dataset_id identifier of Jenna dataset

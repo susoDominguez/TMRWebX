@@ -58,7 +58,7 @@ router.post("/add", async function (req, res) {
 });
 
 router.post("/delete", async function (req, res) {
-  let query = auxFuncts.sparql_drop_named_graphs("beliefs", req.body.id);
+  let query = auxFuncts.sparql_drop_named_graphs("beliefs", `CB${req.body.id}`);
   let {status, data} = await utils.sparqlUpdate("beliefs", query);
   res.status(status).send(data);
 });
