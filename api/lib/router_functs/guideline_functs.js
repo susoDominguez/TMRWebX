@@ -939,7 +939,7 @@ function action_rec(req, res, insertOrDelete) {
   let sources = "";
   const date = new Date().toJSON();
   //this nanopublication is included in the main  guideline (to be added to default graph)
-  const id2CIG = `${id} tmr:isPartOf data:CIG-${req.body.cig_id} .`;
+  const id2CIG = `${id} vocab:isPartOf data:CIG-${req.body.cig_id} .`;
 
   if (req.body.derivedFrom) {
     sources = `  prov:wasDerivedFrom  `;
@@ -1062,12 +1062,12 @@ function insert_CB_in_rec(req, res, insertOrDelete) {
     ` {
       ` +
     recId +
-    ` tmr:basedOn data:CB` +
+    ` vocab:basedOn data:CB` +
     req.body.belief_id +
     ` .
       data:CB` +
     req.body.belief_id +
-    ` tmr:contribution tmr:` +
+    ` vocab:contribution vocab:` +
     req.body.contribution +
     `.
     }`;
@@ -1238,9 +1238,11 @@ function filter_TMR_rec_type(RecUris) {
  * @param {array} head_vars
  * @param {object} binding
  */
-function get_care_action(head_vars, binding) {
-  //logger.debug(head_vars)
-  //logger.debug(binding)
+function get_care_action(head_vars, binding = []) {
+  if (binding == []) return {};
+
+  logger.debug(head_vars);
+  logger.debug(binding);
 
   let careAction = {};
 
@@ -1249,6 +1251,7 @@ function get_care_action(head_vars, binding) {
     //variable name
     let headVar = head_vars[pos];
     logger.debug(`headVar is ${headVar}`);
+
     //check there is a corresponding binding, if not, next head var
     if (!binding.hasOwnProperty(headVar)) continue;
 
@@ -1319,14 +1322,13 @@ function get_care_action(head_vars, binding) {
 }
 
 function get_transition_object(head_vars, binding) {
+  logger.debug(head_vars);
+  logger.debug(binding);
 
-  logger.debug(head_vars)
-  logger.debug(binding)
+  let data_prefix_length = "http://anonymous.org/data/".length;
+  let vocab_prefix_length = "http://anonymous.org/vocab/".length;
 
-  let data_prefix_length = 'http://anonymous.org/data/'.length;
-  let vocab_prefix_length = 'http://anonymous.org/vocab/'.length;
-
-  var data = {
+  let transition_object = {
     id: undefined,
     situationTypes: [
       {
@@ -1334,8 +1336,8 @@ function get_transition_object(head_vars, binding) {
         id: undefined,
         value: {
           code: undefined,
-          display:undefined,
-          system: undefined
+          display: undefined,
+          system: undefined,
         },
       },
       {
@@ -1343,8 +1345,8 @@ function get_transition_object(head_vars, binding) {
         id: undefined,
         value: {
           code: undefined,
-          display:undefined,
-          system: undefined
+          display: undefined,
+          system: undefined,
         },
       },
     ],
@@ -1352,7 +1354,7 @@ function get_transition_object(head_vars, binding) {
       id: undefined,
       display: undefined,
       code: undefined,
-      system: undefined
+      system: undefined,
     },
   };
 
@@ -1372,61 +1374,239 @@ function get_transition_object(head_vars, binding) {
     //for each heading, add a field
     switch (headVar) {
       case "TrId":
-        data.id = value;
+        transition_object.id = value;
         break;
       case "sitFromId":
-        data.situationTypes[0].id = value;
+        transition_object.situationTypes[0].id = value;
         //extract code
         var type = value.slice(data_prefix_length);
-        data.situationTypes[0].value.code ??= type;
+        transition_object.situationTypes[0].value.code ??= type;
         break;
       case "sitToId":
-        data.situationTypes[1].id = value;
+        transition_object.situationTypes[1].id = value;
         //extract code
         var type = value.slice(data_prefix_length);
-        data.situationTypes[1].value.code ??= type;
+        transition_object.situationTypes[1].value.code ??= type;
         break;
       case "propUri":
         //extract code
-        data.property.id = value;
+        transition_object.property.id = value;
         var type = value.slice(data_prefix_length);
-        data.property.code ??= type;
+        transition_object.property.code ??= type;
         break;
       case "sitFromLabel":
-        data.situationTypes[0].value.display = value;
+        transition_object.situationTypes[0].value.display = value;
         break;
       case "sitToLabel":
-        data.situationTypes[1].value.display = value;
+        transition_object.situationTypes[1].value.display = value;
         break;
       case "propLabel":
-        data.property.display = value;
+        transition_object.property.display = value;
         break;
       case "deriv":
         var type = value.slice(vocab_prefix_length);
-        data.effect = type;
+        transition_object.effect = type;
         break;
-      case 'sitFromIdSCT':
-        data.situationTypes[0].value.code = value;
-        data.situationTypes[0].value.system = sctUri;
+      case "sitFromIdSCT":
+        transition_object.situationTypes[0].value.code = value;
+        transition_object.situationTypes[0].value.system = sctUri;
         break;
-      case 'sitToIdSCT':
-        data.situationTypes[1].value.code = value;
-        data.situationTypes[1].value.system = sctUri;
+      case "sitToIdSCT":
+        transition_object.situationTypes[1].value.code = value;
+        transition_object.situationTypes[1].value.system = sctUri;
         break;
-      case 'propUriSCT':
-        data.property.code = value;
-        data.property.system = sctUri;
+      case "propUriSCT":
+        transition_object.property.code = value;
+        transition_object.property.system = sctUri;
         break;
     }
   }
-  return data;
+  return transition_object;
 }
 
-async function get_rdf_atom_as_array(bindings){
-  let expr = jsonata('[**.value]');
-  const result = await expr.evaluate(bindings).catch(err => logger.error(err));
+function get_CB_object(head_vars, binding) {
+  logger.debug(head_vars);
+  logger.debug(binding);
+
+  const cbData = {
+    id: undefined,
+    author: undefined,
+    contribution: undefined,
+    derivedFrom: undefined,
+    hasSource: undefined,
+    wasAttributedTo: undefined,
+    generatedAtTime: undefined,
+    probability: undefined,
+    evidence: undefined,
+    careActionTypeRef: undefined,
+    transition: {
+      id: undefined,
+      effect: undefined,
+      property: {
+        id: undefined,
+        code: undefined,
+        sctId: undefined,
+        system: undefined,
+        display: undefined,
+      },
+      situationTypes: [
+        {
+          id: undefined,
+          type: "hasTransformableSituation",
+          value: {
+            stateOfProp: undefined,
+            sctId: undefined,
+            system: undefined,
+            display: undefined,
+            code: undefined,
+          },
+        },
+        {
+          id: undefined,
+          type: "hasExpectedSituation",
+          value: {
+            stateOfProp: undefined,
+            sctId: undefined,
+            system: undefined,
+            display: undefined,
+            code: undefined,
+          },
+        },
+      ],
+    },
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+    //temporary var
+    let temp;
+
+    //for each CB
+    switch (headVar) {
+      case "derivedFromCB":
+        temp = value.split(",");
+        cbData.derivedFrom = temp;
+        break;
+      case "hasSourcesCB":
+        temp = value.split(",");
+        cbData.hasSource = temp;
+        break;
+      case "contrib":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.contribution = temp.toLowerCase();
+        break;
+      case "actAdmin":
+        cbData.careActionTypeRef = value;
+        break;
+      case "cbUri":
+        cbData.id = value;
+        break;
+      case "freq":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.probability = temp.toLowerCase();
+        break;
+      case "evidence":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.evidence = temp.toLowerCase();
+        break;
+      case "TrUri":
+        cbData.transition.id = value;
+        break;
+      case "propLabel":
+        cbData.transition.property.display = value;
+        break;
+      case "propSctId":
+        cbData.transition.property.sctId = value;
+        cbData.transition.property.system = sctUri;
+        break;
+      case "propUri":
+        cbData.transition.property.id = value;
+        //extract code
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.property.code = temp;
+        break;
+      case "sitFromId":
+        cbData.transition.situationTypes[0].id = value;
+        //extract code
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.situationTypes[0].value.code = temp;
+        break;
+      case "sitToId":
+        cbData.transition.situationTypes[1].id = value;
+        //extract code
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.situationTypes[1].value.code = temp;
+        break;
+      case "sitFromLabel":
+        cbData.transition.situationTypes[0].value.display = value;
+        break;
+      case "sitFromStateOf":
+        cbData.transition.situationTypes[0].value.stateOfProp = value;
+        break;
+      case "sctPreSit":
+        cbData.transition.situationTypes[0].value.sctId = value;
+        cbData.transition.situationTypes[0].value.system = sctUri;
+        break;
+      case "sitToLabel":
+        cbData.transition.situationTypes[1].value.display = value;
+        break;
+      case "sitToStateOf":
+        cbData.transition.situationTypes[1].value.stateOfProp = value;
+        break;
+      case "sitFromSctId":
+        cbData.transition.situationTypes[0].value.sctId = value;
+        cbData.transition.situationTypes[0].value.system = sctUri;
+        break;
+      case "deriv":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.effect = temp.toLowerCase();
+        break;
+      case "sitToSctId":
+        cbData.transition.situationTypes[1].value.sctId = value;
+        cbData.transition.situationTypes[1].value.system = sctUri;
+        break;    
+      default:
+        logger.debug(
+          "switch headVar param: " + headVar + " with value : " + value
+        );
+        break;
+    }
+  } //endOf loop
+  return cbData;
+}
+
+async function get_rdf_atom_as_array(bindings) {
+  let expr = jsonata("[**.value]");
+  const result = await expr
+    .evaluate(bindings)
+    .catch((err) => logger.error(err));
   //logger.debug(result);
   return result;
+}
+
+function sparql_drop_named_graphs(ds_id, id) {
+  let head_graph = `data:CB${id}_head`;
+  let assert_graph = `data:CB${id}_assertion`;
+  let prov_graph = `data:CB${id}_provenance`;
+  let pubInfo_graph = `data:CB${id}_publicationinfo`;
+
+  return ` DROP SILENT GRAPH ${head_graph} ;  DROP SILENT GRAPH ${assert_graph} ; DROP SILENT GRAPH ${prov_graph} ; DROP SILENT GRAPH ${pubInfo_graph} `;
 }
 
 module.exports = {
@@ -1444,5 +1624,7 @@ module.exports = {
   setUri,
   get_care_action,
   get_transition_object,
-  get_rdf_atom_as_array
+  get_rdf_atom_as_array,
+  sparql_drop_named_graphs,
+  get_CB_object,
 };

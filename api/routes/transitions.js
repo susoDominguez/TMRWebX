@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const auxFunct = require('../lib/router_functs/guideline_functs')
+const auxFunct = require('../lib/router_functs/guideline_functs');
 const config = require('../lib/config');
 const logger = require('../config/winston')
 const utils = require('../lib/utils');

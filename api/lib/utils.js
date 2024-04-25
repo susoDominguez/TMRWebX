@@ -2,17 +2,10 @@ const n3 = require("n3");
 const axios = require("axios").default;
 const qs = require("qs");
 const parser = new n3.Parser();
-//const xmlReader = require("xml-reader");
-//const xmlQuery = require("xml-query");
 const { ErrorHandler } = require("./errorHandler.js");
 const config = require("../lib/config");
 const guidelines = require("./prefixes.js");
 const logger = require("../config/winston");
-const { urlencoded } = require("body-parser");
-//const { options } = require("../routes/careAction.js");
-//const { post } = require("../routes/careAction.js");
-//const { response } = require("express");
-const prefix = `http://anonymous.org/tmr/data`;
 
 let reasoner_config = {
   //default
@@ -102,7 +95,6 @@ async function sparqlQuery(dataset_id, query) {
       response.bindings = data.results.bindings;
 
     return response;
-    
   } catch (error) {
     if (error.response) {
       // The request was made and the server responded with a status code
@@ -396,6 +388,16 @@ module.exports = {
     return sparqlQuery(dataset_id, query);
   },
 
+  get_named_subject_in_named_graphs_from_object: async function (dataset_id, instance) {
+    let query =
+      `
+  SELECT DISTINCT ?s
+  WHERE {
+    GRAPH ?g { ?s a ${instance} } .
+       } `;
+    return sparqlQuery(dataset_id, query);
+  },
+
   sparqlGetPreds_Objcts: async function (dataset_id, subject) {
     let query = `
   SELECT DISTINCT ?p ?o
@@ -561,85 +563,76 @@ module.exports = {
   /**
    *
    * @param {string} datasetId
-   * @param {string} belief_Uri
-   * @param {string} TrId
-   * @param {string} actId
+   * @param {string} belief_id
+   * @param {string} tr_ds_id
+   * @param {string} care_act_ds_id
    * @param {(Error, JSON)} callback
    */
-  getBeliefData: async function (datasetId, belief_Uri, TrId, actId) {
+  getBeliefData: async function (
+    datasetId,
+    belief_id,
+    tr_ds_id,
+    care_act_ds_id
+  ) {
     const TrUrl =
       "<http://" +
       config.JENA_HOST +
       ":" +
       config.JENA_PORT +
       "/" +
-      TrId +
+      tr_ds_id +
       "/query>";
+
     const actUrl =
       "<http://" +
       config.JENA_HOST +
       ":" +
       config.JENA_PORT +
       "/" +
-      actId +
+      care_act_ds_id +
       "/query>";
 
-    let query =
-      `
+    let query = `
     SELECT DISTINCT 
     ?freq ?strength ?TrUri
-    ?propUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
-    ?actAdmin ?adminLabel ?actType ?actLabel 
+    ?propUri ?propLabel
+    ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel
+    ?actAdmin ?adminLabel ?actType ?actLabel ?actId
     WHERE {
-      GRAPH  ` +
-      belief_Uri +
-      ` {
-       ` +
-      belief_Uri +
-      ` a  vocab:CausationBelief . 
-       ` +
-      belief_Uri +
-      ` vocab:frequency ?freq .
-       ` +
-      belief_Uri +
-      ` vocab:strength ?strength .
-        ?actAdmin vocab:causes ?TrUri .
-       }
-      SERVICE ` +
-      actUrl +
-      ` {
-        ?actAdmin a owl:NamedIndividual .
-        ?actAdmin a ?adminT .
-        ?actAdmin	?of ?actId .
-        ?actAdmin rdfs:label ?adminLabel .
-        ?actId a owl:NamedIndividual .
-        ?actId a ?actType .
-        ?actId rdfs:label ?actLabel .
-        FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
-           (?of = vocab:administrationOf || ?of = vocab:applicationOf || ?of = vocab:inoculationOf ) ) .
+      GRAPH ${belief_id}_assertion {
+        ${belief_id} a vocab:CausationBelief ; 
+       vocab:frequency ?freq ;
+       vocab:strength ?strength .
+      ?actAdmin vocab:causes ?TrUri .
       }
-        SERVICE ` +
-      TrUrl +
-      ` { 
+      SERVICE ${actUrl}
+      {
+        ?actAdmin a owl:NamedIndividual , ?adminT ;
+       	?of ?actId ;
+        rdfs:label ?adminLabel .
+        ?actId a owl:NamedIndividual , ?actType ;
+        rdfs:label ?actLabel .
+        FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
+           (?of = vocab:administrationOf || ?of = vocab:applicationOf || ?of = vocab:inoculationOf || ?of = vocab:combinedParticipationOf )
+           ) .
+      }
+        SERVICE ${TrUrl}
+       { 
         ?TrUri a vocab:TransitionType ;
-            a owl:NamedIndividual ;
            vocab:hasTransformableSituation ?sitFromId ;
            vocab:hasExpectedSituation ?sitToId ;
              vocab:affects ?propUri ;
            vocab:derivative ?deriv .
-        ?propUri  a  vocab:TropeType ;
-          a owl:NamedIndividual ;
-             rdfs:label ?propTxt .			        
-        ?sitFromId a vocab:SituationType ;
-          a owl:NamedIndividual ;
+        OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
+             rdfs:label ?propLabel } .		        
+        ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitFromLabel .
-        ?sitToId a vocab:SituationType ;
-          a owl:NamedIndividual ;
+        ?sitToId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitToLabel .
       }
     }
     `;
-    return sparqlJSONQuery(datasetId, query);
+    return sparqlQuery(datasetId, query);
   },
 
   /**
