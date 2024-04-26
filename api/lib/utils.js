@@ -83,7 +83,7 @@ async function sparqlQuery(dataset_id, query) {
       qs.stringify({ query: prefixAndSparqlQuery }),
       fuseki_headers
     );
-    logger.debug(data);
+   // logger.debug(data);
 
     let response = { status: status, bindings: [], head_vars: [] };
     if (data.hasOwnProperty("head") && data.head.hasOwnProperty("vars"))
@@ -543,21 +543,22 @@ module.exports = {
    * @param {string} datasetId
    * @param {string} sta_Uri
    */
-  getStatementData: async function (datasetId, sta_uri) {
-    if (!sta_uri) throw new ErrorHandler(500, `statement URI is missing.`);
+  getStatementData: async function (datasetId, sta_id) {
+    if (!sta_id) throw new ErrorHandler(500, `statement URI is missing.`);
     let query = `
 	    SELECT DISTINCT 
-	    ?statementTitle ?statementText ?organizationName ?jurisdiction
+	    ?st_id ?statementTitle ?statementText ?organizationName ?jurisdiction
 	    WHERE {
-		    GRAPH ${sta_uri} {
-           ${sta_uri}  a  vocab:ClinicalStatement ;
-                 vocab:organizationName ?organizationName ;
-                 vocab:organizationJurisdiction ?jurisdiction ;
-                 vocab:statementTitle ?statementTitle ;
-                 vocab:statementText ?statementText .
+		    GRAPH ?st_assertion {
+          ?st_id  a  vocab:ClinicalStatement ;
+                 vocab:OrganizationName ?organizationName ;
+                 vocab:OrganizationJurisdiction ?jurisdiction ;
+                 vocab:hasStatementTitle ?statementTitle ;
+                 vocab:hasStatementText ?statementText .
 		        }
+            FILTER ( ?st_assertion = data:ST${sta_id}_assertion ) .
 	  } `;
-    return sparqlJSONQuery(datasetId, query);
+    return sparqlQuery(datasetId, query);
   },
 
   /**

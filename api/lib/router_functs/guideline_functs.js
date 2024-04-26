@@ -36,47 +36,6 @@ function setUri(label, prefix, fullUri, shortenedURI) {
   return output;
 }
 
-function actionSubguideline(req, res, insertOrDelete) {
-  if (!req.body.description) {
-    req.body.description = "subGuideline " + req.body.subGuideline_id;
-  }
-
-  // SubGuideline declaration:
-  const description =
-    `data:subCIG-` +
-    req.body.subGuideline_id +
-    ` rdf:type vocab:subGuideline, owl:NamedIndividual ;
-                           rdfs:label "` +
-    req.body.description +
-    `"@en ;
-                           vocab:isSubGuidelineOf  data:CIG-` +
-    req.body.guideline_id +
-    ` .`;
-
-  //var to construct the assignment of recs to a subguideline. initial whitespace to be kept
-  var recDeclaration = " ";
-
-  if (req.body.recs_ids) {
-    //nanopublication is part of this subGuideline. contains  pred and object of resource
-    const isPartOf =
-      ` vocab:isPartOf   data:subCIG-` + req.body.subGuideline_id + ` .\n`;
-
-    req.body.recs_ids.split(",").forEach(function (recId) {
-      recDeclaration +=
-        `data:Rec` + req.body.guideline_id + `-` + recId.trim() + isPartOf;
-    });
-  }
-
-  utils.sparqlUpdate(
-    "CIG-" + req.body.guideline_id,
-    description + recDeclaration,
-    insertOrDelete,
-    function (err, status) {
-      res.sendStatus(status);
-    }
-  );
-}
-
 /*
 function (err, actionResults) {
   if (err) {
@@ -446,7 +405,7 @@ function get_rec_data(recURI, guidelineData, type) {
   return recData;
 }
 
-function get_statement_data(recURI, guidelineData) {
+function get_statement_data2(recURI, guidelineData) {
   //recommendation template object
   let recData = {
     id: recURI,
@@ -599,6 +558,62 @@ function get_statement_data(recURI, guidelineData) {
   } //endOf bindingObj
 
   return recData;
+}
+
+
+function get_ST_data(head_vars,binding){
+  logger.debug(head_vars);
+  logger.debug(binding);
+
+  if (binding == undefined  || binding == []) return {};
+
+  let stData = {
+    id: undefined,
+    author: undefined,
+    hasStatementTitle: undefined,
+    hasStatementText: undefined,
+    organization: undefined,
+    jurisdiction: undefined,
+    derivedFrom: undefined,
+    hasSource: undefined,
+    wasAttributedTo: undefined,
+    generatedAtTime: undefined,
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    logger.debug(`headVar is ${headVar}`);
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+    //for each heading, add a field
+    switch (headVar) {
+      case "st_id":
+        stData.id = value;
+        break;
+      case "statementTitle":
+        stData.hasStatementTitle = value;
+        break;
+      case "statementText":
+        stData.hasStatementText = value;
+        break;
+      case "organizationName":
+        stData.organization = value;
+        break;
+      case "jurisdiction":
+        stData.jurisdiction = value.split(", ");
+        break;
+    }
+  } //endOf loop
+  
+
+  return stData;
 }
 
 function get_rec_json_data(recURI, guidelineData, type) {
@@ -1109,110 +1124,7 @@ function insert_precond_in_rec(req, res, insertOrDelete) {
   );
 }
 
-function action_gprec(req, res, insertOrDelete) {
-  //data id for this rec
-  const id = `data:GPRec` + req.body.cig_id + `-` + req.body.gpRec_id;
 
-  //this nanopublication is included in the main  guideline (to be added to default graph)
-  const id2CIG = id + ` vocab:isPartOf data:CIG-` + req.body.cig_id + ` .`;
-
-  // Graph format:
-  const head =
-    id +
-    `_head { 
-          ` +
-    id +
-    `_head
-              a     nanopub:Nanopublication ;
-              nanopub:hasAssertion        ` +
-    id +
-    ` ;
-              nanopub:hasProvenance       ` +
-    id +
-    `_provenance ;
-              nanopub:hasPublicationInfo  ` +
-    id +
-    `_publicationinfo .
-    }`;
-
-  const body =
-    id +
-    ` {
-      ` +
-    id +
-    `
-              a   vocab:GoodPracticeRecommendation ;
-              rdfs:label  '''${req.body.gpRec_label}'''@en ;
-              vocab:aboutNotificationOf  data:ST` +
-    req.body.statement_id +
-    ` ;
-              vocab:partOf            data:CIG-` +
-    req.body.cig_id +
-    ` ;
-  
-    }`;
-
-  const provenance =
-    id +
-    `_provenance {
-      ` +
-    id +
-    `
-              prov:wasDerivedFrom  <` +
-    (req.body.source ? req.body.source : "unknown") +
-    `> .
-  
-      ` +
-    id +
-    `_provenance
-              a             oa:Annotation ;
-              oa:hasBody    ` +
-    id +
-    ` ;
-              oa:hasTarget  [ oa:hasSource  <http://hdl.handle.net/10222/43703> ] .
-    }`;
-
-  const publication =
-    id +
-    `_publicationinfo {
-        ` +
-    id +
-    `_head
-              prov:generatedAtTime  "2020-03-01"^^xsd:dateTime ;
-              prov:wasAttributedTo  data:` +
-    req.body.author +
-    ` .
-    }`;
-  const graph = `GRAPH ${head} \n GRAPH ${body} \n GRAPH ${provenance} \n GRAPH ${publication}`;
-
-  utils.sparqlUpdate(
-    "CIG-" + req.body.cig_id,
-    graph,
-    insertOrDelete,
-    function (err, status) {
-      if (err) {
-        logger.debug(
-          `error when updating good practice recommendation: ${err}`
-        );
-        res.status(status).end();
-      } else {
-        //add assertion id to default graph as part of CIG
-        if (status === 200) {
-          utils.sparqlUpdate(
-            "CIG-" + req.body.cig_id,
-            id2CIG,
-            insertOrDelete,
-            function (err2, status2) {
-              if (err2) logger.debug(`action_gprec Error: ${err2}`);
-
-              res.status(status2).end();
-            }
-          );
-        }
-      }
-    }
-  );
-}
 
 //filter out vocab types when unnecesary for the triggered router
 function filter_vocab_rec_type(RecUris) {
@@ -1606,14 +1518,12 @@ function sparql_drop_named_graphs(ds_id, id) {
 
 module.exports = {
   filter_vocab_rec_type,
-  action_gprec,
   insert_precond_in_rec,
   insert_CB_in_rec,
   action_rec,
   get_rec_json_data,
-  get_statement_data,
+  get_ST_data,
   get_rec_data,
-  actionSubguideline,
   vocabDataUri,
   sctUri,
   setUri,

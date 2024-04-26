@@ -10,10 +10,8 @@ const auxFuncts = require("../lib/router_functs/guideline_functs");
 const { handleError, ErrorHandler } = require("../lib/errorHandler");
 const logger = require("../config/winston");
 const {
-  action_gprec,
   insert_precond_in_rec,
   insert_CB_in_rec,
-  actionSubguideline,
   tmrDataUri,
   get_statement_data,
   get_rec_json_data,
@@ -21,6 +19,83 @@ const {
   setUri,
 } = require("../lib/router_functs/guideline_functs.js");
 const { error } = require("console");
+
+function action_gprec(req) {
+  //data id for this rec
+  const id = `data:GPRec` + req.body.cig_id + `-` + req.body.gpRec_id;
+
+  //this nanopublication is included in the main  guideline (to be added to default graph)
+  const id2CIG = id + ` vocab:isPartOf data:CIG-` + req.body.cig_id + ` .`;
+
+  // Graph format:
+  const head =
+    id +
+    `_head { 
+          ` +
+    id +
+    `_head
+              a     nanopub:Nanopublication ;
+              nanopub:hasAssertion        ` +
+    id +
+    `_assertion ;
+              nanopub:hasProvenance       ` +
+    id +
+    `_provenance ;
+              nanopub:hasPublicationInfo  ` +
+    id +
+    `_publicationinfo .
+    }`;
+
+  const body =
+    id +
+    `_assertion {
+      ` +
+    id +
+    `
+              a   vocab:GoodPracticeRecommendation ;
+              rdfs:label  '''${req.body.gpRec_label}'''@en ;
+              vocab:aboutNotificationOf  data:ST` +
+    req.body.statement_id +
+    ` ;
+              vocab:partOf            data:CIG-` +
+    req.body.cig_id +
+    ` ;
+  
+    }`;
+
+  const provenance =
+    id +
+    `_provenance {
+      ` +
+    id +
+    `
+              prov:wasDerivedFrom  <` +
+    (req.body.source ? req.body.source : "unknown") +
+    `> .
+  
+      ` +
+    id +
+    `_provenance
+              a             oa:Annotation ;
+              oa:hasBody    ` +
+    id +
+    ` ;
+              oa:hasTarget  [ oa:hasSource  <http://hdl.handle.net/10222/43703> ] .
+    }`;
+
+  const publication =
+    id +
+    `_publicationinfo {
+        ` +
+    id +
+    `_head
+              prov:generatedAtTime  "2020-03-01"^^xsd:dateTime ;
+              prov:wasAttributedTo  data:` +
+    req.body.author +
+    ` .
+    }`;
+  return `  ${id2CIG}  \n GRAPH ${head} \n GRAPH ${body} \n GRAPH ${provenance} \n GRAPH ${publication}`;
+}
 
 function action_rec(req) {
   //data id for this rec
@@ -120,13 +195,39 @@ function action_rec(req) {
   } `;
 }
 
+function actionSubguideline(req) {
+
+  let subciguri =`data:subCIG` + req.body.cig_id + `-` + req.body.subcig_id ;
+
+  if (!req.body.description) {
+    req.body.description = "subGuideline " + subciguri;
+  }
+
+  // SubGuideline declaration:
+  const description = subciguri + ` rdf:type vocab:SubGuideline, owl:NamedIndividual ;
+                           rdfs:label "` + req.body.description + `"@en ;
+                           vocab:isSubGuidelineOf  data:CIG-` + req.body.cig_id + ` .` ;
+
+  //var to construct the assignment of recs to a subguideline. initial whitespace to be kept
+  var recDeclaration = " ";
+
+  if (req.body.recs_ids) {
+    //nanopublication is part of this subGuideline. contains  pred and object of resource
+    const isPartOf = ` vocab:isPartOf ${subciguri} . \n`;
+
+    req.body.recs_ids.split(",").forEach(function (recId) {
+      recDeclaration +=
+        `data:Rec` + req.body.cig_id + `-` + recId.trim() + isPartOf ;
+    });
+  }
+
+  return description + recDeclaration ;
+}
+
 /**
  * Create a persistent or in-memory CIG and return label of CIG
  */
-router.post(
-  "/dataset/create",
-  bodyParser.json(),
-  async function (req, res) {
+router.post("/dataset/create", bodyParser.json(),async function (req, res) {
     //if not id given, use DATE
     let id = req.body.cig_id ? req.body.cig_id : new Date().toISOString();
     //add prefix if not given
@@ -168,33 +269,25 @@ router.post("/dataset/delete", function (req, res, next) {
 
 }); //checked!
 
-router.post("/gprec/add", function (req, res, next) {
-  action_gprec(req, res, config.INSERT);
+router.post("/gprec/add", async function (req, res, next) {
+
+  let  content = action_gprec(req);
+
+  let query = `INSERT DATA { ${content} }`;
+  logger.debug(query)
+  let {status, data} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
+    
+      res.status(status).json(data);
 }); //unchecked!
 
-router.post("/gprec/delete", function (req, res, next) {
-  var id = req.body.cig_id;
-  var idCig;
-
-  if (id.startsWith(`CIG-`)) {
-    idCig = id;
-    id = id.substring(`CIG-`.length - 1);
-  } else {
-    idCig = `CIG-` + id;
-  }
-
-  const gpRecUri = req.body.gprec_uri
-    ? req.body.gprec_uri
-    : "data:GPRec" + id + "-" + req.body.gprec_id;
-
-  utils
-    .sparqlDropGraphsAsync(idCig, gpRecUri)
-    .then((st) => res.status(200).send(st))
-    .catch((err) => {
-      logger.error(err);
-      return res.status(500);
-    });
-}); //unchecked!
+router.post("/gprec/delete", async function (req, res, next) {
+  let query = auxFuncts.sparql_drop_named_graphs(`CIG-${req.body.cig_id}`, `GPRec${req.body.cig_id}-${req.body.gpRec_id}`);
+  let {status, data} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
+  //clear any referencing  on the default graph
+  query = `DELETE { ?s ?p ?o } WHERE { ?s ?p ?o . FILTER (?s = data:GPRec${req.body.cig_id}-${req.body.gpRec_id} || ?o = data:GPRec${req.body.cig_id}-${req.body.gpRec_id} )} `
+  let {status:st, data:dt} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
+  res.status(st).send(dt);
+}); 
 
 router.post("/rec/add", async function (req, res, next) {
   let query = action_rec(req);
@@ -204,6 +297,7 @@ router.post("/rec/add", async function (req, res, next) {
       res.status(status).json(data);
 });
 
+//TODO: review
 router.post("/belief/add", function (req, res, next) {
   insert_CB_in_rec(req, res, config.INSERT);
 });
@@ -213,7 +307,7 @@ router.post("/precond/add", function (req, res, next) {
 });
 
 router.post("/rec/delete", async function (req, res, next) {
-  //droop graphs
+  //drop graphs
   let query = auxFuncts.sparql_drop_named_graphs(`CIG-${req.body.cig_id}`, `Rec${req.body.cig_id}-${req.body.rec_id}`);
   let {status, data} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
   //clear any referencing  on the default graph
@@ -223,13 +317,25 @@ router.post("/rec/delete", async function (req, res, next) {
 });
 
 ///create subguideline by referencing assertion  resources which are same as assertion graph names in main guideline
-router.post("/subguideline/add", function (req, res, next) {
-  actionSubguideline(req, res, config.INSERT);
+router.post("/subguideline/add", async function (req, res, next) {
+
+  let content = actionSubguideline(req) ;
+
+  let query = ` INSERT DATA { ${content} } `;
+
+  let {status, data} = await utils.sparqlUpdate( "CIG-" + req.body.cig_id, query) ;
+
+  res.status(status).send(data);
+
 });
 
 //delete subguideline along with its components
-router.post("/subguideline/delete", function (req, res, next) {
-  actionSubguideline(req, res, config.DELETE);
+router.post("/subguideline/delete", async function (req, res, next) {
+  let subciguri =`data:subCIG` + req.body.cig_id + `-` + req.body.subcig_id ;
+   //clear any referencing  on the default graph
+   query = `DELETE { ?s ?p ?o } WHERE { ?s ?p ?o . FILTER (?s = ${subciguri} || ?o = ${subciguri} )} `
+   let {status:st, data:dt} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
+   res.status(st).send(dt);
 });
 
 ////////////////////////
@@ -281,17 +387,6 @@ router.post("/rec/all/get/", async function (req, res, next) {
       `missing parameters in endpoint /rec/all/get. Rec URI is ${req.body.uri}.`
     );
     return res.sendStatus(404);
-  }
-
-  let idCig, cig;
-  //separate lable id from dataset id
-  if (req.body.cig_id.startsWith(`CIG-`)) {
-    idCig = req.body.cig_id.trim();
-    //remove it
-    cig = req.body.cig_id.trim().substring(`CIG-`.length);
-  } else {
-    cig = req.body.cig_id;
-    idCig = `CIG-` + req.body.cig_id;
   }
 
   const recURI = req.body.uri
@@ -409,58 +504,6 @@ router.post("/gprec/all/get/", async function (req, res, next) {
   }
 });
 
-/**
- * get URIs of all Recommendations in a given CIG
- */
-router.post("/rec/get", async function (req, res) {
-  try {
-    let { cig_id } = req.body;
-    if (!cig_id)
-      throw new ErrorHandler(
-        400,
-        "Router /rec/get: no cig_id parameter provided."
-      );
-
-    let rec_uris = await utils.sparqlGetSubjectAllNamedGraphsAsync(
-      cig_id.startsWith(`CIG-`) ? cig_id : `CIG-` + cig_id,
-      "tmr:ClinicalRecommendation"
-    );
-    if (!rec_uris || (Array.isArray(rec_uris) && rec_uris.length < 1))
-      throw new ErrorHandler(
-        400,
-        "Router /rec/get Error: no Rec URIs retrieved."
-      );
-
-    return res.status(200).json(rec_uris);
-  } catch (err) {
-    logger.error(JSON.stringify(err.message));
-    return res.status(err.statusCode).end();
-  }
-}); //checked
-
-/**
- * get URIs of all Good Practice Recommendations (so, no care actions involved) in a given CIG
- */
-router.post("/gprec/get", function (req, res, next) {
-  if (req.body.cig_id) {
-    var cigId = req.body.cig_id;
-
-    cigId = cigId.startsWith(`CIG-`) ? cigId : `CIG-` + cigId;
-    try {
-      utils.sparqlGetSubjectAllNamedGraphs(
-        cigId,
-        "tmr:GoodPracticeRecommendation",
-        function (err, RecUris) {
-          err ? res.status(400).end() : res.send(filter_TMR_rec_type(RecUris));
-        }
-      );
-    } catch (error) {
-      logger.error(error);
-    }
-  } else {
-    res.status(400).end();
-  }
-}); //checked
 
 /**
  * add nanopub graphs from one existing CIG to another

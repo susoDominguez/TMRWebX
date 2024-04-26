@@ -11,7 +11,7 @@ router.post('/get', async function(req, res, next) {
     let result = await auxFuncts.get_rdf_atom_as_array(bindings);
     return res.status(status).send(result);
   } else {
-    return res.status(status).json({});
+    return res.status(status).json([]);
   }
 
 });
