@@ -22,12 +22,12 @@ function action(req) {
   // Belief format:
   const head = ` GRAPH ${id}_head {
     ${id} a nanopub:Nanopublication ;
-              nanopub:hasAssertion ${id}_assertion ;
+              nanopub:hasAssertion ${id} ;
               nanopub:hasProvenance ${id}_provenance ;
               nanopub:hasPublicationInfo  ${id}_publicationinfo . 
       } `;
 
-  const assertion = ` GRAPH ${id}_assertion {
+  const assertion = ` GRAPH ${id} {
       ${id} a vocab:ClinicalStatement ;
        vocab:OrganizationName "${req.body.organization_name}" ;
           vocab:OrganizationJurisdiction "${req.body.geographical_jurisdiction}" ;

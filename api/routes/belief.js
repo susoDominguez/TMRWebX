@@ -22,21 +22,21 @@ function action(req) {
   // Belief format:
   const head = ` GRAPH ${id}_head {
     ${id} a nanopub:Nanopublication ;
-              nanopub:hasAssertion ${id}_assertion ;
+              nanopub:hasAssertion ${id} ;
               nanopub:hasProvenance ${id}_provenance ;
               nanopub:hasPublicationInfo  ${id}_publicationinfo . 
       } `;
 
-  const assertion = ` GRAPH ${id}_assertion {
+  const assertion = ` GRAPH ${id} {
       data:ActAdminister${req.body.care_action_id} vocab:causes data:Tr${req.body.transition_id} .
-      ${id} a vocab:CausationBelief ;
-          vocab:strength vocab:${req.body.strength} ;
-          vocab:frequency   vocab:${req.body.frequency} . 
+                      ${id} a vocab:CausationBelief ;
+          vocab:strength '''${req.body.strength}''' ;
+          vocab:frequency   '''${req.body.frequency}''' . 
   } `;
 
   const provenance = ` GRAPH ${id}_provenance {
     ${id}_provenance a  oa:Annotation ;
-           oa:hasBody ${id}_assertion ;
+           oa:hasBody ${id} ;
            prov:wasDerivedFrom ${sources} . } `;
 
   // oa:hasTarget [ oa:hasSource <http://hdl.handle.net/10222/43703> ] . `
@@ -64,7 +64,7 @@ router.post("/delete", async function (req, res) {
 });
 
 router.post("/all/get/", async function (req, res, next) {
-  const id = "data:CB"+req.body.id ;
+  const id =  "data:CB"+req.body.id;
 
   try{
   let {status,head_vars,bindings} = await utils.getBeliefData("beliefs",id,"transitions","careActions");

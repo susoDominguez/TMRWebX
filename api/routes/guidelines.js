@@ -74,46 +74,6 @@ router.post("/interactions", function (req, res, next) {
 });
 
 
-/**
- * get URIs of all Recommendations in a given CIG
- */
-router.post("/recs/get", async function (req, res) {
 
-    let { cig_id } = req.body;
-    if (!cig_id)
-      throw new ErrorHandler(
-        400,
-        "Router /rec/get: no cig_id parameter provided."
-      );
-
-    let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(`CIG-` + cig_id, "vocab:ClinicalRecommendation");
-    let results = await auxFuncts.get_rdf_atom_as_array(bindings);
-    
-    return res.status(status).json(results);
-}); //checked
-
-/**
- * get URIs of all Good Practice Recommendations (so, no care actions involved) in a given CIG
- */
-router.post("/gprec/get", function (req, res, next) {
-  if (req.body.cig_id) {
-    var cigId = req.body.cig_id;
-
-    cigId = cigId.startsWith(`CIG-`) ? cigId : `CIG-` + cigId;
-    try {
-      utils.sparqlGetSubjectAllNamedGraphs(
-        cigId,
-        "tmr:GoodPracticeRecommendation",
-        function (err, RecUris) {
-          err ? res.status(400).end() : res.send(filter_TMR_rec_type(RecUris));
-        }
-      );
-    } catch (error) {
-      logger.error(error);
-    }
-  } else {
-    res.status(400).end();
-  }
-}); //checked
 
 module.exports = router;

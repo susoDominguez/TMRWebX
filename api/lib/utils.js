@@ -66,6 +66,9 @@ function nList(list, n) {
  * @param {(Error, [])} callback callback returns empty array if err found
  */
 async function sparqlQuery(dataset_id, query) {
+  
+  logger.info(`query: ${query}`);
+
   //add URL to axios config
   let url = `${jena_baseUrl}/${dataset_id}/query`;
 
@@ -119,6 +122,7 @@ async function sparqlQuery(dataset_id, query) {
     };
   }
 }
+
 
 /**
  *
@@ -549,14 +553,14 @@ module.exports = {
 	    SELECT DISTINCT 
 	    ?st_id ?statementTitle ?statementText ?organizationName ?jurisdiction
 	    WHERE {
-		    GRAPH ?st_assertion {
+		    GRAPH ?st_id {
           ?st_id  a  vocab:ClinicalStatement ;
                  vocab:OrganizationName ?organizationName ;
                  vocab:OrganizationJurisdiction ?jurisdiction ;
                  vocab:hasStatementTitle ?statementTitle ;
                  vocab:hasStatementText ?statementText .
 		        }
-            FILTER ( ?st_assertion = data:ST${sta_id}_assertion ) .
+            FILTER ( ?st_id = data:ST${sta_id} ) .
 	  } `;
     return sparqlQuery(datasetId, query);
   },
@@ -600,7 +604,7 @@ module.exports = {
     ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel
     ?actAdmin ?adminLabel ?actType ?actLabel ?actId
     WHERE {
-      GRAPH ${belief_id}_assertion {
+      GRAPH ${belief_id} {
         ${belief_id} a vocab:CausationBelief ; 
        vocab:frequency ?freq ;
        vocab:strength ?strength .
@@ -639,22 +643,25 @@ module.exports = {
   /**
    *
    * @param {string} cigId
-   * @param {string} recAssertUri
+   * @param {string} rec_uri
    * @param {string} beliefDsId
    * @param {string} TrDsId
    * @param {string} caDsId
    */
   getRecData_multiple_CBs: async function (
     cigId,
-    recAssertUri,
+    rec_uri,
     cbDsId,
     trDsId,
     caDsId
   ) {
-    const recAssertURI = `<${recAssertUri}>`;
-    const recProvURI = `<${recAssertUri}_provenance>`;
-    const recPubInfoURI = `<${recAssertUri}_publicationinfo>`;
-    const recHeadURI = `<${recAssertUri}_head>`;
+
+
+    const recAssertURI = `<${rec_uri}>`;
+    const recProvURI = `<${rec_uri}_provenance>`;
+    const recPubInfoURI = `<${rec_uri}_publicationinfo>`;
+    const recHeadURI = `<${rec_uri}_head>`;
+
 
     const actUrl =
       "<http://" +
@@ -664,6 +671,7 @@ module.exports = {
       "/" +
       caDsId +
       "/query>";
+
     const cbUrl =
       "<http://" +
       config.JENA_HOST +
@@ -672,6 +680,7 @@ module.exports = {
       "/" +
       cbDsId +
       "/query>";
+
     const trUrl =
       "<http://" +
       config.JENA_HOST +
@@ -703,23 +712,22 @@ module.exports = {
             prov:wasAttributedTo  ?attributedTo .
       }
       GRAPH ${recAssertURI} {
-          ${recAssertURI} a  vocab:ClinicalRecommendation ;
+        ${recAssertURI} a  vocab:ClinicalRecommendation ;
                vocab:aboutExecutionOf ?actAdmin ;
                vocab:strength ?strength ;
                rdfs:label ?text ;
-               vocab:basedOn ?cbUri .
-            ?cbUri vocab:contribution ?contrib .
-            ${recAssertURI} vocab:partOf ?partOf .  
+               vocab:basedOn ?cbUri ;
+               vocab:partOf ?partOf .
+            ?cbUri vocab:contribution ?contrib . 
         OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
       }
       SERVICE ${actUrl} {
-        ?actAdmin a owl:NamedIndividual .
-        ?actAdmin a ?adminT .
-        ?actAdmin	?Of ?actId .
-        ?actAdmin rdfs:label ?adminLabel .
-        ?actId a owl:NamedIndividual .
-        ?actId a ?actType .
-        ?actId rdfs:label ?actLabel .
+        ?actAdmin a owl:NamedIndividual , ?adminT ;
+       	?Of ?actId ;
+       rdfs:label ?adminLabel .
+        ?actId a owl:NamedIndividual ;
+       a ?actType ;
+        rdfs:label ?actLabel .
         OPTIONAL { ?actId vocab:snomedCode  ?sctDrg . }
         OPTIONAL { ?actId vocab:hasComponent  ?hasComponent . 
           ?hasComponent  a owl:NamedIndividual ;
@@ -729,7 +737,7 @@ module.exports = {
           ?compActId a owl:NamedIndividual ;
                      a ?compActType ;
                      rdfs:label ?compActLabel . }
-        FILTER (?actType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf)) .
+        FILTER (?actType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:inoculationOf || ?Of =vocab:combinedParticipationOf)) .
       }
       SERVICE ${cbUrl} {
         GRAPH  ?cbUri {
@@ -765,7 +773,9 @@ module.exports = {
     }
        `;
 
-    return sparqlJSONQuery(cigId, query);
+  logger.info(`query: ${query}`);
+
+    return sparqlQuery(cigId, query);
   },
 
   /**
@@ -780,8 +790,7 @@ module.exports = {
     cigId,
     recAssertUri,
     StatmntsId,
-    TrDsId,
-    actDsId
+    TrDsId
   ) {
     const recHeadURI = `<` + recAssertUri + `_head>`;
     const recAssertURI = `<` + recAssertUri + `>`;
@@ -866,7 +875,7 @@ module.exports = {
             ?sctPrecond ?precondLbl ?generatedTime ?attributedTo ?provAttributedTo
        `;
 
-    return sparqlJSONQuery(cigId, query);
+    return sparqlQuery(cigId, query);
   },
 
   /**
@@ -912,7 +921,7 @@ module.exports = {
       actDsId +
       "/query>";
 
-    let query = ` SELECT DISTINCT ?text ?actAdmin ?cbUri ?strength ?contrib ?sourceOfRec ?partOf
+    let query = ` SELECT DISTINCT ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf
 						?freq ?evidence ?TrUri ?PropUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
 						?adminT ?actId ?adminLabel ?actType ?actLabel  ?sitFromSctId ?sitToSctId
 	    WHERE { 
@@ -925,12 +934,6 @@ module.exports = {
 			?cbUri vocab:contribution ?contrib .
 			OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
 			OPTIONAL { ${recAssertURI} vocab:partOf ?partOf . } 
-			}
-			GRAPH ${recProvURI} {
-        ${recProvURI} a  oa:Annotation ; 
-                      oa:hasBody    ${recAssertURI} . 
-        OPTIONAL { ${recAssertURI} vocab:partOf ?partOf . }
-      ${recAssertURI} prov:wasDerivedFrom ?sourceOfRec .
 			} 
 			SERVICE ${cbUrl} {
 				GRAPH  ?cbUri {
@@ -956,17 +959,18 @@ module.exports = {
 				?sitToId vocab:snomedCode ?sitToSctId .
 			} 
 			SERVICE ${actUrl} {
-				?actAdmin a owl:NamedIndividual .
-				?actAdmin a ?adminT .
-				?actAdmin	?Of ?actId .
-				?actAdmin rdfs:label ?adminLabel .
-				?actId a owl:NamedIndividual .
-				?actId a ?actType .
-				?actId rdfs:label ?actLabel .
-				FILTER (?actType != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf) && ?adminT != owl:NamedIndividual ) .
+				?actAdmin a owl:NamedIndividual ;
+				 a ?adminT ;
+					?Of ?actId ;
+				 rdfs:label ?adminLabel .
+				?actId a owl:NamedIndividual ;
+				 a ?actType ;
+				rdfs:label ?actLabel .
+				FILTER (?actType != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf  || ?Of = vocab:inoculationOf  || ?Of = vocab:combinedParticipationOf) && ?adminT != owl:NamedIndividual ) .
 			} 
- 	   }`;
+ 	   }  `;
 
-    return sparqlJSONQuery(cigId, query);
+    return sparqlQuery(cigId, query);
   },
+
 };

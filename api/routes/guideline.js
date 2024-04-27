@@ -20,6 +20,8 @@ const {
 } = require("../lib/router_functs/guideline_functs.js");
 const { error } = require("console");
 
+const dataUri = "http://anonymous.org/data";
+
 function action_gprec(req) {
   //data id for this rec
   const id = `data:GPRec` + req.body.cig_id + `-` + req.body.gpRec_id;
@@ -37,7 +39,7 @@ function action_gprec(req) {
               a     nanopub:Nanopublication ;
               nanopub:hasAssertion        ` +
     id +
-    `_assertion ;
+    ` ;
               nanopub:hasProvenance       ` +
     id +
     `_provenance ;
@@ -125,7 +127,7 @@ function action_rec(req) {
               a     nanopub:Nanopublication ;
               nanopub:hasAssertion        ` +
     id +
-    `_assertion ;
+    ` ;
               nanopub:hasProvenance       ` +
     id +
     `_provenance ;
@@ -136,7 +138,7 @@ function action_rec(req) {
 
   const body =
     id +
-    `_assertion {
+    ` {
       ` +
     id +
     `  a   vocab:ClinicalRecommendation ;
@@ -148,10 +150,10 @@ function action_rec(req) {
     ` ;
               vocab:partOf            data:CIG-` +
     req.body.cig_id +
-    ` ;
-              vocab:strength          vocab:` +
-    (req.body.strength ??= 'Should') +
-    ` .
+    ` ; 
+    vocab:basedOn           data:CB${req.body.belief_id} ;
+              vocab:strength       '''` + req.body.strength +`''' .
+    data:CB${req.body.belief_id}  vocab:contribution  '''${req.body.contribution}''' .
     }`;
 
   const provenance =
@@ -164,7 +166,7 @@ function action_rec(req) {
       oa:hasBody  ` +
     id +
     ` ;
-      oa:hasTarget                  [ oa:hasSource <http://hdl.handle.net/10222/43703> ] .
+      oa:hasTarget     [ oa:hasSource <http://hdl.handle.net/10222/43703> ] .
       ` +
     id +
     `
@@ -227,7 +229,7 @@ function actionSubguideline(req) {
 /**
  * Create a persistent or in-memory CIG and return label of CIG
  */
-router.post("/dataset/create", bodyParser.json(),async function (req, res) {
+router.post("/create", bodyParser.json(),async function (req, res) {
     //if not id given, use DATE
     let id = req.body.cig_id ? req.body.cig_id : new Date().toISOString();
     //add prefix if not given
@@ -257,7 +259,7 @@ router.post("/dataset/create", bodyParser.json(),async function (req, res) {
 /**
  * Delete a persistent or in-memory CIG
  */
-router.post("/dataset/delete", function (req, res, next) {
+router.post("/delete", function (req, res, next) {
   let id = req.body.cig_id;
 
   if (!id) return res.status(404).send('Missing CIG Id parameter.')
@@ -297,15 +299,6 @@ router.post("/rec/add", async function (req, res, next) {
       res.status(status).json(data);
 });
 
-//TODO: review
-router.post("/belief/add", function (req, res, next) {
-  insert_CB_in_rec(req, res, config.INSERT);
-});
-
-router.post("/precond/add", function (req, res, next) {
-  insert_precond_in_rec(req, res, config.INSERT);
-});
-
 router.post("/rec/delete", async function (req, res, next) {
   //drop graphs
   let query = auxFuncts.sparql_drop_named_graphs(`CIG-${req.body.cig_id}`, `Rec${req.body.cig_id}-${req.body.rec_id}`);
@@ -338,40 +331,53 @@ router.post("/subguideline/delete", async function (req, res, next) {
    res.status(st).send(dt);
 });
 
+/**
+ * get URIs of all Recommendations in a given CIG
+ */
+router.post("/recs/get", async function (req, res) {
+
+  let { cig_id } = req.body;
+  if (!cig_id)
+    throw new ErrorHandler(
+      400,
+      "Router /rec/get: no cig_id parameter provided."
+    );
+
+  let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(`CIG-` + cig_id, "vocab:ClinicalRecommendation");
+  let results = await auxFuncts.get_rdf_atom_as_array(bindings);
+  
+  return res.status(status).json(results);
+}); //checked
+
+/**
+* get URIs of all Good Practice Recommendations (so, no care actions involved) in a given CIG
+*/
+router.post("/gprecs/get", async function (req, res, next) {
+  let { cig_id } = req.body;
+  if (!cig_id)
+    throw new ErrorHandler(
+      400,
+      "Router /rec/get: no cig_id parameter provided."
+    );
+
+  let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(`CIG-` + cig_id, "vocab:GoodPracticeRecommendation");
+  let results = await auxFuncts.get_rdf_atom_as_array(bindings);
+  
+  return res.status(status).json(results);
+}); //checked
+
+//TODO: review
+router.post("/belief/add", function (req, res, next) {
+  insert_CB_in_rec(req, res, config.INSERT);
+});
+
+router.post("/precond/add", function (req, res, next) {
+  insert_precond_in_rec(req, res, config.INSERT);
+});
+
+
 ////////////////////////
 
-router.post("/careAction/get", async function (req, res, next) {
-  var postData = "";
-
-  if (req.body.rec_id) {
-    postData = require("querystring").stringify({
-      guideline_id: `CIG-` + req.body.cig_id,
-      rec_id:
-        "http://anonymous.org/tmr/data/Rec" +
-        req.body.cig_id +
-        "-" +
-        req.body.rec_id,
-    });
-  } else {
-    //this one will be more accurate when combining guidelines
-    postData = require("querystring").stringify({
-      guideline_id: `CIG-` + req.body.cig_id,
-      rec_URI: req.body.rec_URI,
-    });
-  }
-
-  let response = {};
-  let st = 200;
-  try {
-    response = await utils.callPrologServerAsync("drug", postData, res);
-  } catch (error) {
-    logger.error(JSON.stringify(error));
-    st = 500;
-    response.error = `Prolog server has failed for dataset ${req.body.cig_id} and recommendation URI ${req.body.rec_id}`;
-  } finally {
-    res.status(st).json(response);
-  }
-});
 
 router.post("/rec/all/get/", async function (req, res, next) {
   //checks
@@ -389,48 +395,38 @@ router.post("/rec/all/get/", async function (req, res, next) {
     return res.sendStatus(404);
   }
 
-  const recURI = req.body.uri
-    ? req.body.uri.trim()
-    : req.body.id.startsWith(`Rec`)
-    ? `${tmrDataUri}/${req.body.id.trim()}`
-    : `${tmrDataUri}/Rec${cig} -${req.body.id.trim()}`;
+  const cigId = req.body.cig_id.startsWith(`CIG-`) ? req.body.cig_id.trim() : `CIG-${req.body.cig_id.trim()}`;
+  const cig_id = req.body.cig_id.startsWith(`CIG-`) ? req.body.cig_id.substring(4) : req.body.cig_id.trim();
+  const recURI = req.body.uri ? req.body.uri.trim() : `${dataUri}/Rec${cig_id}-${req.body.id.trim()}`;
+  
 
-  logger.debug(`rec uri is ${recURI} and cig id is ${idCig}.`);
+  logger.debug(`rec uri is ${recURI} and cigId is ${cigId} and cig_id is ${cig_id}.`);
 
-  let knowledge_rec;
   try {
-    knowledge_rec = await utils.getRecData_multiple_CBsAsync(
-      idCig,
+    
+    let {status, bindings, head_vars} = await utils.getRecData(
+      cigId,
       recURI,
       "beliefs",
       "transitions",
       "careActions"
     );
-  } catch (err) {
-    logger.error(
-      `error when retrieving good practice recommendation at getRecData_multiple_CBs with cig ${idCig} and rec URI ${recURI}`
-    );
-    return res.status(500);
-  }
-  //format data
-  let st_json = {};
-  let status = 200;
-  try {
-    //format knowledge to JSON
-    st_json = get_rec_json_data(recURI, knowledge_rec);
-    //
-    // logger.debug(st_json);
-  } catch (err) {
-    status = 500;
 
+    logger.debug(`bindings: ${JSON.stringify(bindings)}`);
+
+     //format data
+    let st_json = {};
+
+     //format knowledge to JSON
+     st_json = get_rec_json_data(recURI,head_vars, bindings);
+
+     return res.status(status).json(st_json);
+
+  } catch (err) {
     logger.error(
-      `Error at getStatementData for dataset ${cigId} with recommendation URI ${recURI} and associated knowledge: ${JSON.stringify(
-        knowledge_rec
-      )}`
+      `error when retrieving clinical recommendation at getRecData_multiple_CBs with cig ${cigId} and rec URI ${recURI}`
     );
-    logger.error(`Error getStatementData : ${JSON.stringify(err)}`);
-  } finally {
-    return res.status(status).json(st_json);
+    return res.status(500).end();
   }
 });
 
@@ -453,18 +449,21 @@ router.post("/gprec/all/get/", async function (req, res, next) {
   const recURI = req.body.uri
     ? req.body.uri.trim()
     : req.body.id
-    ? `${tmrDataUri}GPRec${id}-${req.body.id.trim()}`
+    ? `${dataUri}GPRec${id}-${req.body.id.trim()}`
     : undefined;
 
   let knowledge_rec;
   try {
-    knowledge_rec = await utils.getRecStmntDataAsync(
+    let {status, bindings, head_vars} = await utils.getRecStmntData(
       idCig,
       recURI,
       "statements",
-      "transitions",
-      "careActions"
+      "transitions"
     );
+    logger.debug(bindings)
+    //format knowledge to JSON
+    let st_json = auxFuncts.get_statement_data(recURI, bindings);
+    return res.status(status).json(st_json);
   } catch (err) {
     logger.error(
       `error when retrieving good practice recommendation at getRecStmntDataAsync with cig ${idCig} and rec URI ${recURI}`
@@ -472,86 +471,50 @@ router.post("/gprec/all/get/", async function (req, res, next) {
     return res.status(500);
   }
 
-  if (
-    knowledge_rec &&
-    knowledge_rec.constructor === Object &&
-    Object.entries(knowledge_rec).length != 0
-  ) {
-    //format data
-    let st_json = {};
-    let status = 200;
-    try {
-      //format knowledge to JSON
-      st_json = get_statement_data(recURI, knowledge_rec);
-      //
-      // logger.debug(st_json);
-    } catch (err) {
-      status = 500;
-      logger.error(
-        `Error at getStatementData for dataset ${cigId} with recommendation URI ${recURI} and associated knowledge: ${JSON.stringify(
-          knowledge_rec
-        )}`
-      );
-      logger.error(`Error getStatementData : ${JSON.stringify(err)}`);
-    } finally {
-      return res.status(status).json(st_json);
-    }
-  } else {
-    logger.error(
-      `no knowledge fetched from CIG ${cigId}  and GP recommendation URI ${recURI}.`
-    );
-    return res.sendStatus(500);
-  }
 });
-
 
 /**
  * add nanopub graphs from one existing CIG to another
  */
-router.post("/dataset/add", async function (req, res, next) {
+router.post("/add", async function (req, res, next) {
   //list of recommendations to be copied from a dataset
   let recList = new Array();
 
-  let { cig_from } = req.body;
-  let { cig_to } = req.body;
+  let { cig_from, cig_to, subguidelines, recommendations} = req.body; 
 
-  logger.debug(`cig_from is ${cig_from} and cig_to is ${cig_to}`);
+    //check both datasets are given
+    if (!(cig_from && cig_to)) {
+      logger.error(
+        `Error: parameters cig_from and cig_to cannot be empty when adding data from one dataset to another. cig_from is ${
+          cig_from || null
+        }; cig_to is ${cig_to || null}.`
+      );
+  
+      return res.status(406).json({
+        status: "error",
+        error: `parameters cig_from and cig_to cannot be empty when adding data from one dataset to another. cig_from is ${
+          cig_from || null
+        }; cig_to is ${cig_to || null}.`,
+      });
+    }
 
-  //check both datasets are given
-  if (!(cig_from && cig_to)) {
-    logger.error(
-      `Error: parameters cig_from and cig_to cannot be empty when adding data from one dataset to another. cig_from is ${
-        cig_from || null
-      }; cig_to is ${cig_to || null}.`
-    );
+  const cigIdFrom = cig_from.startsWith(`CIG-`) ? cig_from.trim() : `CIG-${cig_from.trim()}`;
+    //get postfix Id of dataset (e.g., COPD in CIG-COPD)
+  const cig_from_id = cigIdFrom.substring("CIG-".length);
+    //get postfix Id of dataset (e.g., COPD in CIG-COPD)
+  const cigIdTo = req.body.cig_to.startsWith(`CIG-`) ? req.body.cig_to.trim() : `CIG-${req.body.cig_to.trim()}`;
+  let cig_to_id = cigIdTo.substring("CIG-".length);
 
-    return res.status(406).json({
-      status: "error",
-      error: `parameters cig_from and cig_to cannot be empty when adding data from one dataset to another. cig_from is ${
-        cig_from || null
-      }; cig_to is ${cig_to || null}.`,
-    });
-  }
-
-  //get postfix Id of dataset (e.g., COPD in CIG-COPD)
-  let cig_from_id = cig_from.startsWith(tmrDataUri + "CIG-")
-    ? cig_from.substring((tmrDataUri + "CIG-").length)
-    : cig_from.startsWith("CIG-")
-    ? cig_from.substring("CIG-".length)
-    : cig_from;
+  logger.debug(`cig_from is ${cigIdFrom} and cig_to is ${cigIdTo}`);
 
   //check URI and set, if required
-  cig_from = setUri(cig_from, "CIG", false, false);
-  cig_to = setUri(cig_to, "CIG", false, false);
+  //cig_from = setUri(cig_from, "CIG", false, false);
+  //cig_to = setUri(cig_to, "CIG", false, false);
 
   //are identifiers correctly construed?
   logger.debug(
-    `identifiers for datasets are ${cig_from} with ${cig_from_id}, and also ${cig_to}`
+    `identifiers for datasets are ${cig_from_id} with ${cigIdFrom}, and also ${cigIdTo}`
   );
-
-  //subguideline and recommendations
-  let { subguidelines } = req.body;
-  let { recommendations } = req.body;
 
   let filterSubgString = ``;
 
@@ -559,25 +522,28 @@ router.post("/dataset/add", async function (req, res, next) {
   //then add ALL Recs from one dataset to the other
   if (!(subguidelines || recommendations)) {
     try {
-      recList = await utils.sparqlGetSubjectAllNamedGraphsAsync(
-        cig_from,
-        "tmr:ClinicalRecommendation"
+     let {status, head_vars, bindings} = await utils.sparqlGetSubjectAllNamedGraphs(
+        cigIdFrom,
+        "vocab:ClinicalRecommendation"
       );
+     
+     
+      let recList = await auxFuncts.get_rdf_atom_as_array(bindings);
 
       if (!recList || recList.length == 0)
         throw new Error(
-          `Unexpected output when retrieving ALL recommendations from dataset ${cig_from}. Undefined or empy output`
+          `Unexpected output when retrieving ALL recommendations from dataset ${cigIdFrom}. Undefined or empy output`
         );
     } catch (err) {
       logger.error(
-        `Error: Function sparqlGetSubjectAllNamedGraphs with dataset Id ${cig_from}. The error is ${JSON.stringify(
+        `Error: Function sparqlGetSubjectAllNamedGraphs with dataset Id ${cigIdFrom}. The error is ${JSON.stringify(
           err
         )}`
       );
 
       return res.status(406).json({
         status: "error",
-        error: `Unsuccessful dataset query when retrieving ALL recommendations Ids for CIG with Id ${cig_from}`,
+        error: `Unsuccessful dataset query when retrieving ALL recommendations Ids for CIG with Id ${cigIdFrom}`,
       });
     }
   } else {
@@ -604,10 +570,10 @@ router.post("/dataset/add", async function (req, res, next) {
 
       try {
         //select nanopub URIs from subguidelines
-        recList = await utils.sparqlGetNamedNanopubFromSubguidelinesAsync(
+        recList = await utils.sparqlGetNamedNanopubFromSubguidelines(
           cig_from,
           filterSubgString
-        );
+        ).then( ({status, head_vars, bindings}) =>  auxFuncts.get_rdf_atom_as_array(bindings));
         //no result
         if (!recList || (Array.isArray(recList) && recList.length == 0))
           throw new Error(
@@ -649,19 +615,19 @@ router.post("/dataset/add", async function (req, res, next) {
 
   try {
     //for each assertion URI, add the rest of the related nano graphs
-    const promises = recList.map((uri) => {
+    const promises = recList.map( (uri) => {
       // logger.info(uri);
-      return utils.addGraphsDataFromToCigAsync(
+      let query = auxFuncts.addGraphsDataFromToCig(
         cig_from,
         cig_to,
         uri + `_head`, //nanoHeadList,
-        uri, //assertionList,
+        uri + ``, //assertionList,
         uri + `_provenance`, //nanoProvList,
         uri + `_publicationinfo` //nanoPubList,
       );
+      return utils.sparqlUpdate(cig_to,query);
     });
 
-    //
     await Promise.all(promises).catch((err) => logger.error(err));
 
     return res.status(204).end();
@@ -683,7 +649,7 @@ router.post("/dataset/add", async function (req, res, next) {
 /**
  * get knowledge from all Recommendations in a given CIG
  */
-router.post("/dataset/all/get", async function (req, res, next) {
+router.post("/all/get", async function (req, res, next) {
   //label of CIG
   let cigId;
 
@@ -897,5 +863,39 @@ router.post("/dataset/all/get", async function (req, res, next) {
   );
   return res.statusCode(500);
 }); //checked!
+
+
+router.post("/careAction/get", async function (req, res, next) {
+  var postData = "";
+
+  if (req.body.rec_id) {
+    postData = require("querystring").stringify({
+      guideline_id: `CIG-` + req.body.cig_id,
+      rec_id:
+        "http://anonymous.org/tmr/data/Rec" +
+        req.body.cig_id +
+        "-" +
+        req.body.rec_id,
+    });
+  } else {
+    //this one will be more accurate when combining guidelines
+    postData = require("querystring").stringify({
+      guideline_id: `CIG-` + req.body.cig_id,
+      rec_URI: req.body.rec_URI,
+    });
+  }
+
+  let response = {};
+  let st = 200;
+  try {
+    response = await utils.callPrologServerAsync("drug", postData, res);
+  } catch (error) {
+    logger.error(JSON.stringify(error));
+    st = 500;
+    response.error = `Prolog server has failed for dataset ${req.body.cig_id} and recommendation URI ${req.body.rec_id}`;
+  } finally {
+    res.status(st).json(response);
+  }
+});
 
 module.exports = router;

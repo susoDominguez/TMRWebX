@@ -4,8 +4,8 @@ const logger = require("../../config/winston.js");
 const jsonata = require("jsonata");
 //const { ErrorHandler } = require("../lib/errorHandler");
 
-const vocabDataUri = "http://anonymous.org/data/";
-const vocabDataUri_short = "data:";
+const dataUri = "http://anonymous.org/data/";
+const dataUri_short = "data:";
 const sctUri = `http://snomed.info/sct/`;
 
 /**
@@ -16,7 +16,7 @@ const sctUri = `http://snomed.info/sct/`;
  */
 function setUri(label, prefix, fullUri, shortenedURI) {
   //if its already full URI, return
-  if (label.includes(vocabDataUri)) return label;
+  if (label.includes(dataUri)) return label;
 
   let output = "";
 
@@ -28,82 +28,13 @@ function setUri(label, prefix, fullUri, shortenedURI) {
 
   //construe URI
   output = fullUri
-    ? vocabDataUri + output
+    ? dataUri + output
     : shortenedURI
-    ? vocabDataUri_short + output
+    ? dataUri_short + output
     : output;
 
   return output;
 }
-
-/*
-function (err, actionResults) {
-  if (err) {
-    res.status(404).send(err);
-    return;
-  }
-
-  let data = {};
-  let vars = actionResults.head.vars;
-  let bindings = actionResults.results.bindings[0];
-
-  //format data by looping through head vars
-  for (let pos in vars) {
-    //variable name
-    let headVar = vars[pos];
-
-    //check there is a corresponding binding, if not, next head var
-    if (!(headVar && bindings.hasOwnProperty(headVar))) continue;
-
-    //otherwise, retrieve value
-    let value = bindings[headVar].value;
-
-    //for each heading, add a field
-    switch (headVar) {
-      case "actId":
-        data.id = value;
-        break;
-      case "adminLabel":
-        data.display = value;
-        break;
-      case "actType":
-        //extract code
-        let type = value.slice(25);
-        data.code = type;
-        data.requestType = 0; //for drug related types
-        //check for therapy
-        if (type.startsWith("NonDrugT")) {
-          data.requestType = 1;
-        } else {
-          //check for vaccine
-          if (type.startsWith("VaccineT")) {
-            data.requestType = 2;
-          }
-        }
-        break;
-      case "actLabel":
-        data.drugLabel = value;
-        data.sct_trm = value;
-        break;
-      case "snomed":
-        data.snomedCode = value;
-        data.sct_id = value;
-        break;
-      case "sameAs":
-        data.sameAs = value.split(", ");
-        break;
-      case "hasGroupingCriteria":
-        data.hasGroupingCriteria = value.split(", ");
-        break;
-      case "subsumes":
-        data.subsumes = value.split(", ");
-        break;
-    }
-  }
-
-  res.send(data);
-}
-*/
 
 function get_rec_data(recURI, guidelineData, type) {
   //recommendation template object
@@ -616,7 +547,7 @@ function get_ST_data(head_vars,binding){
   return stData;
 }
 
-function get_rec_json_data(recURI, guidelineData, type) {
+function get_rec_json_data(recURI, head_vars, binding, type) {
   //recommendation template object
   let recData = {
     id: recURI,
@@ -664,12 +595,10 @@ function get_rec_json_data(recURI, guidelineData, type) {
     composedOf: undefined,
   };
 
-  let headVars = guidelineData.head.vars;
-  let bindingsList = guidelineData.results.bindings;
 
-  for (const index in bindingsList) {
+  for (const index in binding) {
     //results object
-    const bindingObj = bindingsList[index];
+    const bindingObj = binding[index];
     //one TR and CB object per CB id encountered
     //one object per causation belief
     const cbData = {
@@ -721,9 +650,9 @@ function get_rec_json_data(recURI, guidelineData, type) {
     };
 
     //format data by looping through head vars
-    for (const pos in headVars) {
+    for (const pos in head_vars) {
       //variable name
-      let headVar = headVars[pos];
+      let headVar = head_vars[pos];
 
       //check there is a corresponding binding, if not, next head var
       if (!(headVar && bindingObj.hasOwnProperty(headVar))) continue;
@@ -1078,21 +1007,17 @@ function insert_CB_in_rec(req, res, insertOrDelete) {
     req.body.belief_id +
     ` vocab:contribution vocab:` +
     req.body.contribution +
-    `.
-    }`;
+    `. }`;
 
   const graph = `GRAPH ${body}`;
   utils.sparqlUpdate(
     "CIG-" + req.body.cig_id,
-    graph,
-    insertOrDelete,
-    function (err, status) {
-      if (err) {
-        logger.debug(`error when updating recommendation with belief: ${err}`);
-      }
+    graph);
+    
+
       res.status(status).end();
-    }
-  );
+    
+  
 }
 
 function insert_precond_in_rec(req, res, insertOrDelete) {
@@ -1123,8 +1048,6 @@ function insert_precond_in_rec(req, res, insertOrDelete) {
     }
   );
 }
-
-
 
 //filter out vocab types when unnecesary for the triggered router
 function filter_vocab_rec_type(RecUris) {
@@ -1508,12 +1431,96 @@ async function get_rdf_atom_as_array(bindings) {
 
 function sparql_drop_named_graphs(ds_id, id) {
   let head_graph = `data:${id}_head`;
-  let assert_graph = `data:${id}_assertion`;
+  let assert_graph = `data:${id}`;
   let prov_graph = `data:${id}_provenance`;
   let pubInfo_graph = `data:${id}_publicationinfo`;
 
   return ` DROP SILENT GRAPH ${head_graph} ;  DROP SILENT GRAPH ${assert_graph} ; DROP SILENT GRAPH ${prov_graph} ; DROP SILENT GRAPH ${pubInfo_graph} `;
 }
+
+
+  /**
+   *
+   * @param {string} cigFrom original CIG
+   * @param {string} cigTo destination CIG
+   * @param {string} nanoHead
+   * @param {string} nanoAssert
+   * @param {string} nanoProv
+   * @param {string} nanoPubInfo
+   * @param {(Error, number) => number} callback callback function returning status
+   */
+function  addGraphsDataFromToCig(
+    cigFrom,
+    cigTo,
+    nanoHead,
+    nanoAssert,
+    nanoProv,
+    nanoPub ) {
+    let insertGraphsData = ``;
+    let graphs;
+    let assertGraphs = ``;
+    let provGraphs = ``;
+    let headGraphs = ``;
+    let nanopubGraphs = ``;
+    let graphDescrDel = ``;
+    let graphDescrIns = ``;
+
+    let deleteTriples;
+
+    const cigFromUrl =
+      "http://" +
+      config.JENA_HOST +
+      ":" +
+      config.JENA_PORT +
+      "/" +
+      cigFrom +
+      "/query";
+
+    assertGraphs = `\nGRAPH <` + nanoAssert + `> { ?a  ?b ?c } `;
+    provGraphs = `\nGRAPH <` + nanoProv + `> { ?d  ?e ?f } `;
+    nanopubGraphs = `\nGRAPH <` + nanoPub + `> { ?g ?h ?i } `;
+    headGraphs = `\nGRAPH <` + nanoHead + `> { ?j ?k ?l } `;
+
+    graphDescrDel +=
+      `\nGRAPH <` +
+      nanoAssert +
+      `> { <` +
+      nanoAssert +
+      `> vocab:partOf data:` +
+      cigFrom +
+      ` } `;
+
+    graphDescrIns +=
+      `\nGRAPH <` +
+      nanoAssert +
+      `> { <` +
+      nanoAssert +
+      `> vocab:partOf data:` +
+      cigTo +
+      ` } `;
+
+    insertGraphsData =
+      `\nINSERT {` +
+      headGraphs +
+      assertGraphs +
+      graphDescrIns +
+      nanopubGraphs +
+      provGraphs +
+      `} \nWHERE { SERVICE <` +
+      cigFromUrl +
+      `> { ` +
+      headGraphs +
+      assertGraphs +
+      nanopubGraphs +
+      provGraphs +
+      ` } } ; `;
+
+    deleteTriples = `\nDELETE WHERE { ` + graphDescrDel + ` } ; `;
+
+    ///UPDATE GRAPH STORE///
+
+    return insertGraphsData + deleteTriples;
+  }
 
 
 module.exports = {
@@ -1524,7 +1531,6 @@ module.exports = {
   get_rec_json_data,
   get_ST_data,
   get_rec_data,
-  vocabDataUri,
   sctUri,
   setUri,
   get_care_action,
@@ -1532,4 +1538,5 @@ module.exports = {
   get_rdf_atom_as_array,
   sparql_drop_named_graphs,
   get_CB_object,
+  addGraphsDataFromToCig
 };
