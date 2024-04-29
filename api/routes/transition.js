@@ -119,7 +119,7 @@ function action(req, res, insertOrDelete) {
   const transition = `data:Tr` + req.body.id + ` rdf:type vocab:TransitionType ;
                   vocab:hasTransformableSituation data:Sit` + req.body.pre_situation_id + ` ;
                   vocab:hasExpectedSituation data:Sit` + req.body.post_situation_id + ` ;
-                  vocab:derivative   vocab:` + req.body.derivative + ` ;
+                  vocab:derivative   "` + req.body.derivative + `" ;
                   vocab:affects data:Prop` + req.body.affected_property_id + ` .`
 
   return transition;

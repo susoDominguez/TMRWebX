@@ -825,22 +825,6 @@ module.exports = {
       (GROUP_CONCAT(DISTINCT ?stOj;   SEPARATOR=",") AS ?orgJursSt)
       (GROUP_CONCAT(DISTINCT ?provhasSource;   SEPARATOR=",") AS ?provHasSources)
       WHERE { 
-        GRAPH ${recHeadURI} {
-          ${recHeadURI} a nanopub:Nanopublication ;
-              nanopub:hasAssertion ${recAssertURI} ;
-              nanopub:hasProvenance ${recProvURI} ;
-              nanopub:hasPublicationInfo ${recPubInfoURI} .
-        }
-        GRAPH ${recProvURI} {
-          ${recProvURI} rdf:type oa:Annotation ;
-                        oa:hasBody ${recAssertURI} .
-          ${recAssertURI} prov:wasDerivedFrom ?derived .
-         OPTIONAL {  ${recProvURI}      oa:hasTarget  [  oa:hasSource ?provHasSource ] . }
-        }
-        GRAPH ${recPubInfoURI} {
-          ${recHeadURI} prov:generatedAtTime ?generatedTime ;
-                      prov:wasAttributedTo  ?attributedTo .
-        }
         GRAPH ${recAssertURI} {
            ${recAssertURI} a  vocab:GoodPracticeRecommendation ;
                          rdfs:label ?label .

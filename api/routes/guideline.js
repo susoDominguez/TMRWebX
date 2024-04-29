@@ -50,7 +50,7 @@ function action_gprec(req) {
 
   const body =
     id +
-    `_assertion {
+    ` {
       ` +
     id +
     `
@@ -340,10 +340,11 @@ router.post("/recs/get", async function (req, res) {
   if (!cig_id)
     throw new ErrorHandler(
       400,
-      "Router /rec/get: no cig_id parameter provided."
+      "Router /recs/get: no cig_id parameter provided."
     );
 
   let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(`CIG-` + cig_id, "vocab:ClinicalRecommendation");
+  
   let results = await auxFuncts.get_rdf_atom_as_array(bindings);
   
   return res.status(status).json(results);
@@ -375,9 +376,7 @@ router.post("/precond/add", function (req, res, next) {
   insert_precond_in_rec(req, res, config.INSERT);
 });
 
-
 ////////////////////////
-
 
 router.post("/rec/all/get/", async function (req, res, next) {
   //checks
@@ -414,11 +413,8 @@ router.post("/rec/all/get/", async function (req, res, next) {
 
     logger.debug(`bindings: ${JSON.stringify(bindings)}`);
 
-     //format data
-    let st_json = {};
-
      //format knowledge to JSON
-     st_json = get_rec_json_data(recURI,head_vars, bindings);
+     let st_json = get_rec_json_data(recURI,head_vars, bindings);
 
      return res.status(status).json(st_json);
 
@@ -449,10 +445,10 @@ router.post("/gprec/all/get/", async function (req, res, next) {
   const recURI = req.body.uri
     ? req.body.uri.trim()
     : req.body.id
-    ? `${dataUri}GPRec${id}-${req.body.id.trim()}`
+    ? `${dataUri}/GPRec${id}-${req.body.id.trim()}`
     : undefined;
 
-  let knowledge_rec;
+
   try {
     let {status, bindings, head_vars} = await utils.getRecStmntData(
       idCig,
@@ -460,7 +456,9 @@ router.post("/gprec/all/get/", async function (req, res, next) {
       "statements",
       "transitions"
     );
-    logger.debug(bindings)
+
+    logger.debug(`bindings: ${bindings}`);
+    
     //format knowledge to JSON
     let st_json = auxFuncts.get_statement_data(recURI, bindings);
     return res.status(status).json(st_json);
