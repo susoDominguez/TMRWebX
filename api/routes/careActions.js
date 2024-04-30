@@ -7,47 +7,108 @@ const logger = require('../config/winston');
 //const guidelines = require('../lib/guidelines');
 const utils = require('../lib/utils');
 
+router.post('/drugs/individual/get', async function(req, res, next) {
+  try{
+    let arr_res =  await Promise.all([
+      utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType"),
+      utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType")
+    ]);
+  
+    let arrs= new Array();
+  
+    for (const {data, status}  of arr_res) {
+      
+      let aList = Array.isArray(data)? data : new Array(data);
+      logger.debug(aList)
+      arrs.push(aList);
+    }
+    //flatten then convert to set and back to array to remove duplicates
+    let anArr = [...new Set(arrs.flat(1))];
+    return res.json(anArr);
+  } catch(err){
+    return res.status(500).json(err);
+  }
+});
+
 //get all drug types URIS
 router.post('/drugs/get', async function(req, res, next) {
-  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:DrugType").catch(err => logger.error('Error: drugs/get '+err));
-  return res.status(status).send(data);
+  try{
+    let arr_res =  await Promise.all([
+      utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugCategory"),
+      utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType"),
+      utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType")
+    ]);
+  
+    let arrs= new Array();
+  
+    for (const {data, status}  of arr_res) {
+      
+      let aList = Array.isArray(data)? data : new Array(data);
+      logger.debug(aList)
+      arrs.push(aList);
+    }
+    //flatten then convert to set and back to array to remove duplicates
+    let anArr = [...new Set(arrs.flat(1))];
+    return res.json(anArr);
+  } catch(err){
+    return res.status(500).json(err);
+  }
 });
 
 //Get all non drug types URIs
 router.post('/nonDrugs/get', async function(req, res, next) {
-  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:NonDrugType").catch(err => logger.error('Error: drugs/get '+err));
-  return res.status(status).send(data);
+  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType").catch(err => logger.error('Error: router careactions nonDrugs/get '+err));
+  let aList = Array.isArray(data)? data : new Array(data);
+  return res.status(status).send(aList);
 });
 
 //Get all vaccine types URIs
 router.post('/vaccines/get', async function(req, res, next) {
-  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:VaccineType").catch(err => logger.error('Error: drugs/get '+err));
-  return res.status(status).send(data);
+  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType").catch(err => logger.error('Error: router careactions vaccines/get '+err));
+  let aList = Array.isArray(data)? data : new Array(data);
+  return res.status(status).send(aList);
 });
 
 //Get all drug categories types URIs
 router.post('/drugCategories/get', async function(req, res, next) {
-  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:DrugCategory").catch(err => logger.error('Error: drugs/get '+err));
-  return res.status(status).send(data);
+  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugCategory").catch(err => logger.error('Error: router careactions combinations/get '+err));
+  let aList = Array.isArray(data)? data : new Array(data);
+  return res.status(status).json(aList);
 });
 
 //Get all drug and non drug combinations types URIs
 router.post('/combinations/get', async function(req, res, next) {
-  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:CompoundType").catch(err => logger.error('Error: drugs/get '+err));
-  return res.status(status).send(data);
+  let {status = 500, data = [] } =  await utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:CombinedCareType").catch(err => logger.error('Error: router careactions combinations/get '+err));
+  let aList = Array.isArray(data)? data : new Array(data);
+  return res.status(status).send(aList);
 });
 
-//TODO: review
+
 //Get all drug and non drug combinations types URIs
 router.post('/get', async function(req, res, next) {
+  try{
+  let arr_res =  await Promise.all([
+    utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:CombinedCareType"),
+    utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugCategory"),
+    utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType"),
+    utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType"),
+    utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugType")
+  ]);
 
-  let results = await Promise.all(utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:DrugAdministrationType"), utils.sparqlGetSubjectDefaultGraph("careActions", "tmr:NonDrugAdministrationType")).catch(err => logger.error('Error: careActions/get '+err));
-  let status1 = results[0].status ?? 500;
-  let status2 = results[1].status ?? 500;
-   status2 = status2 < status1 ? status2 : status1;
-  let data1 = results[0].data ?? [];
-  let data2 = results[1].data ?? [];
-  return res.status(status2).send(data1 + data2);
+  let arrs= new Array();
+
+  for (const {data, status}  of arr_res) {
+    
+    let aList = Array.isArray(data)? data : new Array(data);
+    logger.debug(aList)
+    arrs.push(aList);
+  }
+  //flatten then convert to set and back to array to remove duplicates
+  let anArr = [...new Set(arrs.flat(1))];
+  return res.json(anArr);
+} catch(err){
+  return res.status(500).json(err);
+}
 });
 
 

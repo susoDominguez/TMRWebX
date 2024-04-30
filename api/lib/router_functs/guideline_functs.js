@@ -1,147 +1,40 @@
 const Promise = require("bluebird");
 const utils = Promise.promisifyAll(require("../utils.js"));
 const logger = require("../../config/winston.js");
+const jsonata = require("jsonata");
 //const { ErrorHandler } = require("../lib/errorHandler");
 
-const tmrDataUri = "http://anonymous.org/tmr/data/";
-const tmrDataUri_short = "data:";
+const dataUri = "http://anonymous.org/data/";
+const dataUri_short = "data:";
 const sctUri = `http://snomed.info/sct/`;
 
 /**
- * 
+ *
  * @param {String} label label representing the knowledge as a full URI or a shortened version
  * @param {String} prefix prefix to add to label
  * @param {Boolean} fullUri set the label argument as a full URI? otherwise, just the identifying section of the URI
  */
-function setUri(label, prefix, fullUri, shortenedURI){
-
+function setUri(label, prefix, fullUri, shortenedURI) {
   //if its already full URI, return
-  if(label.includes(tmrDataUri)) return label;
-  
+  if (label.includes(dataUri)) return label;
+
   let output = "";
 
   //if it is not full URI neither has the expected prefix, add prefix
-  if(prefix && !label.startsWith(prefix))  output = prefix + "-";
+  if (prefix && !label.startsWith(prefix)) output = prefix + "-";
 
   //add the label to the final output
   output += label;
- 
 
   //construe URI
-  output = fullUri ? (tmrDataUri + output) : shortenedURI ? (tmrDataUri_short + output) : output ;
+  output = fullUri
+    ? dataUri + output
+    : shortenedURI
+    ? dataUri_short + output
+    : output;
 
-  return output
+  return output;
 }
-
-function actionSubguideline(req, res, insertOrDelete) {
-  if (!req.body.description) {
-    req.body.description = "subGuideline " + req.body.subGuideline_id;
-  }
-
-  // SubGuideline declaration:
-  const description =
-    `data:subCIG-` +
-    req.body.subGuideline_id +
-    ` rdf:type tmr:subGuideline, owl:NamedIndividual ;
-                           rdfs:label "` +
-    req.body.description +
-    `"@en ;
-                           tmr:isSubGuidelineOf  data:CIG-` +
-    req.body.guideline_id +
-    ` .`;
-
-  //var to construct the assignment of recs to a subguideline. initial whitespace to be kept
-  var recDeclaration = " ";
-
-  if (req.body.recs_ids) {
-    //nanopublication is part of this subGuideline. contains  pred and object of resource
-    const isPartOf =
-      ` tmr:isPartOf   data:subCIG-` + req.body.subGuideline_id + ` .\n`;
-
-    req.body.recs_ids.split(",").forEach(function (recId) {
-      recDeclaration +=
-        `data:Rec` + req.body.guideline_id + `-` + recId.trim() + isPartOf;
-    });
-  }
-
-  utils.sparqlUpdate(
-    "CIG-" + req.body.guideline_id,
-    description + recDeclaration,
-    insertOrDelete,
-    function (err, status) {
-      res.sendStatus(status);
-    }
-  );
-}
-
-/*
-function (err, actionResults) {
-  if (err) {
-    res.status(404).send(err);
-    return;
-  }
-
-  let data = {};
-  let vars = actionResults.head.vars;
-  let bindings = actionResults.results.bindings[0];
-
-  //format data by looping through head vars
-  for (let pos in vars) {
-    //variable name
-    let headVar = vars[pos];
-
-    //check there is a corresponding binding, if not, next head var
-    if (!(headVar && bindings.hasOwnProperty(headVar))) continue;
-
-    //otherwise, retrieve value
-    let value = bindings[headVar].value;
-
-    //for each heading, add a field
-    switch (headVar) {
-      case "actId":
-        data.id = value;
-        break;
-      case "adminLabel":
-        data.display = value;
-        break;
-      case "actType":
-        //extract code
-        let type = value.slice(25);
-        data.code = type;
-        data.requestType = 0; //for drug related types
-        //check for therapy
-        if (type.startsWith("NonDrugT")) {
-          data.requestType = 1;
-        } else {
-          //check for vaccine
-          if (type.startsWith("VaccineT")) {
-            data.requestType = 2;
-          }
-        }
-        break;
-      case "actLabel":
-        data.drugLabel = value;
-        data.sct_trm = value;
-        break;
-      case "snomed":
-        data.snomedCode = value;
-        data.sct_id = value;
-        break;
-      case "sameAs":
-        data.sameAs = value.split(", ");
-        break;
-      case "hasGroupingCriteria":
-        data.hasGroupingCriteria = value.split(", ");
-        break;
-      case "subsumes":
-        data.subsumes = value.split(", ");
-        break;
-    }
-  }
-
-  res.send(data);
-}
-*/
 
 function get_rec_data(recURI, guidelineData, type) {
   //recommendation template object
@@ -150,8 +43,18 @@ function get_rec_data(recURI, guidelineData, type) {
     partOf: undefined, //combined dataset or original
     extractedFrom: undefined, //original dataset
     type: {
-      sctId: ( type === 'nonDrugType' ? "304541006" : type === 'vaccineType' ? '830152006' : "306807008" ),
-      display: ( type === 'nonDrugType' ? "Recommendation to perform treatment (procedure)" : type === 'vaccineType' ? 'Recommendation regarding vaccination (procedure)' : "Recommendation to start drug treatment (procedure)" ),
+      sctId:
+        type === "nonDrugType"
+          ? "304541006"
+          : type === "vaccineType"
+          ? "830152006"
+          : "306807008",
+      display:
+        type === "nonDrugType"
+          ? "Recommendation to perform treatment (procedure)"
+          : type === "vaccineType"
+          ? "Recommendation regarding vaccination (procedure)"
+          : "Recommendation to start drug treatment (procedure)",
     },
     careActionType: {
       id: undefined,
@@ -433,7 +336,7 @@ function get_rec_data(recURI, guidelineData, type) {
   return recData;
 }
 
-function get_statement_data(recURI, guidelineData) {
+function get_statement_data2(recURI, guidelineData) {
   //recommendation template object
   let recData = {
     id: recURI,
@@ -588,7 +491,63 @@ function get_statement_data(recURI, guidelineData) {
   return recData;
 }
 
-function get_rec_json_data(recURI, guidelineData,type) {
+
+function get_ST_data(head_vars,binding){
+  logger.debug(head_vars);
+  logger.debug(binding);
+
+  if (binding == undefined  || binding == []) return {};
+
+  let stData = {
+    id: undefined,
+    author: undefined,
+    hasStatementTitle: undefined,
+    hasStatementText: undefined,
+    organization: undefined,
+    jurisdiction: undefined,
+    derivedFrom: undefined,
+    hasSource: undefined,
+    wasAttributedTo: undefined,
+    generatedAtTime: undefined,
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    logger.debug(`headVar is ${headVar}`);
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+    //for each heading, add a field
+    switch (headVar) {
+      case "st_id":
+        stData.id = value;
+        break;
+      case "statementTitle":
+        stData.hasStatementTitle = value;
+        break;
+      case "statementText":
+        stData.hasStatementText = value;
+        break;
+      case "organizationName":
+        stData.organization = value;
+        break;
+      case "jurisdiction":
+        stData.jurisdiction = value.split(", ");
+        break;
+    }
+  } //endOf loop
+  
+
+  return stData;
+}
+
+function get_rec_json_data(recURI, head_vars, binding, type) {
   //recommendation template object
   let recData = {
     id: recURI,
@@ -596,8 +555,18 @@ function get_rec_json_data(recURI, guidelineData,type) {
     extractedFrom: undefined, //original dataset
     label: undefined,
     type: {
-      sctId: ( type === 'nonDrugType' ? "304541006" : type === 'vaccineType' ? '830152006' : "306807008" ),
-      display: ( type === 'nonDrugType' ? "Recommendation to perform treatment (procedure)" : type === 'vaccineType' ? 'Recommendation regarding vaccination (procedure)' : "Recommendation to start drug treatment (procedure)" ),
+      sctId:
+        type === "nonDrugType"
+          ? "304541006"
+          : type === "vaccineType"
+          ? "830152006"
+          : "306807008",
+      display:
+        type === "nonDrugType"
+          ? "Recommendation to perform treatment (procedure)"
+          : type === "vaccineType"
+          ? "Recommendation regarding vaccination (procedure)"
+          : "Recommendation to start drug treatment (procedure)",
     },
     derivedFrom: undefined,
     hasSource: undefined,
@@ -626,13 +595,10 @@ function get_rec_json_data(recURI, guidelineData,type) {
     composedOf: undefined,
   };
 
-  let headVars = guidelineData.head.vars;
-  let bindingsList = guidelineData.results.bindings;
 
-
-  for (const index in bindingsList) {
+  for (const index in binding) {
     //results object
-    const bindingObj = bindingsList[index];
+    const bindingObj = binding[index];
     //one TR and CB object per CB id encountered
     //one object per causation belief
     const cbData = {
@@ -684,9 +650,9 @@ function get_rec_json_data(recURI, guidelineData,type) {
     };
 
     //format data by looping through head vars
-    for (const pos in headVars) {
+    for (const pos in head_vars) {
       //variable name
-      let headVar = headVars[pos];
+      let headVar = head_vars[pos];
 
       //check there is a corresponding binding, if not, next head var
       if (!(headVar && bindingObj.hasOwnProperty(headVar))) continue;
@@ -913,11 +879,11 @@ function get_rec_json_data(recURI, guidelineData,type) {
 
 function action_rec(req, res, insertOrDelete) {
   //data id for this rec
-  const id = `data:Rec${req.body.cig_id}-${req.body.rec_id}`;
+  const id = `data:Rec${req.body.cig_id}-${req.body.id}`;
   let sources = "";
   const date = new Date().toJSON();
   //this nanopublication is included in the main  guideline (to be added to default graph)
-  const id2CIG = `${id} tmr:isPartOf data:CIG-${req.body.cig_id} .`;
+  const id2CIG = `${id} vocab:isPartOf data:CIG-${req.body.cig_id} .`;
 
   if (req.body.derivedFrom) {
     sources = `  prov:wasDerivedFrom  `;
@@ -930,7 +896,7 @@ function action_rec(req, res, insertOrDelete) {
   }
 
   // Guideline format:
-  const head =
+  const $ =
     id +
     `_head { 
           ` +
@@ -950,20 +916,20 @@ function action_rec(req, res, insertOrDelete) {
 
   const body =
     id +
-    ` {
+    `_assertion {
       ` +
     id +
-    `  a   tmr:ClinicalRecommendation ;
+    `  a   vocab:ClinicalRecommendation ;
               rdfs:label  '''` +
     req.body.label +
     `'''@en ;
-              tmr:aboutExecutionOf  data:ActAdminister` +
+              vocab:aboutExecutionOf  data:ActAdminister` +
     req.body.careAction_id +
     ` ;
-              tmr:partOf            data:CIG-` +
+              vocab:partOf            data:CIG-` +
     req.body.cig_id +
     ` ;
-              tmr:strength          tmr:` +
+              vocab:strength          vocab:` +
     req.body.strength +
     ` .
     }`;
@@ -1001,16 +967,10 @@ function action_rec(req, res, insertOrDelete) {
     `.
       }`;
 
+      return {id2CIG:id2CIG, query:`GRAPH ${head} GRAPH ${body} GRAPH ${provenance} GRAPH ${publication}`};
   utils.sparqlUpdate(
     "CIG-" + req.body.cig_id,
-    "GRAPH " +
-      head +
-      "\nGRAPH " +
-      body +
-      "\nGRAPH " +
-      provenance +
-      "\nGRAPH " +
-      publication,
+    
     insertOrDelete,
     function (err, status) {
       if (status === 200) {
@@ -1040,28 +1000,24 @@ function insert_CB_in_rec(req, res, insertOrDelete) {
     ` {
       ` +
     recId +
-    ` tmr:basedOn data:CB` +
+    ` vocab:basedOn data:CB` +
     req.body.belief_id +
     ` .
       data:CB` +
     req.body.belief_id +
-    ` tmr:contribution tmr:` +
+    ` vocab:contribution vocab:` +
     req.body.contribution +
-    `.
-    }`;
+    `. }`;
 
   const graph = `GRAPH ${body}`;
   utils.sparqlUpdate(
     "CIG-" + req.body.cig_id,
-    graph,
-    insertOrDelete,
-    function (err, status) {
-      if (err) {
-        logger.debug(`error when updating recommendation with belief: ${err}`);
-      }
+    graph);
+    
+
       res.status(status).end();
-    }
-  );
+    
+  
 }
 
 function insert_precond_in_rec(req, res, insertOrDelete) {
@@ -1072,7 +1028,7 @@ function insert_precond_in_rec(req, res, insertOrDelete) {
     ` {
       ` +
     recId +
-    ` tmr:hasFilterSituation data:Sit` +
+    ` vocab:hasFilterSituation data:Sit` +
     req.body.precond_id +
     ` .
     }`;
@@ -1093,206 +1049,494 @@ function insert_precond_in_rec(req, res, insertOrDelete) {
   );
 }
 
-function action_gprec(req, res, insertOrDelete) {
-  //data id for this rec
-  const id = `data:GPRec` + req.body.cig_id + `-` + req.body.gpRec_id;
-
-  //this nanopublication is included in the main  guideline (to be added to default graph)
-  const id2CIG = id + ` tmr:isPartOf data:CIG-` + req.body.cig_id + ` .`;
-
-  // Graph format:
-  const head =
-    id +
-    `_head { 
-          ` +
-    id +
-    `_head
-              a     nanopub:Nanopublication ;
-              nanopub:hasAssertion        ` +
-    id +
-    ` ;
-              nanopub:hasProvenance       ` +
-    id +
-    `_provenance ;
-              nanopub:hasPublicationInfo  ` +
-    id +
-    `_publicationinfo .
-    }`;
-
-  const body =
-    id +
-    ` {
-      ` +
-    id +
-    `
-              a   tmr:GoodPracticeRecommendation ;
-              rdfs:label  '''${req.body.gpRec_label}'''@en ;
-              tmr:aboutNotificationOf  data:ST` +
-    req.body.statement_id +
-    ` ;
-              tmr:partOf            data:CIG-` +
-    req.body.cig_id +
-    ` ;
-  
-    }`;
-
-  const provenance =
-    id +
-    `_provenance {
-      ` +
-    id +
-    `
-              prov:wasDerivedFrom  <` +
-    (req.body.source ? req.body.source : "unknown") +
-    `> .
-  
-      ` +
-    id +
-    `_provenance
-              a             oa:Annotation ;
-              oa:hasBody    ` +
-    id +
-    ` ;
-              oa:hasTarget  [ oa:hasSource  <http://hdl.handle.net/10222/43703> ] .
-    }`;
-
-  const publication =
-    id +
-    `_publicationinfo {
-        ` +
-    id +
-    `_head
-              prov:generatedAtTime  "2020-03-01"^^xsd:dateTime ;
-              prov:wasAttributedTo  data:` +
-    req.body.author +
-    ` .
-    }`;
-  const graph = `GRAPH ${head} \n GRAPH ${body} \n GRAPH ${provenance} \n GRAPH ${publication}`;
-
-  utils.sparqlUpdate(
-    "CIG-" + req.body.cig_id,
-    graph,
-    insertOrDelete,
-    function (err, status) {
-      if (err) {
-        logger.debug(
-          `error when updating good practice recommendation: ${err}`
-        );
-        res.status(status).end();
-      } else {
-        //add assertion id to default graph as part of CIG
-        if (status === 200) {
-          utils.sparqlUpdate(
-            "CIG-" + req.body.cig_id,
-            id2CIG,
-            insertOrDelete,
-            function (err2, status2) {
-              if (err2) logger.debug(`action_gprec Error: ${err2}`);
-
-              res.status(status2).end();
-            }
-          );
-        }
-      }
-    }
-  );
-}
-
-//filter out TMR types when unnecesary for the triggered router
-function filter_TMR_rec_type(RecUris) {
+//filter out vocab types when unnecesary for the triggered router
+function filter_vocab_rec_type(RecUris) {
   if (!Array.isArray(RecUris)) return RecUris;
   let result = RecUris.filter(
     (uri) =>
       !(
-        uri === "http://anonymous.org/tmr/ClinicalRecommendation" ||
-        uri === "http://anonymous.org/tmr/GoodPracticeRecommendation"
+        uri === "http://anonymous.org/vocab/ClinicalRecommendation" ||
+        uri === "http://anonymous.org/vocab/GoodPracticeRecommendation"
       )
   );
   return result;
 }
 
+/**
+ *
+ * @param {array} head_vars
+ * @param {object} binding
+ */
+function get_care_action(head_vars, binding = []) {
+  if (binding == []) return {};
 
-function careAction_rdf2json(head_vars, bindings) {
+  logger.debug(head_vars);
+  logger.debug(binding);
 
-  let data = {};
+  let careAction = {};
 
   //format rdf by looping through head vars
   for (let pos in head_vars) {
     //variable name
     let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
 
     //check there is a corresponding binding, if not, next head var
-    if (!(headVar && bindings.hasOwnProperty(headVar))) continue;
+    if (!binding.hasOwnProperty(headVar)) continue;
 
     //otherwise, retrieve value
-    let value = bindings[headVar].value;
-
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
     //for each heading, add a field
     switch (headVar) {
       case "actId":
-        data.id = value;
+        careAction.id = value;
         break;
       case "adminLabel":
-        data.display = value;
+        careAction.display = value;
         break;
       case "actType":
         //extract code
-        let type = value.slice(25);
-        data.code = type;
-        data.requestType = 0; //for drug related types
+        let type = "";
+        logger.debug(value);
+        if (value.startsWith("http://anonymous.org/vocab/")) {
+          type = value.slice(27);
+        } else {
+          //http://anonymous.org/vocab/vocab/DrugType
+          type = value.slice(31);
+        }
+        careAction.code = type;
+        careAction.requestType = 0; //for individual or category drugs that are not vaccines
         //check for therapy
         if (type.startsWith("NonDrugT")) {
-          data.requestType = 1;
+          careAction.requestType = 1;
         } else {
           //check for vaccine
           if (type.startsWith("VaccineT")) {
-            data.requestType = 2;
+            careAction.requestType = 2;
           } else {
             //check for care actions combination
-            if(type.startsWith("CombT")) {
-              data.requestType = 3;
+            if (type.startsWith("CombT")) {
+              careAction.requestType = 3;
             }
           }
         }
         break;
       case "actLabel":
-        data.drugLabel = value;
-        data.sct_trm = value;
+        careAction.drugLabel = value;
+        careAction.sct_trm = value;
         break;
       case "snomed":
-        data.snomedCode = value;
-        data.sct_id = value;
+        careAction.snomedCode = value;
+        careAction.sct_id = value;
         break;
       case "sameAs":
-        data.sameAs = value.split(", ");
+        careAction.sameAs = value.split(", ");
         break;
       case "hasGroupingCriteria":
-        data.hasGroupingCriteria = value.split(", ");
+        careAction.hasGroupingCriteria = value.split(", ");
         break;
       case "subsumes":
-        data.subsumes = value.split(", ");
+        careAction.subsumes = value.split(", ");
         break;
-      case "hasComponents":
-        data.hasComponents = value.split(", ");
+      case "components":
+        careAction.hasComponents = value.split(", ");
         break;
     }
-  }//endOf loop
-logger.debug(data)
-  return data
+  } //endOf loop
+
+  if (!careAction.hasOwnProperty("snomedCode")) careAction.sct_trm = undefined;
+
+  return careAction;
 }
 
+function get_transition_object(head_vars, binding) {
+  logger.debug(head_vars);
+  logger.debug(binding);
+
+  let data_prefix_length = "http://anonymous.org/data/".length;
+  let vocab_prefix_length = "http://anonymous.org/vocab/".length;
+
+  let transition_object = {
+    id: undefined,
+    situationTypes: [
+      {
+        type: "hasTransformableSituation",
+        id: undefined,
+        value: {
+          code: undefined,
+          display: undefined,
+          system: undefined,
+        },
+      },
+      {
+        type: "hasExpectedSituation",
+        id: undefined,
+        value: {
+          code: undefined,
+          display: undefined,
+          system: undefined,
+        },
+      },
+    ],
+    property: {
+      id: undefined,
+      display: undefined,
+      code: undefined,
+      system: undefined,
+    },
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+    //for each heading, add a field
+
+    //for each heading, add a field
+    switch (headVar) {
+      case "TrId":
+        transition_object.id = value;
+        break;
+      case "sitFromId":
+        transition_object.situationTypes[0].id = value;
+        //extract code
+        var type = value.slice(data_prefix_length);
+        transition_object.situationTypes[0].value.code ??= type;
+        break;
+      case "sitToId":
+        transition_object.situationTypes[1].id = value;
+        //extract code
+        var type = value.slice(data_prefix_length);
+        transition_object.situationTypes[1].value.code ??= type;
+        break;
+      case "propUri":
+        //extract code
+        transition_object.property.id = value;
+        var type = value.slice(data_prefix_length);
+        transition_object.property.code ??= type;
+        break;
+      case "sitFromLabel":
+        transition_object.situationTypes[0].value.display = value;
+        break;
+      case "sitToLabel":
+        transition_object.situationTypes[1].value.display = value;
+        break;
+      case "propLabel":
+        transition_object.property.display = value;
+        break;
+      case "deriv":
+        var type = value.slice(vocab_prefix_length);
+        transition_object.effect = type;
+        break;
+      case "sitFromIdSCT":
+        transition_object.situationTypes[0].value.code = value;
+        transition_object.situationTypes[0].value.system = sctUri;
+        break;
+      case "sitToIdSCT":
+        transition_object.situationTypes[1].value.code = value;
+        transition_object.situationTypes[1].value.system = sctUri;
+        break;
+      case "propUriSCT":
+        transition_object.property.code = value;
+        transition_object.property.system = sctUri;
+        break;
+    }
+  }
+  return transition_object;
+}
+
+function get_CB_object(head_vars, binding) {
+  logger.debug(head_vars);
+  logger.debug(binding);
+
+  const cbData = {
+    id: undefined,
+    author: undefined,
+    contribution: undefined,
+    derivedFrom: undefined,
+    hasSource: undefined,
+    wasAttributedTo: undefined,
+    generatedAtTime: undefined,
+    probability: undefined,
+    evidence: undefined,
+    careActionTypeRef: undefined,
+    transition: {
+      id: undefined,
+      effect: undefined,
+      property: {
+        id: undefined,
+        code: undefined,
+        sctId: undefined,
+        system: undefined,
+        display: undefined,
+      },
+      situationTypes: [
+        {
+          id: undefined,
+          type: "hasTransformableSituation",
+          value: {
+            stateOfProp: undefined,
+            sctId: undefined,
+            system: undefined,
+            display: undefined,
+            code: undefined,
+          },
+        },
+        {
+          id: undefined,
+          type: "hasExpectedSituation",
+          value: {
+            stateOfProp: undefined,
+            sctId: undefined,
+            system: undefined,
+            display: undefined,
+            code: undefined,
+          },
+        },
+      ],
+    },
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+    //temporary var
+    let temp;
+
+    //for each CB
+    switch (headVar) {
+      case "derivedFromCB":
+        temp = value.split(",");
+        cbData.derivedFrom = temp;
+        break;
+      case "hasSourcesCB":
+        temp = value.split(",");
+        cbData.hasSource = temp;
+        break;
+      case "contrib":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.contribution = temp.toLowerCase();
+        break;
+      case "actAdmin":
+        cbData.careActionTypeRef = value;
+        break;
+      case "cbUri":
+        cbData.id = value;
+        break;
+      case "freq":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.probability = temp.toLowerCase();
+        break;
+      case "evidence":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.evidence = temp.toLowerCase();
+        break;
+      case "TrUri":
+        cbData.transition.id = value;
+        break;
+      case "propLabel":
+        cbData.transition.property.display = value;
+        break;
+      case "propSctId":
+        cbData.transition.property.sctId = value;
+        cbData.transition.property.system = sctUri;
+        break;
+      case "propUri":
+        cbData.transition.property.id = value;
+        //extract code
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.property.code = temp;
+        break;
+      case "sitFromId":
+        cbData.transition.situationTypes[0].id = value;
+        //extract code
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.situationTypes[0].value.code = temp;
+        break;
+      case "sitToId":
+        cbData.transition.situationTypes[1].id = value;
+        //extract code
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.situationTypes[1].value.code = temp;
+        break;
+      case "sitFromLabel":
+        cbData.transition.situationTypes[0].value.display = value;
+        break;
+      case "sitFromStateOf":
+        cbData.transition.situationTypes[0].value.stateOfProp = value;
+        break;
+      case "sctPreSit":
+        cbData.transition.situationTypes[0].value.sctId = value;
+        cbData.transition.situationTypes[0].value.system = sctUri;
+        break;
+      case "sitToLabel":
+        cbData.transition.situationTypes[1].value.display = value;
+        break;
+      case "sitToStateOf":
+        cbData.transition.situationTypes[1].value.stateOfProp = value;
+        break;
+      case "sitFromSctId":
+        cbData.transition.situationTypes[0].value.sctId = value;
+        cbData.transition.situationTypes[0].value.system = sctUri;
+        break;
+      case "deriv":
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.transition.effect = temp.toLowerCase();
+        break;
+      case "sitToSctId":
+        cbData.transition.situationTypes[1].value.sctId = value;
+        cbData.transition.situationTypes[1].value.system = sctUri;
+        break;    
+      default:
+        logger.debug(
+          "switch headVar param: " + headVar + " with value : " + value
+        );
+        break;
+    }
+  } //endOf loop
+  return cbData;
+}
+
+async function get_rdf_atom_as_array(bindings) {
+  let expr = jsonata("[**.value]");
+  const result = await expr
+    .evaluate(bindings)
+    .catch((err) => logger.error(err));
+  //logger.debug(result);
+  return result;
+}
+
+function sparql_drop_named_graphs(ds_id, id) {
+  let head_graph = `data:${id}_head`;
+  let assert_graph = `data:${id}`;
+  let prov_graph = `data:${id}_provenance`;
+  let pubInfo_graph = `data:${id}_publicationinfo`;
+
+  return ` DROP SILENT GRAPH ${head_graph} ;  DROP SILENT GRAPH ${assert_graph} ; DROP SILENT GRAPH ${prov_graph} ; DROP SILENT GRAPH ${pubInfo_graph} `;
+}
+
+
+  /**
+   *
+   * @param {string} cigFrom original CIG
+   * @param {string} cigTo destination CIG
+   * @param {string} nanoHead
+   * @param {string} nanoAssert
+   * @param {string} nanoProv
+   * @param {string} nanoPubInfo
+   * @param {(Error, number) => number} callback callback function returning status
+   */
+function  addGraphsDataFromToCig(
+    cigFrom,
+    cigTo,
+    nanoHead,
+    nanoAssert,
+    nanoProv,
+    nanoPub ) {
+    let insertGraphsData = ``;
+    let graphs;
+    let assertGraphs = ``;
+    let provGraphs = ``;
+    let headGraphs = ``;
+    let nanopubGraphs = ``;
+    let graphDescrDel = ``;
+    let graphDescrIns = ``;
+
+    let deleteTriples;
+
+    const cigFromUrl =
+      "http://" +
+      config.JENA_HOST +
+      ":" +
+      config.JENA_PORT +
+      "/" +
+      cigFrom +
+      "/query";
+
+    assertGraphs = `\nGRAPH <` + nanoAssert + `> { ?a  ?b ?c } `;
+    provGraphs = `\nGRAPH <` + nanoProv + `> { ?d  ?e ?f } `;
+    nanopubGraphs = `\nGRAPH <` + nanoPub + `> { ?g ?h ?i } `;
+    headGraphs = `\nGRAPH <` + nanoHead + `> { ?j ?k ?l } `;
+
+    graphDescrDel +=
+      `\nGRAPH <` +
+      nanoAssert +
+      `> { <` +
+      nanoAssert +
+      `> vocab:partOf data:` +
+      cigFrom +
+      ` } `;
+
+    graphDescrIns +=
+      `\nGRAPH <` +
+      nanoAssert +
+      `> { <` +
+      nanoAssert +
+      `> vocab:partOf data:` +
+      cigTo +
+      ` } `;
+
+    insertGraphsData =
+      `\nINSERT {` +
+      headGraphs +
+      assertGraphs +
+      graphDescrIns +
+      nanopubGraphs +
+      provGraphs +
+      `} \nWHERE { SERVICE <` +
+      cigFromUrl +
+      `> { ` +
+      headGraphs +
+      assertGraphs +
+      nanopubGraphs +
+      provGraphs +
+      ` } } ; `;
+
+    deleteTriples = `\nDELETE WHERE { ` + graphDescrDel + ` } ; `;
+
+    ///UPDATE GRAPH STORE///
+
+    return insertGraphsData + deleteTriples;
+  }
+
+
 module.exports = {
-  filter_TMR_rec_type,
-  action_gprec,
+  filter_vocab_rec_type,
   insert_precond_in_rec,
   insert_CB_in_rec,
   action_rec,
   get_rec_json_data,
-  get_statement_data,
+  get_ST_data,
   get_rec_data,
-  actionSubguideline,
-  tmrDataUri,
   sctUri,
   setUri,
-  careAction_rdf2json
+  get_care_action,
+  get_transition_object,
+  get_rdf_atom_as_array,
+  sparql_drop_named_graphs,
+  get_CB_object,
+  addGraphsDataFromToCig
 };

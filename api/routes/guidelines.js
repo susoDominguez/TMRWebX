@@ -7,8 +7,9 @@ const { reportError } = require("../lib/parser/parserError");
 const utils = Promise.promisifyAll(require("../lib/utils"));
 const logger = require("../config/winston");
 const { ErrorHandler } = require("../lib/errorHandler");
-const { error } = require("console");
-const { json } = require("body-parser");
+//const { error } = require("console");
+//const { json } = require("body-parser");
+const auxFuncts = require("../lib/router_functs/guideline_functs");
 //const e = require("express");
 //const { throws } = require("assert");
 
@@ -71,5 +72,8 @@ router.post("/interactions", function (req, res, next) {
       });
     });
 });
+
+
+
 
 module.exports = router;

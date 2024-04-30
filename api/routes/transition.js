@@ -5,47 +5,132 @@ const router = express.Router();
 const config = require('../lib/config');
 //const guidelines = require('../lib/prefixes');
 const utils = require('../lib/utils');
+const auxFunct = require('../lib/router_functs/guideline_functs')
 const { ErrorHandler } = require('../lib/errorHandler');
 
-function postTransition(transitionData, res, insertOrDelete) {
+router.post('/property/add', async function(req, res, next) {
 
-  utils.sparqlUpdate('transitions', transitionData, insertOrDelete, function(err, status) {
+  let def = actionProperty(req);
+  let {data, status} = await postTransition(def, config.INSERT);
 
-    res.status(status).end();
+  return res.status(status).send(data);
 
-  });
+});
+
+router.post('/property/delete', async function(req, res, next) {
+  let {data, status} = await postTransition(req.body.id, config.DELETE, 'Prop');
+
+  return res.status(status).send(data);
+
+});
+
+router.post('/situation/compound/add', async function(req, res, next) {
+
+  let def = actionSituationComplex(req);;
+
+  let {data, status} = await postTransition(def, config.INSERT);
+
+  return res.status(status).send(data);
+
+});
+
+router.post('/situation/add', async function(req, res, next) {
+
+  let def = actionSituation(req, res, config.INSERT);
+
+  let {data, status} = await postTransition(def, config.INSERT);
+
+  return res.status(status).send(data);
+
+});
+
+router.post('/situation/delete', async function(req, res, next) {
+
+  let {data, status} = await postTransition(req.body.id, config.DELETE, 'Sit');
+
+  return res.status(status).send(data);
+
+});
+
+router.post('/situation/compound/delete', async function(req, res, next) {
+
+  let {data, status} = await postTransition(req.body.id, config.DELETE, 'Sit');
+
+  return res.status(status).send(data);
+
+});
+
+router.post('/add', async function(req, res, next) {
+
+  let def = action(req, res, config.INSERT);
+
+  let {data, status} = await postTransition(def, config.INSERT);
+
+  return res.status(status).send(data);
+
+});
+
+router.post('/delete', async function(req, res, next) {
+
+  let {data, status} = await postTransition(req.body.id, config.DELETE, 'Tr');
+
+  return res.status(status).send(data);
+
+});
+
+/// GET 
+router.post('/all/get/', async function(req, res, next) {
+
+  const id = req.body.id ? "data:Tr"+req.body.id : "<"+req.body.uri+">" ;
+
+  let {status,head_vars,bindings} = await utils.getTransitionData("transitions", id);
+
+  if(status < 400 && bindings.length > 0) {
+    let data = auxFunct.get_transition_object(head_vars, bindings[0]);
+    return res.status(status).json(data);
+  } else {
+    return res.status(status).json({});
+  }
+
+});
+
+
+
+async function postTransition(transitionData, insertOrDelete, type = '') {
+
+  const del_str = ` data:${type+transitionData} ?p ?o . `;
+
+  let content = insertOrDelete === config.INSERT ? transitionData : del_str;
+  
+  let sparql_query_str = `${insertOrDelete} ${insertOrDelete === config.INSERT ? "DATA" : ""} { ${content} } `;
+
+  if(insertOrDelete === config.DELETE){
+    let query_post_str = ` WHERE {  ${del_str}  }`;
+    sparql_query_str += query_post_str ;
+  }
+
+   return await utils.sparqlUpdate('transitions', sparql_query_str); 
 
 }
 
 function action(req, res, insertOrDelete) {
 
-  const transition = `data:Tr` + req.body.transition_id + ` rdf:type tmr:TransitionType, owl:NamedIndividual ;
-                  tmr:hasTransformableSituation data:Sit` + req.body.pre_situation_id + ` ;
-                  tmr:hasExpectedSituation data:Sit` + req.body.post_situation_id + ` ;
-                  tmr:derivative   tmr:` + req.body.derivative + ` ;
-                  tmr:affects data:Prop` + req.body.affected_property_id + ` .`
+  //, owl:NamedIndividual 
+  const transition = `data:Tr` + req.body.id + ` rdf:type vocab:TransitionType ;
+                  vocab:hasTransformableSituation data:Sit` + req.body.pre_situation_id + ` ;
+                  vocab:hasExpectedSituation data:Sit` + req.body.post_situation_id + ` ;
+                  vocab:derivative   "` + req.body.derivative + `" ;
+                  vocab:affects data:Prop` + req.body.affected_property_id + ` .`
 
-  postTransition(transition, res, insertOrDelete);
+  return transition;
 
 }
 
-router.post('/add', function(req, res, next) {
+function actionSituation(req) {
 
-  action(req, res, config.INSERT);
-
-});
-
-router.post('/delete', function(req, res, next) {
-
-  action(req, res, config.DELETE);
-
-});
-
-function actionSituation(req, res, insertOrDelete) {
-
-  var situationDef = `data:Sit` + req.body.situation_id + ` rdf:type tmr:SituationType, owl:NamedIndividual;
-               rdfs:label "` + req.body.situation_label + `"@en ; 
-               tmr:stateOf  "`+ req.body.stateOfproperty +`" `
+  var situationDef = `data:Sit` + req.body.id + ` rdf:type vocab:SituationType, owl:NamedIndividual ;
+               rdfs:label "` + req.body.label + `"@en ; 
+               vocab:stateOf  "`+ req.body.stateOfproperty +`" `
 
   if ( req.body.umlsCodes ) {
 
@@ -54,7 +139,7 @@ function actionSituation(req, res, insertOrDelete) {
     req.body.umlsCodes.split(",").forEach(function(code) {
 
       situationDef += `
-      tmr:umlsCode   "` + code.trim() + `"^^xsd:string ;`
+      vocab:umlsCode   "` + code.trim() + `"^^xsd:string ;`
 
     });
      //this removes the last semicolon
@@ -68,7 +153,7 @@ function actionSituation(req, res, insertOrDelete) {
     req.body.atcCodes.split(",").forEach(function(code) {
 
       situationDef += `
-      tmr:atcCode   "` + code.trim() + `"^^xsd:string ;`
+      vocab:atcCode   "` + code.trim() + `"^^xsd:string ;`
 
     });
     //this removes the last semicolon
@@ -82,21 +167,21 @@ function actionSituation(req, res, insertOrDelete) {
     req.body.icd10Codes.split(",").forEach(function(code) {
 
       situationDef += `
-      tmr:icd10Code   "` + code.trim() + `"^^xsd:string ;`
+      vocab:icd10Code   "` + code.trim() + `"^^xsd:string ;`
 
     });
     //this removes the last semicolon
     situationDef = situationDef.substring(0, situationDef.length - 1);
   }
 
-  if ( req.body.snomedCodes ) {
+  if ( req.body.snomedCode ) {
 
     situationDef += `;`;
 
-    req.body.snomedCodes.split(",").forEach(function(code) {
+    req.body.snomedCode.split(",").forEach(function(code) {
 
       situationDef += `
-      tmr:snomedCode   "` + code.trim() + `"^^xsd:string ;`
+      vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
 
     });
     //this removes the last semicolon
@@ -105,17 +190,17 @@ function actionSituation(req, res, insertOrDelete) {
 
   situationDef += `.`
 
-  postTransition(situationDef, res, insertOrDelete);
+  return situationDef ;
 
 }
 
-function actionSituationComplex(req, res, insertOrDelete) {
+function actionSituationComplex(req) {
 
-  let situationDef = `data:Sit` + req.body.compound_sit_id + ` rdf:type tmr:CompoundSituationType, owl:NamedIndividual;
+  let situationDef = `data:Sit` + req.body.id + ` rdf:type vocab:CompoundSituationType, owl:NamedIndividual;
                rdfs:label "` + req.body.label + `"@en ; `
   
   let compoundList = ` 
-               tmr:`+req.body.connective+` `;
+               vocab:`+req.body.connective+` `;
 
   if ( req.body.situation_id_list ) {
 
@@ -130,59 +215,68 @@ function actionSituationComplex(req, res, insertOrDelete) {
     throw ErrorHandler(500, `list of situations missing`);
   }
 
+  if ( req.body.icd10Code ) {
+    compoundList += `;`;
+                
+    req.body.icd10Codes.split(",").forEach(function(code) {
+                
+      compoundList += `
+        vocab:icd10Code   "` + code.trim() + `"^^xsd:string ;`
+                
+    });
+      //this removes the last semicolon
+      compoundList = compoundList.substring(0, compoundList.length - 1);
+}
+
+if ( req.body.snomedCode ) {
+  compoundList += `;`;
+              
+  req.body.snomedCode.split(",").forEach(function(code) {
+              
+    compoundList += `
+      vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
+              
+  });
+    //this removes the last semicolon
+    compoundList = compoundList.substring(0, compoundList.length - 1);
+}
+
   compoundList += `.`
 
-  postTransition( (situationDef + compoundList), res, insertOrDelete);
+  return situationDef + compoundList;
 
 }
 
-router.post('/situation/add', function(req, res, next) {
 
-  actionSituation(req, res, config.INSERT);
-
-});
-
-router.post('/situation/compound/add', function(req, res, next) {
-
-  actionSituationComplex(req, res, config.INSERT);
-
-});
-
-
-router.post('/situation/delete', function(req, res, next) {
-
-  actionSituation(req, res, config.DELETE);
-
-});
 
 //////////////
 //////////////
 
-function actionProperty(req, res, insertOrDelete) {
+function actionProperty(req) {
 
-  var property = `data:Prop` + req.body.property_id + ` rdf:type  tmr:TropeType, owl:NamedIndividual ;
-                    rdfs:label "` + req.body.property_label + `"@en `;
+  var property = `data:Prop` + req.body.id + ` rdf:type  vocab:TropeType, owl:NamedIndividual ;
+                    rdfs:label "` + req.body.label + `"@en `;
 
-  if ( req.body.icd10Codes ) {
+  if ( req.body.icd10Code ) {
       property += `;`;
                   
       req.body.icd10Codes.split(",").forEach(function(code) {
                   
         property += `
-          tmr:icd10Code   "` + code.trim() + `"^^xsd:string ;`
+          vocab:icd10Code   "` + code.trim() + `"^^xsd:string ;`
                   
       });
         //this removes the last semicolon
       property = property.substring(0, property.length - 1);
   }
 
-  if ( req.body.snomedCodes ) {
+  if ( req.body.snomedCode ) {
     property += `;`;
                 
-    req.body.snomedCodes.split(",").forEach(function(code) {
+    req.body.snomedCode.split(",").forEach(function(code) {
                 
       property += `
-        tmr:snomedCode   "` + code.trim() + `"^^xsd:string ;`
+        vocab:snomedCode   "` + code.trim() + `"^^xsd:string ;`
                 
     });
       //this removes the last semicolon
@@ -192,130 +286,9 @@ function actionProperty(req, res, insertOrDelete) {
   //add final dot on RDF          
     property += `.`
 
-  postTransition(property, res, insertOrDelete);
+  return property;
 
 }
 
-router.post('/property/add', function(req, res, next) {
-
-  actionProperty(req, res, config.INSERT);
-
-});
-
-router.post('/property/delete', function(req, res, next) {
-
-  actionProperty(req, res, config.DELETE);
-
-});
-
-router.post('/all/get/', function(req, res, next) {
-
-  const data = 'http://anonymous.org/tmr/data/';
-  
-  const id = req.body.uri ? "<"+req.body.uri+">" : "<"+ data + req.body.id+">";
-
-    utils.getTransitionData("transitions",id, function(err, transitionData) {
-
-      if(err) {
-        res.status(404).send(transitionData);
-        return;
-      }
-
-      //if  data found in Object (we check), begin
-      if(transitionData.constructor === Object && Object.entries(transitionData).length != 0) {
-
-      var data = { id: id  ,
-                    situationTypes: [
-                      {
-                        "type": "hasTransformableSituation",
-                        "value": {}
-                      },
-                      {
-                        "type": "hasExpectedSituation",
-                        "value": {}
-                      }
-                    ],
-                    property: {} };
-
-      var vars = transitionData.head.vars;
-      var bindings = transitionData.results.bindings;
-      
-      //format data by looping through results
-      for(let pos in bindings){
-
-        var bind = bindings[pos];
-
-        for(var varPos in vars){
-
-          var value = bind[vars[varPos]].value;
-
-          //for each heading, add a field
-          switch (vars[varPos]) {
-            case "sitFromId":
-              data.situationTypes[0].id = value;
-              //extract code
-              var type = value.slice(30);
-              data.situationTypes[0].value.code= type;
-              break;
-            case "sitToId":
-              data.situationTypes[1].id = value;
-              //extract code
-              var type = value.slice(30);
-              data.situationTypes[1].value.code= type;
-              break;
-            case "propUri":
-              //extract code
-              var type = value.slice(30);
-              data.property.code = type;
-              break;
-            case "sitFromLabel":
-              data.situationTypes[0].value.display =  value;
-              break;
-            case "sitToLabel":
-              data.situationTypes[1].value.display = value;
-              break;
-            case "propTxt":
-              data.property.display = value;
-              break;
-            case "deriv":
-              var type = value.slice(25);
-              data.effect = type;
-              break;
-          }
-        }
-    }
-    res.send(data);
-      } else {
-        res.send({});
-      }
-      
-    });
-
-});
-
-router.post( '/situation/all/get/', function(req, res, next) {
-
-    utils.sparqlGetPreds_Objcts("transitions", ( req.body.uri ? "<"+req.body.uri+">" : "data:Sit"+req.body.id), 
-     function(err, situationData) {
-      if(err){
-        next(new ErrorHandler(500, err));
-      } else {
-        res.send(situationData);
-      }
-  
-    });
-});
-
-router.post('/property/all/get/', function(req, res, next) {
-
-    utils.sparqlGetPreds_Objcts("transitions", ( req.body.property_URI ? "<"+req.body.property_URI+">" : "data:Prop"+req.body.property_id ), 
-      function(err,propertyData) {
-
-      res.send(propertyData);
-  
-    });
-  
-
-});
 
 module.exports = router;

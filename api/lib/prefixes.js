@@ -1,16 +1,24 @@
 module.exports = {
 	PREFIXES:
-		` PREFIX data: <http://anonymous.org/tmr/data/>
-		 PREFIX nanopub: <http://www.nanopub.org/nschema#>
-		 PREFIX np: <http://www.nanopub.org/nschema#>
-		 PREFIX oa: <http://www.w3.org/ns/oa#>
-		 PREFIX owl: <http://www.w3.org/2002/07/owl#>
-		 PREFIX prov: <http://www.w3.org/ns/prov#>
-		 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-		 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-		 PREFIX tmr: <http://anonymous.org/tmr/>
-		 PREFIX xml: <http://www.w3.org/XML/1998/namespace>
-		 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-		 PREFIX dct: <http://purl.org/dc/terms/>
+		`prefix :      <http://anonymous.org/data/> 
+		prefix np:    <http://www.nanopub.org/nschema#> 
+		prefix data:  <http://anonymous.org/data/> 
+		prefix owl:   <http://www.w3.org/2002/07/owl#> 
+		prefix swrlb: <http://www.w3.org/2003/11/swrlb#> 
+		prefix xsd:   <http://www.w3.org/2001/XMLSchema#> 
+		prefix swrl:  <http://www.w3.org/2003/11/swrl#> 
+		prefix vocab4i: <http://anonymous.org/vocab4i/> 
+		prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> 
+		prefix oa:    <http://www.w3.org/ns/oa#> 
+		prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> 
+		prefix xml:   <http://www.w3.org/XML/1998/namespace> 
+		prefix tmr:   <http://anonymous.org/vocab/> 
+		prefix vocab: <http://anonymous.org/vocab/> 
+		prefix tmr4i: <http://anonymous.org/vocab4i/> 
+		prefix nanopub: <http://www.nanopub.org/nschema#> 
+		prefix prov:  <http://www.w3.org/ns/prov#> 
+		prefix tmrdata:  <http://anonymous.org/tmr/data/> 
+		prefix tmrvocab:  <http://anonymous.org/tmr/vocab> 
+		prefix tmrvocab4i: <http://anonymous.org/vocab4i/> 
 		   `
 };

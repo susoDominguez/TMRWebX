@@ -35,19 +35,11 @@ router.post("/drug/vaccine/individual/add", async function (req, res) {
 });
 
 router.post("/combination/add", async function (req, res) {
-  let sprql_str = careActDef(req, "CombT");
+  let sprql_str = careActDef(req, "CombCareT");
    let {status, data} = await postDrugs(sprql_str, config.INSERT);
      res.status(status).send(data);
 });
 
-/* 
-/TO BE DONE
-router.post("/nondrug/category/add", function (req, res) {
-  nonDrugCatCareAction(req, config.INSERT, (err, status) =>
-    res.status(status).end()
-  );
-});
-*/
 
 /////////////////////////////////////////
 
@@ -71,8 +63,8 @@ router.post("/nondrug/individual/delete", async function (req, res) {
 });
 
 router.post("/combination/delete", async function (req, res) {
-  let sprql_str = delete_def("CombT", req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, "CombT"+req.body.id, req.body.id) ;
+  let sprql_str = delete_def("CombCareT", req.body.id);
+  let {status, data} = await postDrugs(sprql_str, config.DELETE, "CombCareT"+req.body.id, req.body.id) ;
    res.status(status).send(data);
 });
 
@@ -125,17 +117,16 @@ router.post("/all/get/", async function (req, res) {
   //no params
   if (!(req.body.uri || req.body.id)) return res.status(406).send('Missing Id or URI parameter.');
 
-  //else
-  const prefix = `http://anonymous.org/tmr/data/`;
-
-
-    let {status = 500,head_vars=[], bindings=[]} = await utils.getCareActionData(
-      "careActions",
-      req.body.id ? prefix + req.body.id : req.body.uri);
-
-    let data = auxFunct.careAction_rdf2json(head_vars, bindings); //TODO:
-
+    let {status ,head_vars, bindings} = await utils.getCareActionData("careActions", 'ActAdminister'+req.body.id, req.body.uri);
+  if(status < 400) {
+    let data = auxFunct.get_care_action(head_vars, bindings[0]);
     return res.status(status).json(data);
+  } else {
+    return res.status(status).end();
+  }
+
+
+     
 });
 
 /*
@@ -181,7 +172,7 @@ router.post('/all/get/', function(req, res) {
 
 async function postDrugs(careActData, insertOrDelete, type, id) { 
 
-  const del_str = ` data:${type} ?p ?o . data:ActAdminister${id} ?p1 ?o1 . `;
+  const del_str = ` data:${type+id} ?p ?o . `;
 
   let content = insertOrDelete === config.INSERT ? careActData : del_str;
   
@@ -197,17 +188,14 @@ async function postDrugs(careActData, insertOrDelete, type, id) {
 
 //Defines drug types and categories, providing an english label.
 function drugDef(type, id, englishLbl) {
-  englishLbl = type !== "CombT" ? englishLbl : "a combination of " + englishLbl;
+  englishLbl = type !== "CombCareT" ? englishLbl : "a combination of " + englishLbl + " therapies";
 
   return (drug =
-    `data:` +
-    type +
-    id +
-    ` a tmr:${
+    `data:` + type + id + ` a vocab:${
       type === "DrugCat"
         ? "DrugCategory"
-        : type === "CombT"
-        ? "CompoundType"
+        : type === "CombCareT"
+        ? "CombinedCareType"
         : type === "VacT"
         ? "VaccineType"
         : "DrugType"
@@ -219,7 +207,7 @@ function drugDef(type, id, englishLbl) {
 
 //Defines non-drug related care actions
 function nonDrugDef(type, id, label) {
-  return `data:${type + id} a tmr:NonDrugType , owl:NamedIndividual ;
+  return `data:${type + id} a vocab:NonDrugType , owl:NamedIndividual ;
                       rdfs:label "${label}"@en `;
 }
 
@@ -227,15 +215,15 @@ function nonDrugDef(type, id, label) {
 
 //Administration action care general to both drug type and category
 function drugAdminActDef(type, id, englishLabel) {
-  let drugAdministration = `data:ActAdminister${id} a tmr:${
+  let drugAdministration = `data:ActAdminister${id} a vocab:${
     type === "VacT"
       ? "VaccinationType"
-      : type === "CombT"
+      : type === "CombCareT"
       ? "CombinedCareActionType"
       : "DrugAdministrationType"
   }, owl:NamedIndividual ;
                       rdfs:label "administer ${englishLabel} "@en ;
-                      tmr:administrationOf data:${type + id} `;
+                      vocab:${type === "CombCareT"? 'combinedParticipationOf': type == 'VacT'? 'inoculationOf': 'administrationOf'} data:${type + id} `;
 
   return drugAdministration;
 }
@@ -243,9 +231,9 @@ function drugAdminActDef(type, id, englishLabel) {
 //Administration non drug action care
 function nonDrugAdminActDef(type, id, actLabel) {
 
-  return `data:ActAdminister${id}  a tmr:NonDrugAdministrationType , owl:NamedIndividual ;
+  return `data:ActAdminister${id}  a vocab:NonDrugAdministrationType , owl:NamedIndividual ;
                               rdfs:label "${actLabel}"@en ;
-                              tmr:applicationOf data:${type + id} `;
+                              vocab:applicationOf data:${type + id} `;
 }
 
 //defines the insertion of clinical codes both in drugT and nonDrugT. Also in drug categories & combinations
@@ -258,7 +246,7 @@ function insertCodes(req) {
     req.body.icd10Codes.split(",").forEach(function (code) {
       careAction +=
         `
-        tmr:icd10Code   "` +
+        vocab:icd10Code   "` +
         code.trim() +
         `"^^xsd:string ;`;
     });
@@ -271,7 +259,7 @@ function insertCodes(req) {
     req.body.snomedCodes.split(",").forEach(function (code) {
       careAction +=
         `
-      tmr:snomedCode   "` +
+      vocab:snomedCode   "` +
         code.trim() +
         `"^^xsd:string ;`;
     });
@@ -285,7 +273,7 @@ function insertCodes(req) {
     req.body.umlsCodes.split(",").forEach(function (code) {
       careAction +=
         `
-      tmr:umlsCode   "` +
+      vocab:umlsCode   "` +
         code.trim() +
         `"^^xsd:string ;`;
     });
@@ -318,7 +306,7 @@ function careActDef(req, drug_type) {
   }
 
   //add components in combined drug types or else subsumed drugs
-  if (drug_type === 'CombT' && components_ids) {
+  if (drug_type === 'CombCareT' && components_ids) {
     careAct_def += addComponents(components_ids);
   } else {
     if (subsumed_list) {
@@ -368,7 +356,7 @@ function careActDefNonDrug(req, type) {
 //add one or more drugTypes as part of the grouping criteria of a drug category
 function addGroupingCriteria(groupingCriteriaIds) {
   let groupingCriteria = ` ;
-                            tmr:hasGroupingCriteria  `;
+                            vocab:hasGroupingCriteria  `;
 
   groupingCriteriaIds.split(",").forEach(function (criteriaId) {
     groupingCriteria += `data:Tr` + criteriaId.trim() + `, `;
@@ -381,7 +369,7 @@ function addGroupingCriteria(groupingCriteriaIds) {
 
 function addComponents(componentsStr) {
   let components_part = ` ;
-                            tmr:hasComponent  `;
+                            vocab:hasComponent  `;
 
   componentsStr.split(",").forEach(function (compId) {
     components_part += `data:ActAdminister` + compId.trim() + `, `;
@@ -395,7 +383,7 @@ function addComponents(componentsStr) {
 //Specify multiple drug subsumptions via the administrationOf triple.
 function adminActSubs(drugIds) {
   let adminSubs = ` ;
-                      tmr:subsumes  `;
+                      vocab:subsumes  `;
 
   drugIds.split(",").forEach(function (elem) {
     adminSubs += `data:ActAdminister` + elem.trim() + `, `;
