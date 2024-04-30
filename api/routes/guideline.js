@@ -53,8 +53,7 @@ function action_gprec(req) {
     ` {
       ` +
     id +
-    `
-              a   vocab:GoodPracticeRecommendation ;
+    `         a   vocab:GoodPracticeRecommendation ;
               rdfs:label  '''${req.body.gpRec_label}'''@en ;
               vocab:aboutNotificationOf  data:ST` +
     req.body.statement_id +

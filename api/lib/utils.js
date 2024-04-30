@@ -832,10 +832,10 @@ module.exports = {
               SERVICE ${stmntUrl} {
                 GRAPH  ?stUri {
                   ?stUri a  vocab:ClinicalStatement ;
-                       vocab:statementText ?stTxt ;
-                        vocab:statementTitle ?stTtl ;
-                        vocab:organizationJurisdiction ?stOj ;
-                        vocab:organizationName ?stOn .   
+                       vocab:hasStatementText ?stTxt ;
+                        vocab:hasStatementTitle ?stTtl ;
+                        vocab:OrganizationJurisdiction ?stOj ;
+                        vocab:OrganizationName ?stOn .   
                 }
               GRAPH ?stUriProv {
                ?stUriProv oa:hasBody ?stUri ;
@@ -846,13 +846,6 @@ module.exports = {
             }
            OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
            OPTIONAL { ${recAssertURI} vocab:partOf ?partOf  . } 
-           OPTIONAL { ${recAssertURI} vocab:hasFilterSituation ?precond .
-             SERVICE ${TrUrl} {  
-               ?precond  rdf:type  owl:NamedIndividual  ;
-                        rdfs:label ?precondLbl  .
-               OPTIONAL { ?precond  vocab:snomedCode ?sctPrecond . }
-             }
-           }
          } 
         }
       } GROUP BY ?stUri ?label  ?sourceCB ?stTxt ?partOf ?extractedFrom ?stTtl 
