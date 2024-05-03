@@ -5,8 +5,8 @@ ENV NODE_ENV=production
 WORKDIR /usr/src/app
 
 COPY --chown=node:node package*.json ./
-#RUN npm install
-RUN npm ci --only=production
+RUN npm install
+#RUN npm ci --only=production
 #install rest of project
 COPY --chown=node:node . .
 # install dependencies

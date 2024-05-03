@@ -30,7 +30,6 @@ services:
       - JVM_ARGS=-Xmx2g
     depends_on: 
       - busybox
-
   interaction_app:
     build: 
       context: ./api/

@@ -12,7 +12,7 @@ function action(req) {
   const date = new Date().toJSON();
   let sources = "";
 
-  req.body.derivedFrom ??= 'http://anonymous.org/tmr/data/Not_given';
+  req.body.derivedFrom  = req.body.derivedFrom  ? req.body.derivedFrom : 'http://anonymous.org/tmr/data/Not_given';
   req.body.derivedFrom.split(",").forEach(function (code) {
     sources += ` <${code.trim()}> ,`;
   });
@@ -70,7 +70,7 @@ router.post("/all/get/", async function (req, res, next) {
     req.body.id);
 
     let result = auxFuncts.get_ST_data(head_vars,bindings[0]);
-    res.status(status).json(result ??= {});
+    res.status(status).json(result ? result : {});
   });
 
 

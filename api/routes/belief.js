@@ -12,7 +12,7 @@ function action(req) {
   const date = new Date().toJSON();
   let sources = "";
 
-  req.body.derivedFrom ??= 'http://anonymous.org/tmr/data/Not_given';
+  req.body.derivedFrom = req.body.derivedFrom ? req.body.derivedFrom : 'http://anonymous.org/tmr/data/Not_given';
   req.body.derivedFrom.split(",").forEach(function (code) {
     sources += ` <${code.trim()}> ,`;
   });
