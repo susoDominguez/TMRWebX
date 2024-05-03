@@ -37,6 +37,7 @@ function setUri(label, prefix, fullUri, shortenedURI) {
 }
 
 function get_rec_data(recURI, guidelineData, type) {
+  
   //recommendation template object
   let recData = {
     id: recURI,
@@ -336,97 +337,8 @@ function get_rec_data(recURI, guidelineData, type) {
   return recData;
 }
 
-function get_statement_data2(recURI, guidelineData) {
-  //recommendation template object
-  let recData = {
-    id: recURI,
-    partOf: undefined, //combined dataset or original
-    extractedFrom: undefined, //original dataset
-    type: {
-      sctId: "223464006",
-      display: "Procedure education (procedure)",
-    },
-    derivedFrom: undefined,
-    hasSource: undefined,
-    wasAttributedTo: undefined,
-    generatedAtTime: undefined,
-    hasFilterSituation: undefined,
-    title: undefined,
-    clinicalStatements: [],
-  };
-
-  let precond = {
-    id: undefined,
-    sctId: undefined,
-    display: undefined,
-    composedOf: undefined,
-  };
-
-  let headVars = guidelineData.head.vars;
-  let bindingsList = guidelineData.results.bindings;
-  //logger.debug(bindingsList.length);
-
-  for (const index in bindingsList) {
-    //results object
-    const bindingObj = bindingsList[index];
-    //one TR and CB object per CB id encountered
-    //one object per causation belief
-    const stData = {
-      id: undefined,
-      author: undefined,
-      hasStatementTitle: undefined,
-      hasStatementText: undefined,
-      organization: undefined,
-      jurisdiction: undefined,
-      derivedFrom: undefined,
-      hasSource: undefined,
-      wasAttributedTo: undefined,
-      generatedAtTime: undefined,
-    };
-
-    //format data by looping through head vars
-    for (const pos in headVars) {
-      //variable name
-      let headVar = headVars[pos];
-
-      //check there is a corresponding binding, if not, next head var
-      if (!(headVar && bindingObj.hasOwnProperty(headVar))) continue;
-
-      //otherwise, retrieve value
-      let value = bindingObj[headVar].value;
-      //temporary var
-      let temp;
-
-      //for each CB
-      switch (headVar) {
-        case "derivedFromSt":
-          temp = value.split(",");
-          stData.derivedFrom = temp;
-          break;
-        case "hasSourcesSt":
-          temp = value.split(",");
-          stData.hasSource = temp;
-          break;
-        case "orgNmsSt":
-          temp = value.split(",");
-          stData.organization = temp;
-          break;
-        case "stUri":
-          stData.id = value;
-          break;
-        case "orgJursSt":
-          temp = value.split(",");
-          stData.jurisdiction = temp;
-          break;
-        case "stTxt":
-          stData.hasStatementText = value;
-          break;
-        case "stTtl":
-          stData.hasStatementTitle = value;
-          break;
-      }
-
-      //take the first binding object and
+/*
+ //take the first binding object and
       //create the outer content of recoomend minus CBs
       if (index < 1) {
         switch (headVar) {
@@ -480,23 +392,65 @@ function get_statement_data2(recURI, guidelineData) {
         }
         if (precond.id) recData.hasFilterSituation = precond;
       }
+*/
+function get_gpRec_data(recURI, head_vars, binding) {
 
-      //test values of each binding object
-      //logger.debug(`head var is ${headVar} and value is ${value}`);
+  //recommendation template object
+  let recData = {
+    id: recURI,
+    partOf: undefined, //combined dataset or original
+    extractedFrom: undefined, //original dataset
+    type: {
+      code: "223464006",
+      display: "Procedure education (procedure)",
+      system: sctUri
+    },
+    hasSource: undefined,
+    wasAttributedTo: undefined,
+    generatedAtTime: undefined,
+    hasFilterSituation: undefined,
+    title: undefined,
+    clinicalStatements: [],
+  };
+
+
+    //format data by looping through head vars
+    for (const pos in head_vars) {
+      //variable name
+      let headVar = head_vars[pos];
+
+      //check there is a corresponding binding, if not, next head var
+      if (!binding.hasOwnProperty(headVar) || !recData.hasOwnProperty(headVar)) continue;
+
+      //otherwise, retrieve value
+      let value = binding[headVar].value;
+      //temporary var
+      let temp;
+      logger.debug(`head var is ${headVar} and value is ${value}`);
+      //for each CB
+      switch (headVar) {
+        case "partOf":
+          recData.partOf = value;
+          break;
+        case "hasSources":
+          recData.hasSource = value.split(",");
+          break;
+        case "author":
+          recData.wasAttributedTo = value;
+          break;
+        case "label":
+          recData.title = value;
+          break;
+      }
     } //endOf headVars
-    //add one CB object to Rec
-    recData.clinicalStatements.push(stData);
-  } //endOf bindingObj
 
   return recData;
 }
 
 
 function get_ST_data(head_vars,binding){
-  logger.debug(head_vars);
-  logger.debug(binding);
 
-  if (binding == undefined  || binding == []) return {};
+  if (binding == undefined  || binding.length === 0) return {};
 
   let stData = {
     id: undefined,
@@ -525,21 +479,27 @@ function get_ST_data(head_vars,binding){
     logger.debug(`binding value is ${value}`);
     //for each heading, add a field
     switch (headVar) {
-      case "st_id":
+      case "stUri":
         stData.id = value;
         break;
-      case "statementTitle":
+      case "stTtl":
         stData.hasStatementTitle = value;
         break;
-      case "statementText":
+      case "stTxt":
         stData.hasStatementText = value;
         break;
-      case "organizationName":
-        stData.organization = value;
+      case "orgNmsSt":
+        stData.organization =  value.split(", ");
         break;
-      case "jurisdiction":
+      case "orgJursSt":
         stData.jurisdiction = value.split(", ");
         break;
+      case "derivedFromSt":
+          stData.derivedFrom = value.split(", ");
+          break;
+      case "hasSources":
+            stData.hasTarget = value.split(", ");
+            break;
     }
   } //endOf loop
   
@@ -1529,6 +1489,7 @@ module.exports = {
   insert_CB_in_rec,
   action_rec,
   get_rec_json_data,
+  get_gpRec_data,
   get_ST_data,
   get_rec_data,
   sctUri,

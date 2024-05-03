@@ -26,7 +26,7 @@ services:
       - FUSEKI_DATASET_1=careActions
       - FUSEKI_DATASET_2=transitions
       - FUSEKI_DATASET_3=beliefs
-      - FUSEKI_DATASET_4=CIG-COPD
+      - FUSEKI_DATASET_4=statements
       - JVM_ARGS=-Xmx2g
     depends_on: 
       - busybox

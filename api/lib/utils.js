@@ -520,8 +520,7 @@ module.exports = {
       (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
       (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
 		WHERE {
-			 ${atom} a owl:NamedIndividual ;
-			  a ?adminT ;
+			 ${atom} a owl:NamedIndividual , ?adminT ;
 				?Of ?actId ;
 			  rdfs:label ?adminLabel .
      OPTIONAL { ${atom} vocab:subsumes ?subsumption . }  
@@ -816,40 +815,35 @@ module.exports = {
 
     let query = `
       SELECT DISTINCT 
-        ?stUri ?label ?sourceCB ?stTxt ?partOf ?extractedFrom ?stTtl 
-        ?sctPrecond ?precondLbl ?generatedTime ?attributedTo ?provAttributedTo
+        ?stUri ?label ?stTxt ?partOf ?extractedFrom ?stTtl ?generatedTime 
       (GROUP_CONCAT(DISTINCT ?derived;   SEPARATOR=",") AS ?derivedFrom)
-      (GROUP_CONCAT(DISTINCT ?hasSource;   SEPARATOR=",") AS ?hasSources)
+      (GROUP_CONCAT(DISTINCT ?hasSourceSt;   SEPARATOR=",") AS ?hasSources)
       (GROUP_CONCAT(DISTINCT ?derivedSt;   SEPARATOR=",") AS ?derivedFromSt)
       (GROUP_CONCAT(DISTINCT ?stOn;   SEPARATOR=",") AS ?orgNmsSt)
       (GROUP_CONCAT(DISTINCT ?stOj;   SEPARATOR=",") AS ?orgJursSt)
-      (GROUP_CONCAT(DISTINCT ?provhasSource;   SEPARATOR=",") AS ?provHasSources)
       WHERE { 
-        GRAPH ${recAssertURI} {
-           ${recAssertURI} a  vocab:GoodPracticeRecommendation ;
-                         rdfs:label ?label .
-           {   ${recAssertURI}   vocab:aboutNotificationOf ?stUri . 
-              SERVICE ${stmntUrl} {
-                GRAPH  ?stUri {
-                  ?stUri a  vocab:ClinicalStatement ;
-                       vocab:hasStatementText ?stTxt ;
-                        vocab:hasStatementTitle ?stTtl ;
-                        vocab:OrganizationJurisdiction ?stOj ;
-                        vocab:OrganizationName ?stOn .   
-                }
-              GRAPH ?stUriProv {
-               ?stUriProv oa:hasBody ?stUri ;
-                         rdf:type oa:Annotation .  
-               OPTIONAL { ?stUriProv  oa:hasTarget  [  oa:hasSource ?hasSourceSt ] .} 
-               OPTIONAL { ?stUri prov:wasDerivedFrom ?derivedSt . }
-              }
+         GRAPH ${recAssertURI} {
+            ${recAssertURI} a  vocab:GoodPracticeRecommendation ;
+                         rdfs:label ?label ;
+                       vocab:partOf ?partOf  ;
+                       vocab:aboutNotificationOf ?stUri . 
+              OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . }   
+         }  
+        SERVICE ${stmntUrl} {
+            GRAPH  ?stUri {
+              ?stUri a  vocab:ClinicalStatement ;
+                   vocab:hasStatementText ?stTxt ;
+                    vocab:hasStatementTitle ?stTtl ;
+                    vocab:OrganizationJurisdiction ?stOj ;
+                    vocab:OrganizationName ?stOn .   
             }
-           OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
-           OPTIONAL { ${recAssertURI} vocab:partOf ?partOf  . } 
-         } 
-        }
-      } GROUP BY ?stUri ?label  ?sourceCB ?stTxt ?partOf ?extractedFrom ?stTtl 
-            ?sctPrecond ?precondLbl ?generatedTime ?attributedTo ?provAttributedTo
+          GRAPH ?stUriProv {
+           ?stUriProv oa:hasBody ?stUri ;
+                     rdf:type oa:Annotation .  
+           OPTIONAL { ?stUriProv  oa:hasTarget  [  oa:hasSource ?hasSourceSt ] .} 
+           OPTIONAL { ?stUri prov:wasDerivedFrom ?derivedSt . }
+          }} 
+      } GROUP BY ?stUri ?label ?stTxt ?partOf ?extractedFrom ?stTtl ?generatedTime 
        `;
 
     return sparqlQuery(cigId, query);
@@ -936,14 +930,19 @@ module.exports = {
 				?sitToId vocab:snomedCode ?sitToSctId .
 			} 
 			SERVICE ${actUrl} {
-				?actAdmin a owl:NamedIndividual ;
-				 a ?adminT ;
+				?actAdmin a owl:NamedIndividual, ?adminT ;
 					?Of ?actId ;
 				 rdfs:label ?adminLabel .
-				?actId a owl:NamedIndividual ;
-				 a ?actType ;
-				rdfs:label ?actLabel .
-				FILTER (?actType != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf  || ?Of = vocab:inoculationOf  || ?Of = vocab:combinedParticipationOf) && ?adminT != owl:NamedIndividual ) .
+         OPTIONAL { ?actAdmin vocab:subsumes ?subsumption . }  
+     OPTIONAL { ?actAdmin vocab:hasComponent ?component . }  
+				?actId a owl:NamedIndividual , ?actType ;
+				    rdfs:label ?actLabel .
+            OPTIONAL { ?actId vocab:snomedCode  ?snomed . }
+            OPTIONAL { ?actId vocab:hasGroupingCriteria  ?criterion . }
+            OPTIONAL { ?actId owl:sameAs ?same . } 
+            FILTER ( ?actType != owl:NamedIndividual &&
+              ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedParticipationOf || ?Of = vocab:inoculationOf ) &&
+              ?adminT != owl:NamedIndividual ) .
 			} 
  	   }  `;
 

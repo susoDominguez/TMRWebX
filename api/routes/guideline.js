@@ -279,7 +279,7 @@ router.post("/gprec/add", async function (req, res, next) {
   let {status, data} = await utils.sparqlUpdate(`CIG-${req.body.cig_id}`, query);
     
       res.status(status).json(data);
-}); //unchecked!
+}); //checked!
 
 router.post("/gprec/delete", async function (req, res, next) {
   let query = auxFuncts.sparql_drop_named_graphs(`CIG-${req.body.cig_id}`, `GPRec${req.body.cig_id}-${req.body.gpRec_id}`);
@@ -449,6 +449,7 @@ router.post("/gprec/all/get/", async function (req, res, next) {
 
 
   try {
+
     let {status, bindings, head_vars} = await utils.getRecStmntData(
       idCig,
       recURI,
@@ -456,14 +457,33 @@ router.post("/gprec/all/get/", async function (req, res, next) {
       "transitions"
     );
 
-    logger.debug(`bindings: ${bindings}`);
+    //logger.debug(`bindings: ${JSON.stringify(bindings)}`);
+
+    if(!bindings || bindings.length===0) throw new ErrorHandler(500,`no bindings found for GP Rec ${recURI} in ${idCig}`)
     
-    //format knowledge to JSON
-    let st_json = auxFuncts.get_statement_data(recURI, bindings);
-    return res.status(status).json(st_json);
+    let gpRec = {};
+
+    //for each binding, extract the rec once and each statement binding
+    for (let index = 0; index < bindings.length; index++) {
+      const binding = bindings[index];
+
+      if(index===0) {
+        gpRec = auxFuncts.get_gp
+        
+        
+        Rec_data(recURI,head_vars,binding);
+        logger.debug(`gpRec is ${gpRec}`)
+      }
+
+      if(gpRec.hasOwnProperty("clinicalStatements")) gpRec["clinicalStatements"].push(auxFuncts.get_ST_data(head_vars, binding));
+    }
+
+
+
+    return res.status(status).json(gpRec);
   } catch (err) {
     logger.error(
-      `error when retrieving good practice recommendation at getRecStmntDataAsync with cig ${idCig} and rec URI ${recURI}`
+      `error when retrieving good practice recommendation with cig ${idCig} and rec URI ${recURI}: ${JSON.stringify(error)}`
     );
     return res.status(500);
   }
