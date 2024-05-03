@@ -1169,19 +1169,19 @@ function get_transition_object(head_vars, binding) {
         transition_object.situationTypes[0].id = value;
         //extract code
         var type = value.slice(data_prefix_length);
-        transition_object.situationTypes[0].value.code ??= type;
+        transition_object.situationTypes[0].value.code ? transition_object.situationTypes[0].value.code : type;
         break;
       case "sitToId":
         transition_object.situationTypes[1].id = value;
         //extract code
         var type = value.slice(data_prefix_length);
-        transition_object.situationTypes[1].value.code ??= type;
+        transition_object.situationTypes[1].value.code ? transition_object.situationTypes[1].value.code :  type;
         break;
       case "propUri":
         //extract code
         transition_object.property.id = value;
         var type = value.slice(data_prefix_length);
-        transition_object.property.code ??= type;
+        transition_object.property.code ?  transition_object.property.code : type;
         break;
       case "sitFromLabel":
         transition_object.situationTypes[0].value.display = value;
