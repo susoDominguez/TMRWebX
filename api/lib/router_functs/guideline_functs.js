@@ -1389,6 +1389,16 @@ async function get_rdf_atom_as_array(bindings) {
   return result;
 }
 
+async function get_sparqlquery_arr(arr_resp) {
+
+  let expr = jsonata("$.bindings.**.value[]");
+  const result = await expr
+    .evaluate(arr_resp)
+    .catch((err) => logger.error(err));
+  logger.debug(result);
+  return result;
+}
+
 function sparql_drop_named_graphs(ds_id, id) {
   let head_graph = `data:${id}_head`;
   let assert_graph = `data:${id}`;
@@ -1499,5 +1509,6 @@ module.exports = {
   get_rdf_atom_as_array,
   sparql_drop_named_graphs,
   get_CB_object,
-  addGraphsDataFromToCig
+  addGraphsDataFromToCig,
+  get_sparqlquery_arr
 };
