@@ -42,7 +42,7 @@ router.post('/drugs/get', async function(req, res, next) {
 });
 
 //Get all non drug types URIs
-router.post('/nonDrugs/get', async function(req, res, next) {
+router.post('/nondrugs/get', async function(req, res, next) {
   try {
     let arr_res =  await Promise.all([
       utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:NonDrugType")
@@ -57,7 +57,7 @@ router.post('/nonDrugs/get', async function(req, res, next) {
 });
 
 //Get all vaccine types URIs
-router.post('/vaccines/get', async function(req, res, next) {
+router.post('/drugs/vaccine/get', async function(req, res, next) {
   try {
     let arr_res =  await Promise.all([
      utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:VaccineType")
@@ -72,9 +72,8 @@ router.post('/vaccines/get', async function(req, res, next) {
 });
 
 //Get all drug categories types URIs
-router.post('/drugCategories/get', async function(req, res, next) {
+router.post('/drugs/category/get', async function(req, res, next) {
   try {
-
     let arr_res =  await Promise.all([
      utils.sparqlGetSubjectDefaultGraph("careActions", "vocab:DrugCategory")
     ]).then( (arr_resp) => auxFuncts.get_sparqlquery_arr(arr_resp));
@@ -88,7 +87,7 @@ router.post('/drugCategories/get', async function(req, res, next) {
 });
 
 //Get all drug and non drug combinations types URIs
-router.post('/combinations/get', async function(req, res, next) {
+router.post('/drugs/combination/get', async function(req, res, next) {
   try {
 
     let arr_res =  await Promise.all([
@@ -104,7 +103,7 @@ router.post('/combinations/get', async function(req, res, next) {
 });
 
 
-//Get all drug and non drug combinations types URIs
+//Get all care actions URIs
 router.post('/get', async function(req, res, next) {
   try {
 

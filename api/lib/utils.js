@@ -86,7 +86,8 @@ async function sparqlQuery(dataset_id, query) {
       qs.stringify({ query: prefixAndSparqlQuery }),
       fuseki_headers
     );
-   // logger.debug(data);
+    
+    logger.debug(`data is ${JSON.stringify(data)}`);
 
     let response = { status: status, bindings: [], head_vars: [] };
     if (data.hasOwnProperty("head") && data.head.hasOwnProperty("vars"))
@@ -546,20 +547,27 @@ module.exports = {
    * @param {string} datasetId
    * @param {string} sta_Uri
    */
-  getStatementData: async function (datasetId, sta_id) {
-    if (!sta_id) throw new ErrorHandler(500, `statement URI is missing.`);
+  getStatementData: async function (datasetId = "statements", sta_id = null, sta_uri = null) {
+
+    if (!sta_id && !sta_uri) throw new ErrorHandler(500, `statement URI is missing.`);
+    
+    const st_assert = sta_uri ? `<${sta_uri}>` : `data:ST${sta_id}`;
+    const st_prov = sta_uri ? `<${sta_uri}_provenance>` : `data:ST${sta_id}_provenance`;
+
     let query = `
 	    SELECT DISTINCT 
-	    ?st_id ?statementTitle ?statementText ?organizationName ?jurisdiction
+	    ?st_id ?statementTitle ?statementText ?organizationName ?jurisdiction ?derivedFromSt
 	    WHERE {
-		    GRAPH ?st_id {
+		    GRAPH ${st_assert} {
           ?st_id  a  vocab:ClinicalStatement ;
                  vocab:OrganizationName ?organizationName ;
                  vocab:OrganizationJurisdiction ?jurisdiction ;
                  vocab:hasStatementTitle ?statementTitle ;
                  vocab:hasStatementText ?statementText .
 		        }
-            FILTER ( ?st_id = data:ST${sta_id} ) .
+        GRAPH ${st_prov} {
+          ?id_prov  prov:wasDerivedFrom ?derivedFromSt . 
+        }
 	  } `;
     return sparqlQuery(datasetId, query);
   },
@@ -596,19 +604,22 @@ module.exports = {
       care_act_ds_id +
       "/query>";
 
+    //format belief_id
+    if(belief_id.startsWith('http')) belief_id = `<${belief_id}>`;
+
     let query = `
     SELECT DISTINCT 
-    ?freq ?strength ?TrUri
-    ?propUri ?propLabel
-    ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel
+    ?cbUri ?freq ?strength ?TrUri
+    ?propUri ?propLabel ?propUriSCT
+    ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT
     ?actAdmin ?adminLabel ?actType ?actLabel ?actId
     WHERE {
       GRAPH ${belief_id} {
-        ${belief_id} a vocab:CausationBelief ; 
+        ?cbUri a vocab:CausationBelief ; 
        vocab:frequency ?freq ;
        vocab:strength ?strength .
       ?actAdmin vocab:causes ?TrUri .
-      }
+      } FILTER ( ?cbUri = ${belief_id}) .
       SERVICE ${actUrl}
       {
         ?actAdmin a owl:NamedIndividual , ?adminT ;
@@ -628,11 +639,14 @@ module.exports = {
              vocab:affects ?propUri ;
            vocab:derivative ?deriv .
         OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
-             rdfs:label ?propLabel } .		        
+             rdfs:label ?propLabel } .	
+        OPTIONAL { ?propUri vocab:snomedCode ?propUriSCT } .	        
         ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitFromLabel .
+        OPTIONAL { ?sitFromId vocab:snomedCode ?sitFromIdSCT } .
         ?sitToId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitToLabel .
+        OPTIONAL { ?sitToId vocab:snomedCode ?sitToIdSCT } .
       }
     }
     `;
@@ -788,11 +802,10 @@ module.exports = {
   getRecStmntData: async function (
     cigId,
     recAssertUri,
-    StatmntsId,
-    TrDsId
+    StatmntsId
   ) {
     const recHeadURI = `<` + recAssertUri + `_head>`;
-    const recAssertURI = `<` + recAssertUri + `>`;
+    const graphUri = `<` + recAssertUri + `>`;
     const recProvURI = `<` + recAssertUri + `_provenance>`;
     const recPubInfoURI = `<` + recAssertUri + `_publicationinfo>`;
 
@@ -804,46 +817,22 @@ module.exports = {
       "/" +
       StatmntsId +
       "/query>";
-    const TrUrl =
-      "<http://" +
-      config.JENA_HOST +
-      ":" +
-      config.JENA_PORT +
-      "/" +
-      TrDsId +
-      "/query>";
 
     let query = `
-      SELECT DISTINCT 
-        ?stUri ?label ?stTxt ?partOf ?extractedFrom ?stTtl ?generatedTime 
-      (GROUP_CONCAT(DISTINCT ?derived;   SEPARATOR=",") AS ?derivedFrom)
-      (GROUP_CONCAT(DISTINCT ?hasSourceSt;   SEPARATOR=",") AS ?hasSources)
-      (GROUP_CONCAT(DISTINCT ?derivedSt;   SEPARATOR=",") AS ?derivedFromSt)
-      (GROUP_CONCAT(DISTINCT ?stOn;   SEPARATOR=",") AS ?orgNmsSt)
-      (GROUP_CONCAT(DISTINCT ?stOj;   SEPARATOR=",") AS ?orgJursSt)
+      SELECT DISTINCT ?gpRecId ?label ?partOf ?extractedFrom ?wasDerivedFrom
+      (GROUP_CONCAT(DISTINCT ?stUri;   SEPARATOR=",") AS ?stUris)
       WHERE { 
-         GRAPH ${recAssertURI} {
-            ${recAssertURI} a  vocab:GoodPracticeRecommendation ;
+         GRAPH ${graphUri} {
+            ?gpRecId a vocab:GoodPracticeRecommendation ;
                          rdfs:label ?label ;
                        vocab:partOf ?partOf  ;
-                       vocab:aboutNotificationOf ?stUri . 
-              OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . }   
-         }  
-        SERVICE ${stmntUrl} {
-            GRAPH  ?stUri {
-              ?stUri a  vocab:ClinicalStatement ;
-                   vocab:hasStatementText ?stTxt ;
-                    vocab:hasStatementTitle ?stTtl ;
-                    vocab:OrganizationJurisdiction ?stOj ;
-                    vocab:OrganizationName ?stOn .   
-            }
-          GRAPH ?stUriProv {
-           ?stUriProv oa:hasBody ?stUri ;
-                     rdf:type oa:Annotation .  
-           OPTIONAL { ?stUriProv  oa:hasTarget  [  oa:hasSource ?hasSourceSt ] .} 
-           OPTIONAL { ?stUri prov:wasDerivedFrom ?derivedSt . }
-          }} 
-      } GROUP BY ?stUri ?label ?stTxt ?partOf ?extractedFrom ?stTtl ?generatedTime 
+                       vocab:aboutNotificationOf ?stUri .  
+           OPTIONAL { ?gpRecId vocab:extractedFrom ?extractedFrom . } 
+         } 
+         GRAPH ${recProvURI} {
+          OPTIONAL { ?gpRecId prov:wasDerivedFrom ?wasDerivedFrom . }   
+       }
+      } GROUP BY ?gpRecId ?label ?partOf ?extractedFrom ?wasDerivedFrom
        `;
 
     return sparqlQuery(cigId, query);
@@ -866,23 +855,10 @@ module.exports = {
   ) {
     const recAssertURI = `<` + recAssertUri + `>`;
     const recProvURI = `<` + recAssertUri + `_provenance>`;
+    const recPubURI = `<` + recAssertUri + `_publicationinfo>`;
 
-    const cbUrl =
-      "<http://" +
-      config.JENA_HOST +
-      ":" +
-      config.JENA_PORT +
-      "/" +
-      beliefDsId +
-      "/query>";
-    const TrUrl =
-      "<http://" +
-      config.JENA_HOST +
-      ":" +
-      config.JENA_PORT +
-      "/" +
-      TrDsId +
-      "/query>";
+
+
     const actUrl =
       "<http://" +
       config.JENA_HOST +
@@ -892,59 +868,23 @@ module.exports = {
       actDsId +
       "/query>";
 
-    let query = ` SELECT DISTINCT ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf
-						?freq ?evidence ?TrUri ?PropUri ?deriv ?sitFromId ?sitToId ?propTxt ?sitFromLabel ?sitToLabel
-						?adminT ?actId ?adminLabel ?actType ?actLabel  ?sitFromSctId ?sitToSctId
+    let query = ` SELECT DISTINCT ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime
+        (GROUP_CONCAT( DISTINCT ?wasDerivedFrom;   SEPARATOR=",") AS ?derivedFrom)
 	    WHERE { 
 		   GRAPH ${recAssertURI} {
-        ${recAssertURI} a  vocab:ClinicalRecommendation ; 
+        ?recId a  vocab:ClinicalRecommendation ; 
                        rdfs:label ?text ;
                        vocab:aboutExecutionOf ?actAdmin ;
                        vocab:basedOn ?cbUri ;
                        vocab:strength ?strength .
 			?cbUri vocab:contribution ?contrib .
-			OPTIONAL { ${recAssertURI} vocab:extractedFrom ?extractedFrom . } 
-			OPTIONAL { ${recAssertURI} vocab:partOf ?partOf . } 
+			OPTIONAL { ?recId vocab:extractedFrom ?extractedFrom . } 
+			OPTIONAL { ?recId vocab:partOf ?partOf . } 
 			} 
-			SERVICE ${cbUrl} {
-				GRAPH  ?cbUri {
-					?cbUri a  vocab:CausationBelief . 
-					?cbUri vocab:frequency ?freq .
-					?cbUri vocab:strength ?evidence .
-				  ?actAdmin vocab:causes ?TrUri .
-				}
-			} 
-			SERVICE ${TrUrl} { 
-				?TrUri a vocab:TransitionType .
-				?TrUri vocab:affects ?PropUri .
-				?TrUri vocab:derivative ?deriv .
-				?TrUri vocab:hasTransformableSituation ?sitFromId .
-				?TrUri vocab:hasExpectedSituation ?sitToId .
-				?PropUri  a  vocab:TropeType .
-				?PropUri rdfs:label ?propTxt .
-				?sitFromId a vocab:SituationType .
-				?sitToId a vocab:SituationType .
-				?sitFromId rdfs:label ?sitFromLabel .
-				?sitToId rdfs:label ?sitToLabel .
-        ?sitFromId vocab:snomedCode ?sitFromSctId .
-				?sitToId vocab:snomedCode ?sitToSctId .
-			} 
-			SERVICE ${actUrl} {
-				?actAdmin a owl:NamedIndividual, ?adminT ;
-					?Of ?actId ;
-				 rdfs:label ?adminLabel .
-         OPTIONAL { ?actAdmin vocab:subsumes ?subsumption . }  
-     OPTIONAL { ?actAdmin vocab:hasComponent ?component . }  
-				?actId a owl:NamedIndividual , ?actType ;
-				    rdfs:label ?actLabel .
-            OPTIONAL { ?actId vocab:snomedCode  ?snomed . }
-            OPTIONAL { ?actId vocab:hasGroupingCriteria  ?criterion . }
-            OPTIONAL { ?actId owl:sameAs ?same . } 
-            FILTER ( ?actType != owl:NamedIndividual &&
-              ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedParticipationOf || ?Of = vocab:inoculationOf ) &&
-              ?adminT != owl:NamedIndividual ) .
-			} 
- 	   }  `;
+      GRAPH ${recProvURI} {
+        OPTIONAL { ?recId prov:wasDerivedFrom ?wasDerivedFrom . }
+      }
+ 	   }  GROUP BY ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime `;
 
     return sparqlQuery(cigId, query);
   },

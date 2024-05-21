@@ -69,7 +69,10 @@ router.post("/all/get/", async function (req, res, next) {
     "statements",
     req.body.id);
 
+//    logger.debug(JSON.stringify(bindings));
+
     let result = auxFuncts.get_ST_data(head_vars,bindings[0]);
+    //logger.debug(JSON.stringify(result));
     res.status(status).json(result ? result : {});
   });
 

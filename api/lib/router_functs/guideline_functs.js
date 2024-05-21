@@ -393,11 +393,11 @@ function get_rec_data(recURI, guidelineData, type) {
         if (precond.id) recData.hasFilterSituation = precond;
       }
 */
-function get_gpRec_data(recURI, head_vars, binding) {
+function get_gpRec_data(head_vars, binding) {
 
   //recommendation template object
-  let recData = {
-    id: recURI,
+  let gpRec_data = {
+    id: undefined,
     partOf: undefined, //combined dataset or original
     extractedFrom: undefined, //original dataset
     type: {
@@ -410,8 +410,8 @@ function get_gpRec_data(recURI, head_vars, binding) {
     generatedAtTime: undefined,
     hasFilterSituation: undefined,
     title: undefined,
-    clinicalStatements: [],
-  };
+    clinicalStatements: []
+  } ;
 
 
     //format data by looping through head vars
@@ -420,31 +420,39 @@ function get_gpRec_data(recURI, head_vars, binding) {
       let headVar = head_vars[pos];
 
       //check there is a corresponding binding, if not, next head var
-      if (!binding.hasOwnProperty(headVar) || !recData.hasOwnProperty(headVar)) continue;
+      if (!binding.hasOwnProperty(headVar)) continue;
 
       //otherwise, retrieve value
       let value = binding[headVar].value;
       //temporary var
       let temp;
+
       logger.debug(`head var is ${headVar} and value is ${value}`);
-      //for each CB
+      //for each head var found
       switch (headVar) {
+        case "wasDerivedFrom":
+          gpRec_data.hasSource = value;
+          break;
         case "partOf":
-          recData.partOf = value;
+          gpRec_data.partOf = value;
           break;
-        case "hasSources":
-          recData.hasSource = value.split(",");
-          break;
-        case "author":
-          recData.wasAttributedTo = value;
+        case "gpRecId":
+            gpRec_data.id = value;
+            break;
+        case "extractedFrom":
+          gpRec_data.extractedFrom = value;
           break;
         case "label":
-          recData.title = value;
+          gpRec_data.title = value;
+          break;
+        case "stUris":
+           temp = value.split(",");
+            gpRec_data.clinicalStatements = temp;
           break;
       }
     } //endOf headVars
 
-  return recData;
+  return gpRec_data;
 }
 
 
@@ -477,21 +485,22 @@ function get_ST_data(head_vars,binding){
     logger.debug(`headVar is ${headVar}`);
     let value = binding[headVar].value;
     logger.debug(`binding value is ${value}`);
+
     //for each heading, add a field
     switch (headVar) {
-      case "stUri":
+      case "st_id":
         stData.id = value;
         break;
-      case "stTtl":
+      case "statementTitle":
         stData.hasStatementTitle = value;
         break;
-      case "stTxt":
+      case "statementText":
         stData.hasStatementText = value;
         break;
-      case "orgNmsSt":
+      case "organizationName":
         stData.organization =  value.split(", ");
         break;
-      case "orgJursSt":
+      case "jurisdiction":
         stData.jurisdiction = value.split(", ");
         break;
       case "derivedFromSt":
@@ -499,10 +508,13 @@ function get_ST_data(head_vars,binding){
           break;
       case "hasSources":
             stData.hasTarget = value.split(", ");
-            break;
+         break;
     }
   } //endOf loop
-  
+
+
+  logger.debug(`stData is ${JSON.stringify(stData)}`);
+
 
   return stData;
 }
@@ -1193,8 +1205,8 @@ function get_transition_object(head_vars, binding) {
         transition_object.property.display = value;
         break;
       case "deriv":
-        var type = value.slice(vocab_prefix_length);
-        transition_object.effect = type;
+        //var type = value.slice(vocab_prefix_length);
+        transition_object.effect = value.toLowerCase();
         break;
       case "sitFromIdSCT":
         transition_object.situationTypes[0].value.code = value;
@@ -1281,6 +1293,9 @@ function get_CB_object(head_vars, binding) {
 
     //for each CB
     switch (headVar) {
+      case "cbUri":
+        cbData.id = value;
+        break;
       case "derivedFromCB":
         temp = value.split(",");
         cbData.derivedFrom = temp;
@@ -1305,6 +1320,10 @@ function get_CB_object(head_vars, binding) {
         temp = temp[temp.length - 1];
         cbData.probability = temp.toLowerCase();
         break;
+      case "strength":
+          temp = value.split("/");
+          temp = temp[temp.length - 1];
+          cbData.evidence = temp.toLowerCase();
       case "evidence":
         temp = value.split("/");
         temp = temp[temp.length - 1];
@@ -1316,8 +1335,8 @@ function get_CB_object(head_vars, binding) {
       case "propLabel":
         cbData.transition.property.display = value;
         break;
-      case "propSctId":
-        cbData.transition.property.sctId = value;
+      case "propUriSCT":
+        cbData.transition.property.code = value;
         cbData.transition.property.system = sctUri;
         break;
       case "propUri":
@@ -1332,14 +1351,14 @@ function get_CB_object(head_vars, binding) {
         //extract code
         temp = value.split("/");
         temp = temp[temp.length - 1];
-        cbData.transition.situationTypes[0].value.code = temp;
+        cbData.transition.situationTypes[0].value.id = temp;
         break;
       case "sitToId":
         cbData.transition.situationTypes[1].id = value;
         //extract code
         temp = value.split("/");
         temp = temp[temp.length - 1];
-        cbData.transition.situationTypes[1].value.code = temp;
+        cbData.transition.situationTypes[1].value.id = temp;
         break;
       case "sitFromLabel":
         cbData.transition.situationTypes[0].value.display = value;
@@ -1348,7 +1367,7 @@ function get_CB_object(head_vars, binding) {
         cbData.transition.situationTypes[0].value.stateOfProp = value;
         break;
       case "sctPreSit":
-        cbData.transition.situationTypes[0].value.sctId = value;
+        cbData.transition.situationTypes[0].value.code = value;
         cbData.transition.situationTypes[0].value.system = sctUri;
         break;
       case "sitToLabel":
@@ -1357,8 +1376,8 @@ function get_CB_object(head_vars, binding) {
       case "sitToStateOf":
         cbData.transition.situationTypes[1].value.stateOfProp = value;
         break;
-      case "sitFromSctId":
-        cbData.transition.situationTypes[0].value.sctId = value;
+      case "sitFromIdSCT":
+        cbData.transition.situationTypes[0].value.code = value;
         cbData.transition.situationTypes[0].value.system = sctUri;
         break;
       case "deriv":
@@ -1366,8 +1385,8 @@ function get_CB_object(head_vars, binding) {
         temp = temp[temp.length - 1];
         cbData.transition.effect = temp.toLowerCase();
         break;
-      case "sitToSctId":
-        cbData.transition.situationTypes[1].value.sctId = value;
+      case "sitToIdSCT":
+        cbData.transition.situationTypes[1].value.code = value;
         cbData.transition.situationTypes[1].value.system = sctUri;
         break;    
       default:
@@ -1390,12 +1409,13 @@ async function get_rdf_atom_as_array(bindings) {
 }
 
 async function get_sparqlquery_arr(arr_resp) {
+  logger.debug(`arr_resp is ${JSON.stringify(arr_resp)}`);
 
-  let expr = jsonata("$.bindings.**.value[]");
+  let expr = jsonata("[$.bindings.**.value]");
   const result = await expr
     .evaluate(arr_resp)
     .catch((err) => logger.error(err));
-  logger.debug(result);
+ 
   return result;
 }
 

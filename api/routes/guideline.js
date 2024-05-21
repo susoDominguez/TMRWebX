@@ -22,6 +22,65 @@ const { error } = require("console");
 
 const dataUri = "http://anonymous.org/data";
 
+async function get_gprec_contents(idCig,recURI){
+
+  let gpRec = { };
+
+  //add main contents of gpRec
+  gpRec =  await utils.getRecStmntData(
+    idCig,
+    recURI,
+    "statements"
+  ).then( ({status, bindings, head_vars}) => auxFuncts.get_gpRec_data(head_vars,bindings[0]) );
+  
+  //then clinical statement(s)
+
+  //if no clinical statemnts are found it is an error
+  if(!gpRec.hasOwnProperty("clinicalStatements")) throw new ErrorHandler(500, `clinicalStatements field is missing when constructing goodPractice recommendation in router gprec/all/get `);
+
+
+  //otherwise, fetch the rdf and convert to JSON for all URIs found
+      //logger.debug(`gpRec["clinicalStatements"] is ` + JSON.stringify(gpRec["clinicalStatements"]));
+  let results = await Promise.all(gpRec["clinicalStatements"].map( (uri) => utils.getStatementData("statements",null,uri) ));
+
+  gpRec["clinicalStatements"] = results.map( ({status,head_vars, bindings}) => auxFuncts.get_ST_data(head_vars, bindings[0]));
+
+  return gpRec;
+}
+
+async function get_rec_contents(cigId, recURI){
+
+  let rec = { };
+
+  //add main contents of gpRec
+  let {status, bindings, head_vars} = await utils.getRecData(
+    cigId,
+    recURI,
+    "beliefs",
+    "transitions",
+    "careActions"
+  );
+
+  logger.debug(`bindings: ${JSON.stringify(bindings.length)}`);
+
+   //format knowledge to JSON
+   let st_json = get_rec_json_data(recURI, head_vars, bindings);
+  
+  //then clinical statement(s)
+
+  //if no clinical statemnts are found it is an error
+  if(!rec.hasOwnProperty("causationBeliefs")) throw new ErrorHandler(500, `clinicalStatements field is missing when constructing goodPractice recommendation in router gprec/all/get `);
+
+
+  //otherwise, fetch the rdf and convert to JSON for all URIs found
+      //logger.debug(`gpRec["clinicalStatements"] is ` + JSON.stringify(gpRec["clinicalStatements"]));
+  let results = await Promise.all(rec["clinicalStatements"].map( (uri) => utils.getStatementData("statements",null,uri) ));
+
+  rec["clinicalStatements"] = results.map( ({status,head_vars, bindings}) => auxFuncts.get_ST_data(head_vars, bindings[0]));
+
+  return rec;
+}
+
 function action_gprec(req) {
   //data id for this rec
   const id = `data:GPRec` + req.body.cig_id + `-` + req.body.gpRec_id;
@@ -398,24 +457,13 @@ router.post("/rec/all/get/", async function (req, res, next) {
   const recURI = req.body.uri ? req.body.uri.trim() : `${dataUri}/Rec${cig_id}-${req.body.id.trim()}`;
   
 
-  logger.debug(`rec uri is ${recURI} and cigId is ${cigId} and cig_id is ${cig_id}.`);
+  //logger.debug(`rec uri is ${recURI} and cigId is ${cigId} and cig_id is ${cig_id}.`);
 
   try {
     
-    let {status, bindings, head_vars} = await utils.getRecData(
-      cigId,
-      recURI,
-      "beliefs",
-      "transitions",
-      "careActions"
-    );
+   let result = await get_rec_contents(cigId, recURI);
 
-    logger.debug(`bindings: ${JSON.stringify(bindings)}`);
-
-     //format knowledge to JSON
-     let st_json = get_rec_json_data(recURI,head_vars, bindings);
-
-     return res.status(status).json(st_json);
+     return res.json(result);
 
   } catch (err) {
     logger.error(
@@ -450,37 +498,10 @@ router.post("/gprec/all/get/", async function (req, res, next) {
 
   try {
 
-    let {status, bindings, head_vars} = await utils.getRecStmntData(
-      idCig,
-      recURI,
-      "statements",
-      "transitions"
-    );
+    let gpRec = await get_gprec_contents(idCig,recURI);
 
-    //logger.debug(`bindings: ${JSON.stringify(bindings)}`);
+    return res.json(gpRec);
 
-    if(!bindings || bindings.length===0) throw new ErrorHandler(500,`no bindings found for GP Rec ${recURI} in ${idCig}`)
-    
-    let gpRec = {};
-
-    //for each binding, extract the rec once and each statement binding
-    for (let index = 0; index < bindings.length; index++) {
-      const binding = bindings[index];
-
-      if(index===0) {
-        gpRec = auxFuncts.get_gp
-        
-        
-        Rec_data(recURI,head_vars,binding);
-        logger.debug(`gpRec is ${gpRec}`)
-      }
-
-      if(gpRec.hasOwnProperty("clinicalStatements")) gpRec["clinicalStatements"].push(auxFuncts.get_ST_data(head_vars, binding));
-    }
-
-
-
-    return res.status(status).json(gpRec);
   } catch (err) {
     logger.error(
       `error when retrieving good practice recommendation with cig ${idCig} and rec URI ${recURI}: ${JSON.stringify(error)}`
@@ -667,219 +688,47 @@ router.post("/add", async function (req, res, next) {
  * get knowledge from all Recommendations in a given CIG
  */
 router.post("/all/get", async function (req, res, next) {
-  //label of CIG
-  let cigId;
-
-  //full URI
-  if (!req.body.uri) {
-    //just the id
-    if (!req.body.id) {
-      return res.status(406).json({
-        status: "error",
-        error: "parameter id is missing when calling endpoint /cig/get.",
-      });
-    } else {
-      //cig Id
-      cigId = req.body.id.trim();
-    }
-  } else {
-    //cig Id from URI
-    cigId = req.body.uri.trim().substring(tmrDataUri.length);
-  }
-
-  let uriList;
-
-  try {
-    //deliver list of Rec URIs
-    uriList = await utils.sparqlGetSubjectAllNamedGraphsAsync(cigId, [
-      "tmr:ClinicalRecommendation",
-      "tmr:GoodPracticeRecommendation",
-    ]);
-
-    logger.debug(`uriList is ${uriList}`);
-  } catch (error) {
-    logger.error(
-      `Error in utils.sparqlGetSubjectAllNamedGraphsAsync sent from endpoint /cig/get : ${JSON.stringify(
-        error
-      )}`
-    );
-    //return status
-    return res.status(500).json({
-      error:
-        "Error when retrieving list of recommendation URIs from dataset with Id " +
-        cigId,
-    });
-  }
-
-  if (uriList && Array.isArray(uriList)) {
-    //list to hold recs data
-    let recDataList = new Array();
-    //list to hold info on the type of rec stored in the list above
-    let is_gp_rec_list = new Array();
-    //data extracted from store service
-    let dataset_data,
-      dataset_json = new Array();
-
-    //for each uri in list, fetch knowledge from dataset
-    for (let index = 0; index < uriList.length; index++) {
-      const uri_rec = uriList[index];
-
-      //if it is a TMR rec
-      if (uri_rec.startsWith(tmrDataUri + `Rec`)) {
-        //add data to list
-        recDataList.push(
-          utils.getRecData_multiple_CBsAsync(
-            cigId,
-            uri_rec,
-            "beliefs",
-            "transitions",
-            "careActions"
-          )
-        );
-        //add info on type of rec
-        is_gp_rec_list.push(false);
-      } else {
-        //if it is a TMR GP rec
-        if (uri_rec.startsWith(tmrDataUri + `GPRec`)) {
-          //add data to list
-          recDataList.push(
-            utils.getRecStmntDataAsync(
-              cigId,
-              uri_rec,
-              "statements",
-              "transitions",
-              "careActions"
-            )
-          );
-          //add info on type of rec
-          is_gp_rec_list.push(true);
-        }
-      } //endOf else
-    } //endOf loop
-
-    //check Rec URI list has same size as list with knowledge from recs
-    //otherwise, throw error
-    if (recDataList.length !== uriList.length) {
-      logger.error(
-        `list of recommendations URIs does not have the same size has the list of recommendation knowledge in endpoint cig/get with Rec URI list: ${JSON.stringify(
-          uriList
-        )} .`
-      );
-      return res.status(500).json({
-        error:
-          "There has been an issue when recovering knowledge from TMR recommendations: the number of URIs and the number of distinct associated data extracted do not match in dataset " +
-          cigId,
-      });
-    }
-
-    //convert knowledge into JSON format
-    try {
-      // evaluate async list
-      dataset_data = await Promise.all(recDataList);
-    } catch (error) {
-      // throw new ErrorHandler(500, `endpoint cig/get error when evaluating promises : ${JSON.stringify(error)}`);
-      logger.error(
-        `Error from endpoint cig/get when applying promise.all to recDataList: ${JSON.stringify(
-          error
-        )}`
-      );
-      return res.status(500).json({
-        error: "Internal error when fetching knowledge from dataset " + cigId,
-      });
-    }
-
-    //Attempt to format all data, if error is found, stop process and return error silently
-    try {
-      //for each element with TMR knowledge, identify type of rec and format to JSON
-      for (let index = 0; index < dataset_data.length; index++) {
-        //URI Rec
-        const recUri = uriList[index];
-        //TMR rec in rdf format associated to URI rec
-        const knowledge_rec = dataset_data[index];
-        //boolean identifyoing whether URI rec is good practice rec or not
-        const is_gp_rec = is_gp_rec_list[index];
-
-        //if it has data, convert to JSON
-        if (
-          knowledge_rec &&
-          knowledge_rec.constructor === Object &&
-          Object.entries(knowledge_rec).length != 0
-        ) {
-          //act accordingly to type when formatting
-          if (is_gp_rec) {
-            try {
-              //format knowledge to JSON
-              let st_json = get_statement_data(recUri, knowledge_rec);
-              //add formatted knowledge
-              dataset_json.push(st_json);
-              //
-              // logger.debug(st_json);
-            } catch (err) {
-              //silently log error?
-              logger.error(
-                `Error at getStatementData for dataset ${cigId} with recommendation URI ${recUri} and associated knowledge: ${JSON.stringify(
-                  knowledge_rec
-                )}`
-              );
-              logger.error(`Error getStatementData : ${JSON.stringify(error)}`);
-
-              throw new ErrorHandler(500, {
-                error:
-                  "Error when formatting knowledge from dataset " +
-                  cigId +
-                  " with recommendation URI " +
-                  recUri,
-              });
-            }
-          } //endOf if
-
-          if (!is_gp_rec) {
-            try {
-              //format knowledge to JSON
-              let rec_json = get_rec_json_data(recUri, knowledge_rec);
-              //add formatted knowledge
-              dataset_json.push(rec_json);
-              //
-              //logger.debug(rec_json);
-            } catch (err) {
-              //silently log error?
-              logger.error(
-                `Error at get_rec_json_data for dataset ${cigId} with recommendation URI ${recUri} and associated knowledge: ${JSON.stringify(
-                  knowledge_rec
-                )}`
-              );
-              logger.error(
-                `Error get_rec_json_data : ${JSON.stringify(error)}`
-              );
-              throw new ErrorHandler(500, {
-                error:
-                  "Error when formatting knowledge to JSON from dataset " +
-                  cigId +
-                  " with recommendation URI " +
-                  recUri,
-              });
-            }
-          } //endOf if !is_pg_rec
-        } else {
-          logger.error(
-            `Error in cig/get endpoint. dataset ${cigId} has recommendation URI ${recUri} with knowledge data = ${knowledge_rec}.`
-          );
-        } //endOf if knowledge_rec && ...
-      } //endOf for loop
-
-      //send formatted dataset knowledge
-      return res.status(200).json(dataset_json);
-    } catch (error) {
-      logger.error(error);
-      return res.sendStatus(500);
-    }
-  } //endOf if UriList && ...
-
+//checks
+if (!(req.body.uri || req.body.id)) {
   logger.error(
-    `Error endpoint cig/get. There is no list of Recommendations URIs`
+    `missing parameter for recommendation in endpoint guideline/all/get.`
   );
-  return res.statusCode(500);
-}); //checked!
+  return res.sendStatus(404);
+}
+
+if (!req.body.cig_id) {
+  logger.error(
+    `missing parameters in endpoint guideline/all/get. Rec URI is ${req.body.uri}.`
+  );
+  return res.sendStatus(404);
+}
+
+const cigId = req.body.cig_id.startsWith(`CIG-`) ? req.body.cig_id.trim() : `CIG-${req.body.cig_id.trim()}`;
+//const cig_id = req.body.cig_id.startsWith(`CIG-`) ? req.body.cig_id.substring(4) : req.body.cig_id.trim();
+//const recURI = req.body.uri ? req.body.uri.trim() : `${dataUri}/Rec${cig_id}-${req.body.id.trim()}`;
+
+
+//logger.debug(`rec uri is ${recURI} and cigId is ${cigId} and cig_id is ${cig_id}.`);
+
+try {
+  //get rec URIs
+  //get gpRec URIs 
+  let results = await Promise.all([utils.get_named_subject_in_named_graphs_from_object(cigId,"vocab:ClinicalRecommendation"), utils.get_named_subject_in_named_graphs_from_object(cigId, "vocab:GoodPracticeRecommendation")]);
+  let results_rec = auxFuncts.get_rdf_atom_as_array(results[0].bindings);
+  let results_gprec = auxFuncts.get_rdf_atom_as_array(results[1].bindings);
+  //get recs data
+  //get gprecs data
+  const get_gprec_funct = recURI => get_gprec_contents(cigId,recURI);
+  //join
+  //return
+  return res.json(results);
+
+} catch(err){
+    logger.error(err);
+    return res.status(500);
+}
+  
+});
 
 
 router.post("/careAction/get", async function (req, res, next) {

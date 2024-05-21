@@ -7,6 +7,7 @@ const auxFunct = require("../lib/router_functs/guideline_functs");
 //const guidelines = require("../lib/prefixes");
 //const logger = require("../config/winston");
 const utils = require("../lib/utils");
+const logger = require("../config/winston");
 //const { ErrorHandler } = require("../lib/errorHandler");
 
 //create
@@ -24,6 +25,7 @@ router.post("/nondrug/individual/add", async function (req, res) {
 
 router.post("/drug/category/add", async function (req, res) {
   let sprql_str = careActDef(req, "DrugCat");
+  logger.debug(`sprql_str is ${sprql_str}`);
    let {status, data} = await postDrugs(sprql_str, config.INSERT);
      res.status(status).send(data);
 });
@@ -46,31 +48,31 @@ router.post("/combination/add", async function (req, res) {
 //DELETE
 router.post("/drug/individual/delete", async function (req, res) {
   let sprql_str = delete_def("DrugT", req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, "DrugT"+req.body.id, req.body.id) ;
+  let {status, data} = await postDrugs(sprql_str, config.DELETE, "DrugT", req.body.id) ;
    res.status(status? status : '500').send(data? data : 'Error');
 });
 
 router.post("/drug/category/delete", async function (req, res) {
   let sprql_str = delete_def("DrugCat", req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, "DrugCat"+req.body.id, req.body.id) ;
+  let {status, data} = await postDrugs(sprql_str, config.DELETE, "DrugCat", req.body.id) ;
    res.status(status).send(data);
 });
 
 router.post("/nondrug/individual/delete", async function (req, res) {
   let sprql_str = delete_def("NonDrugT", req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, "NonDrugT"+req.body.id, req.body.id) ;
+  let {status, data} = await postDrugs(sprql_str, config.DELETE, "NonDrugT", req.body.id) ;
    res.status(status).send(data);
 });
 
 router.post("/combination/delete", async function (req, res) {
   let sprql_str = delete_def("CombCareT", req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, "CombCareT"+req.body.id, req.body.id) ;
+  let {status, data} = await postDrugs(sprql_str, config.DELETE, "CombCareT", req.body.id) ;
    res.status(status).send(data);
 });
 
 router.post("/drug/vaccine/individual/delete", async function (req, res) {
   let sprql_str = delete_def("VacT", req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, "VacT"+req.body.id, req.body.id) ;
+  let {status, data} = await postDrugs(sprql_str, config.DELETE, "VacT", req.body.id) ;
    res.status(status).send(data);
 });
 
@@ -172,14 +174,14 @@ router.post('/all/get/', function(req, res) {
 
 async function postDrugs(careActData, insertOrDelete, type, id) { 
 
-  const del_str = ` data:${type+id} ?p ?o . `;
+  const del_str = ` ?s ?p ?o `;
 
   let content = insertOrDelete === config.INSERT ? careActData : del_str;
   
   let sparql_query_str = `${insertOrDelete} ${insertOrDelete === config.INSERT ? "DATA" : ""} { ${content} } `;
 
   if(insertOrDelete === config.DELETE){
-    let query_post_str = ` WHERE {  ${del_str}  }`;
+    let query_post_str = ` WHERE {  ${del_str} . ${careActData} }`;
     sparql_query_str += query_post_str ;
   }
 
@@ -393,8 +395,7 @@ function adminActSubs(drugIds) {
 }
 
 function delete_def(type, id) {
-  return `data:${type + id} ?p ?o .
-   data:ActAdminister${id} ?p1 ?o1 .`;
+  return ` FILTER (?s = data:${type + id} || ?s = data:ActAdminister${id} ) `;
 }
 
 module.exports = router;
