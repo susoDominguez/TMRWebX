@@ -513,29 +513,26 @@ module.exports = {
    * @param {string | undefined} uri
    */
   getCareActionData: async function (dataset_id, id, uri) {
-    let atom = id ? `data:${id}` : `<${uri}>`;
+    let atom = id ? `data:ActAdminister${id}` : `<${uri}>`;
 
-    let query = `SELECT DISTINCT  ?actId ?adminLabel ?actType ?actLabel ?snomed 
+    let query = `SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?snomed ?drugTid
       (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
       (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
       (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
       (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
 		WHERE {
-			 ${atom} a owl:NamedIndividual , ?adminT ;
-				?Of ?actId ;
-			  rdfs:label ?adminLabel .
-     OPTIONAL { ${atom} vocab:subsumes ?subsumption . }  
-     OPTIONAL { ${atom} vocab:hasComponent ?component . }  
-			?actId a owl:NamedIndividual .
-			?actId a ?actType .
-			?actId rdfs:label ?actLabel .
-			OPTIONAL { ?actId vocab:snomedCode  ?snomed . }
-      OPTIONAL { ?actId vocab:hasGroupingCriteria  ?criterion . }
-      OPTIONAL { ?actId owl:sameAs ?same . } 
-			FILTER ( ?actType != owl:NamedIndividual &&
-				 ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedParticipationOf || ?Of = vocab:inoculationOf ) &&
-				 ?adminT != owl:NamedIndividual ) .
-		} GROUP BY ?actId ?adminLabel ?actType ?actLabel ?snomed
+      ?actId a owl:NamedIndividual , ?adminT ;
+				       ?Of ?drugTid ;
+			         rdfs:label ?adminLabel .
+     OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
+     OPTIONAL { ?actId vocab:hasComponent ?component . }  
+			   ?drugTid a owl:NamedIndividual , ?drugType  ;
+			         rdfs:label ?drugLabel .
+			OPTIONAL { ?drugTid vocab:snomedCode  ?snomed . }
+      OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
+      OPTIONAL { ?drugTid owl:sameAs ?same . } 
+			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:inoculationOf ) ) .
+		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?snomed ?drugTid ?adminT
 		`;
     //logger.debug(query);
 

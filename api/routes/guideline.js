@@ -12,15 +12,29 @@ const logger = require("../config/winston");
 const {
   insert_precond_in_rec,
   insert_CB_in_rec,
-  tmrDataUri,
-  get_statement_data,
+  get_CB_uris_from_bindings,
+  set_uri,
   get_rec_json_data,
-  filter_TMR_rec_type,
-  setUri,
+  set_cig_id,
 } = require("../lib/router_functs/guideline_functs.js");
 const { error } = require("console");
 
 const dataUri = "http://anonymous.org/data";
+const sctUri = `http://snomed.info/sct/`;
+
+async function get_recs_uris(cig_id){
+
+  let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(cig_id, "vocab:ClinicalRecommendation");
+  
+  return auxFuncts.get_rdf_atom_as_array(bindings);
+}
+
+async function get_gprecs_uris(cig_id){
+  
+  let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(cig_id, "vocab:GoodPracticeRecommendation");
+  
+  return auxFuncts.get_rdf_atom_as_array(bindings);
+}
 
 async function get_gprec_contents(idCig,recURI){
 
@@ -36,11 +50,10 @@ async function get_gprec_contents(idCig,recURI){
   //then clinical statement(s)
 
   //if no clinical statemnts are found it is an error
-  if(!gpRec.hasOwnProperty("clinicalStatements")) throw new ErrorHandler(500, `clinicalStatements field is missing when constructing goodPractice recommendation in router gprec/all/get `);
+  if(gpRec['clinicalStatements'].length === 0) throw new ErrorHandler(500, `clinicalStatements field is missing when constructing goodPractice recommendation in router gprec/all/get `);
 
 
   //otherwise, fetch the rdf and convert to JSON for all URIs found
-      //logger.debug(`gpRec["clinicalStatements"] is ` + JSON.stringify(gpRec["clinicalStatements"]));
   let results = await Promise.all(gpRec["clinicalStatements"].map( (uri) => utils.getStatementData("statements",null,uri) ));
 
   gpRec["clinicalStatements"] = results.map( ({status,head_vars, bindings}) => auxFuncts.get_ST_data(head_vars, bindings[0]));
@@ -50,9 +63,9 @@ async function get_gprec_contents(idCig,recURI){
 
 async function get_rec_contents(cigId, recURI){
 
-  let rec = { };
+  let rec = null;
 
-  //add main contents of gpRec
+  //add main contents of rec
   let {status, bindings, head_vars} = await utils.getRecData(
     cigId,
     recURI,
@@ -61,24 +74,56 @@ async function get_rec_contents(cigId, recURI){
     "careActions"
   );
 
-  logger.debug(`bindings: ${JSON.stringify(bindings.length)}`);
-
-   //format knowledge to JSON
-   let st_json = get_rec_json_data(recURI, head_vars, bindings);
+   //format rec knowledge to JSON
+   let rec_json = get_rec_json_data(recURI, head_vars, bindings[0]);
   
-  //then clinical statement(s)
+  //then causation beliefs
 
-  //if no clinical statemnts are found it is an error
-  if(!rec.hasOwnProperty("causationBeliefs")) throw new ErrorHandler(500, `clinicalStatements field is missing when constructing goodPractice recommendation in router gprec/all/get `);
+  //if no CBs are found it is an error
+  if(typeof rec_json.causation_beliefs === 'undefined') throw new ErrorHandler(500, `causation beliefs field are missing when constructing  recommendation in router rec/all/get `);
+
+  //retrieve each CB and associated data
+  let {uris,contribs} = await get_CB_uris_from_bindings(bindings);
 
 
-  //otherwise, fetch the rdf and convert to JSON for all URIs found
-      //logger.debug(`gpRec["clinicalStatements"] is ` + JSON.stringify(gpRec["clinicalStatements"]));
-  let results = await Promise.all(rec["clinicalStatements"].map( (uri) => utils.getStatementData("statements",null,uri) ));
+  let res_uris = await Promise.all(uris.map( (uri) => utils.getBeliefData("beliefs", uri, "transitions", "careActions") ));
 
-  rec["clinicalStatements"] = results.map( ({status,head_vars, bindings}) => auxFuncts.get_ST_data(head_vars, bindings[0]));
+  rec_json["causation_beliefs"] = res_uris.map( ({status,head_vars, bindings}) => auxFuncts.get_CB_object(head_vars, bindings[0]));
 
-  return rec;
+    //then care action
+    if(rec_json.hasOwnProperty('care_action') && (typeof rec_json.care_action !== 'undefined')) {
+      logger.debug(`rec_json.care_action is ${rec_json.care_action}`);
+      try{
+        let {status, head_vars, bindings} = await utils.getCareActionData("careActions", undefined, rec_json.care_action);
+        if(status < 400) {
+          let data = auxFuncts.get_care_action(head_vars, bindings[0]);
+          rec_json.care_action = data;
+          //logger.debug(JSON.stringify(data));
+          //add type
+          let type = data['administers']['type'];
+          //logger.debug(type);
+          rec_json.type = {
+            system: sctUri,
+            code:
+            type === "nonDrugType"
+                ? "304541006"
+                : type === "vaccineType"
+                ? "830152006"
+                : "306807008",
+            display:
+              type === "nonDrugType"
+                ? "Recommendation to perform treatment (procedure)"
+                : type === "vaccineType"
+                ? "Recommendation regarding vaccination (procedure)"
+                : "Recommendation to start drug treatment (procedure)",
+          }
+        }
+      }catch(err){
+        logger.error(`Error in get guideline recommendation care action: ${err}`);
+      }
+    }
+
+  return rec_json;
 }
 
 function action_gprec(req) {
@@ -257,7 +302,7 @@ function action_rec(req) {
 
 function actionSubguideline(req) {
 
-  let subciguri =`data:subCIG` + req.body.cig_id + `-` + req.body.subcig_id ;
+  let subciguri = set_uri(req.body.subcig_id,`subCIG` + set_cig_id(req.body.cig_id,true),false,true) ;
 
   if (!req.body.description) {
     req.body.description = "subGuideline " + subciguri;
@@ -266,7 +311,7 @@ function actionSubguideline(req) {
   // SubGuideline declaration:
   const description = subciguri + ` rdf:type vocab:SubGuideline, owl:NamedIndividual ;
                            rdfs:label "` + req.body.description + `"@en ;
-                           vocab:isSubGuidelineOf  data:CIG-` + req.body.cig_id + ` .` ;
+                           vocab:isSubGuidelineOf  ` + set_uri(set_cig_id(req.body.cig_id),null,false,true) + ` . \n` ;
 
   //var to construct the assignment of recs to a subguideline. initial whitespace to be kept
   var recDeclaration = " ";
@@ -277,12 +322,13 @@ function actionSubguideline(req) {
 
     req.body.recs_ids.split(",").forEach(function (recId) {
       recDeclaration +=
-        `data:Rec` + req.body.cig_id + `-` + recId.trim() + isPartOf ;
+        ` ${set_uri(recId.trim(),'Rec' + set_cig_id(req.body.cig_id,true),false,true) } ${isPartOf} `;
     });
   }
 
   return description + recDeclaration ;
 }
+
 
 /**
  * Create a persistent or in-memory CIG and return label of CIG
@@ -370,11 +416,13 @@ router.post("/rec/delete", async function (req, res, next) {
 ///create subguideline by referencing assertion  resources which are same as assertion graph names in main guideline
 router.post("/subguideline/add", async function (req, res, next) {
 
+  let cig_id = set_cig_id(req.body.cig_id);
+
   let content = actionSubguideline(req) ;
 
   let query = ` INSERT DATA { ${content} } `;
 
-  let {status, data} = await utils.sparqlUpdate( "CIG-" + req.body.cig_id, query) ;
+  let {status, data} = await utils.sparqlUpdate(cig_id, query) ;
 
   res.status(status).send(data);
 
@@ -400,12 +448,10 @@ router.post("/recs/get", async function (req, res) {
       400,
       "Router /recs/get: no cig_id parameter provided."
     );
-
-  let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(`CIG-` + cig_id, "vocab:ClinicalRecommendation");
   
-  let results = await auxFuncts.get_rdf_atom_as_array(bindings);
+  let results = await get_recs_uris(set_cig_id(cig_id));
   
-  return res.status(status).json(results);
+  return res.status(200).json(results);
 }); //checked
 
 /**
@@ -419,10 +465,9 @@ router.post("/gprecs/get", async function (req, res, next) {
       "Router /rec/get: no cig_id parameter provided."
     );
 
-  let {status, bindings, head_vars} = await utils.get_named_subject_in_named_graphs_from_object(`CIG-` + cig_id, "vocab:GoodPracticeRecommendation");
-  let results = await auxFuncts.get_rdf_atom_as_array(bindings);
+    let results = await get_gprecs_uris(set_cig_id(cig_id));
   
-  return res.status(status).json(results);
+  return res.status(200).json(results);
 }); //checked
 
 //TODO: review
@@ -463,11 +508,11 @@ router.post("/rec/all/get/", async function (req, res, next) {
     
    let result = await get_rec_contents(cigId, recURI);
 
-     return res.json(result);
+  return res.json(result);
 
   } catch (err) {
     logger.error(
-      `error when retrieving clinical recommendation at getRecData_multiple_CBs with cig ${cigId} and rec URI ${recURI}`
+      `error when retrieving clinical recommendation at get_rec_contents with cig ${cigId} and rec URI ${recURI}`
     );
     return res.status(500).end();
   }
@@ -477,23 +522,11 @@ router.post("/rec/all/get/", async function (req, res, next) {
  * get  knowledge from one gprecommendation
  */
 router.post("/gprec/all/get/", async function (req, res, next) {
-  var id = req.body.cig_id.trim();
-  var idCig;
+  var id = set_cig_id(req.body.cig_id, true);
+  var idCig = set_cig_id(req.body.cig_id);
 
-  //separate lable id from dataset id
-  if (id.startsWith(`CIG-`)) {
-    idCig = id;
-    //remove it
-    id = id.substring(`CIG-`.length);
-  } else {
-    idCig = `CIG-` + id;
-  }
 
-  const recURI = req.body.uri
-    ? req.body.uri.trim()
-    : req.body.id
-    ? `${dataUri}/GPRec${id}-${req.body.id.trim()}`
-    : undefined;
+  const recURI = set_uri( (req.body.uri ? req.body.uri : req.body.id),'GPRec' + id, true);
 
 
   try {
@@ -517,6 +550,7 @@ router.post("/gprec/all/get/", async function (req, res, next) {
 router.post("/add", async function (req, res, next) {
   //list of recommendations to be copied from a dataset
   let recList = new Array();
+  let gprecList = new Array();
 
   let { cig_from, cig_to, subguidelines, recommendations} = req.body; 
 
@@ -536,12 +570,12 @@ router.post("/add", async function (req, res, next) {
       });
     }
 
-  const cigIdFrom = cig_from.startsWith(`CIG-`) ? cig_from.trim() : `CIG-${cig_from.trim()}`;
+  const cigIdFrom = set_cig_id(cig_from);
     //get postfix Id of dataset (e.g., COPD in CIG-COPD)
-  const cig_from_id = cigIdFrom.substring("CIG-".length);
+  const cig_from_id = set_cig_id(cig_from,true);
     //get postfix Id of dataset (e.g., COPD in CIG-COPD)
-  const cigIdTo = req.body.cig_to.startsWith(`CIG-`) ? req.body.cig_to.trim() : `CIG-${req.body.cig_to.trim()}`;
-  let cig_to_id = cigIdTo.substring("CIG-".length);
+  const cigIdTo = set_cig_id(cig_to);
+
 
   logger.debug(`cig_from is ${cigIdFrom} and cig_to is ${cigIdTo}`);
 
@@ -551,7 +585,7 @@ router.post("/add", async function (req, res, next) {
 
   //are identifiers correctly construed?
   logger.debug(
-    `identifiers for datasets are ${cig_from_id} with ${cigIdFrom}, and also ${cigIdTo}`
+    `identifiers for datasets are ${cig_from_id} with ${cigIdFrom}`
   );
 
   let filterSubgString = ``;
@@ -560,13 +594,8 @@ router.post("/add", async function (req, res, next) {
   //then add ALL Recs from one dataset to the other
   if (!(subguidelines || recommendations)) {
     try {
-     let {status, head_vars, bindings} = await utils.sparqlGetSubjectAllNamedGraphs(
-        cigIdFrom,
-        "vocab:ClinicalRecommendation"
-      );
-     
-     
-      let recList = await auxFuncts.get_rdf_atom_as_array(bindings);
+     recList = await get_recs_uris(cigIdFrom);
+     gprecList = await get_gprecs_uris(cigIdFrom);
 
       if (!recList || recList.length == 0)
         throw new Error(
@@ -589,9 +618,9 @@ router.post("/add", async function (req, res, next) {
     if (subguidelines) {
       //create list
       subguidelines.split(",").forEach(function (subId) {
-        filterSubgString += `?sg = ${setUri(
+        filterSubgString += `?sg = ${set_uri(
           subId.trim(),
-          "subCIG",
+          `subCIG` + cig_from_id,
           false,
           true
         )} || `;
@@ -609,7 +638,7 @@ router.post("/add", async function (req, res, next) {
       try {
         //select nanopub URIs from subguidelines
         recList = await utils.sparqlGetNamedNanopubFromSubguidelines(
-          cig_from,
+          cigIdFrom,
           filterSubgString
         ).then( ({status, head_vars, bindings}) =>  auxFuncts.get_rdf_atom_as_array(bindings));
         //no result
@@ -619,14 +648,14 @@ router.post("/add", async function (req, res, next) {
           );
       } catch (err) {
         logger.error(
-          `Error: Function sparqlGetNamedNanopubFromSubguidelinesAsync with dataset Id ${cig_from} and filterSubgString = ${filterSubgString}. The error is ${JSON.stringify(
+          `Error: Function sparqlGetNamedNanopubFromSubguidelinesAsync with dataset Id ${cigIdFrom} and filterSubgString = ${filterSubgString}. The error is ${JSON.stringify(
             err
           )}`
         );
 
         return res.status(406).json({
           status: "error",
-          error: `Unsuccessful dataset query when fetching subguidelines for CIG with Id ${cig_from}`,
+          error: `Unsuccessful dataset query when fetching subguidelines for CIG with Id ${cigIdFrom}`,
         });
       }
     }
@@ -636,42 +665,53 @@ router.post("/add", async function (req, res, next) {
     if (recommendations) {
       recommendations
         .split(",")
-        .forEach((recId) =>
-          recList.push(setUri(recId.trim(), `Rec${cig_from_id}`, true))
-        );
+        .forEach((recId) => {
+           recId = recId.trim();
+          if(recId.includes('/GPRec')) {
+            gprecList.push(recId);
+          } else {
+            recId = set_uri(recId, `Rec${cig_from_id}`,true);
+            recList.push(set_uri(recId, `Rec${cig_from_id}`,true))
+          }
+    });
     }
     ///////////
   } //endOf else
 
   //remove potential repeated identifiers
   recList = Array.from(new Set(recList));
+  gprecList = Array.from(new Set(gprecList));
+  //concat
+  recList = recList.concat(gprecList);
 
   //what is on the list of recommendations?
   logger.debug(
-    `the list of recommendations identifiers is ${JSON.stringify(recList)}`
+    `the list of recommendations identifiers is ${JSON.stringify(recList)} `
   );
 
   try {
     //for each assertion URI, add the rest of the related nano graphs
     const promises = recList.map( (uri) => {
-      // logger.info(uri);
+      
       let query = auxFuncts.addGraphsDataFromToCig(
-        cig_from,
-        cig_to,
+        cigIdFrom,
+        cigIdTo,
         uri + `_head`, //nanoHeadList,
         uri + ``, //assertionList,
         uri + `_provenance`, //nanoProvList,
         uri + `_publicationinfo` //nanoPubList,
       );
-      return utils.sparqlUpdate(cig_to,query);
+      
+      return utils.sparqlUpdate(cigIdTo,query);
     });
 
     await Promise.all(promises).catch((err) => logger.error(err));
 
     return res.status(204).end();
+
   } catch (error) {
     logger.error(
-      `Error when adding graphs from dataset ${cig_from} to dataset ${cig_to}. The error is ${JSON.stringify(
+      `Error when adding graphs from dataset ${cigIdFrom} to dataset ${cigIdTo}. The error is ${JSON.stringify(
         error
       )}`
     );
@@ -687,47 +727,39 @@ router.post("/add", async function (req, res, next) {
 /**
  * get knowledge from all Recommendations in a given CIG
  */
-router.post("/all/get", async function (req, res, next) {
+router.post("/all/get", async function (req, res) {
 //checks
-if (!(req.body.uri || req.body.id)) {
-  logger.error(
-    `missing parameter for recommendation in endpoint guideline/all/get.`
-  );
-  return res.sendStatus(404);
-}
 
 if (!req.body.cig_id) {
   logger.error(
     `missing parameters in endpoint guideline/all/get. Rec URI is ${req.body.uri}.`
   );
-  return res.sendStatus(404);
+  return res.status(404).end();
 }
 
-const cigId = req.body.cig_id.startsWith(`CIG-`) ? req.body.cig_id.trim() : `CIG-${req.body.cig_id.trim()}`;
-//const cig_id = req.body.cig_id.startsWith(`CIG-`) ? req.body.cig_id.substring(4) : req.body.cig_id.trim();
-//const recURI = req.body.uri ? req.body.uri.trim() : `${dataUri}/Rec${cig_id}-${req.body.id.trim()}`;
+let results = [];
+let status = 200;
 
-
-//logger.debug(`rec uri is ${recURI} and cigId is ${cigId} and cig_id is ${cig_id}.`);
+const cigId = set_cig_id(req.body.cig_id);
 
 try {
   //get rec URIs
   //get gpRec URIs 
-  let results = await Promise.all([utils.get_named_subject_in_named_graphs_from_object(cigId,"vocab:ClinicalRecommendation"), utils.get_named_subject_in_named_graphs_from_object(cigId, "vocab:GoodPracticeRecommendation")]);
-  let results_rec = auxFuncts.get_rdf_atom_as_array(results[0].bindings);
-  let results_gprec = auxFuncts.get_rdf_atom_as_array(results[1].bindings);
+  let recList = await get_recs_uris(cigId);
+  let gprecList = await get_gprecs_uris(cigId);
   //get recs data
+  let rec_data_list = recList.map( recUri => get_rec_contents(cigId, recUri) );
   //get gprecs data
-  const get_gprec_funct = recURI => get_gprec_contents(cigId,recURI);
+  let gprec_data_list = gprecList.map( gprecUri => get_gprec_contents(cigId, gprecUri) );
   //join
-  //return
-  return res.json(results);
+   results = rec_data_list.concat(gprec_data_list);
+   results = await Promise.all(results);
 
 } catch(err){
     logger.error(err);
-    return res.status(500);
+    status = 500;
 }
-  
+  return res.status(status).json(results);
 });
 
 
