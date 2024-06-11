@@ -402,12 +402,23 @@ async function get_CB_uris_from_bindings(bindings=[]) {
 
   const expr_uri = jsonata('cbUri.value[]');
   const expr_contrib = jsonata('contrib.value[]');
+  
 
-  const result_uri = await expr_uri.evaluate(bindings);
+  const result = await Promise.all([ expr_uri.evaluate(bindings), expr_contrib.evaluate(bindings)]) ;
 
-    const result_contrib = await expr_contrib.evaluate(bindings);
+  const keys = result[0]; // CB URIs
+  const values = result[1]; // CB contributions to given Rec
+
+  const contribMap = (keys, values) => {
+    const map = new Map();
+    for(let i = 0; i < keys.length; i++){
+       map.set(keys[i], values[i]);
+    };
+    return map;
+ };
+
   //create map
-  return { uris: result_uri, contribs: result_contrib};
+  return { uris: keys, contribs: contribMap(keys,values) };
 }
 function get_gpRec_data(head_vars, binding) {
 
@@ -547,14 +558,14 @@ function get_rec_json_data(recURI, head_vars, binding, type) {
     hasSource: undefined,
     wasAttributedTo: undefined,
     generatedAtTime: undefined,
-    hasFilterSituation: undefined,
     care_action: undefined,
+    hasFilterSituation: undefined, 
     causation_beliefs: [],
   };
-  let precond = {
+  let hasFilterSituation = {
     id: undefined,
     system: undefined,
-    sctId: undefined,
+    code: undefined,
     display: undefined,
     composedOf: undefined,
   };
@@ -576,14 +587,8 @@ function get_rec_json_data(recURI, head_vars, binding, type) {
       let temp;
       switch (var_name) {
           //precondition
-          case "precond":
-            precond.id = val;
-            break;
-          case "sctPrecond":
-            precond.sctId = val;
-            break;
-          case "precondLbl":
-            precond.display = val;
+          case "pred":
+            hasFilterSituation.id = val;
             break;
           case "compoundSituation": //TODO
             // precond.composedOf = value;
@@ -608,8 +613,8 @@ function get_rec_json_data(recURI, head_vars, binding, type) {
             recData.suggestion =
               temp.toLowerCase() == "should"
                 ? "recommend"
-                : (temp.toLowerCase() == "should_not" || temp.toLowerCase() == "shouldnot")
-                ? "nonRecommend"
+                : (temp.toLowerCase() == "should-not" || temp.toLowerCase() == "shouldnot")
+                ? "nonrecommend"
                 : temp.toLowerCase();
             break;
           case "derivedFrom":
@@ -629,11 +634,9 @@ function get_rec_json_data(recURI, head_vars, binding, type) {
           case "actAdmin":
             recData.care_action = val;
             break;
-          //CB
-          case "cbUri":
 
         }
-        if (precond.id) recData.hasFilterSituation = precond;
+        if (hasFilterSituation.id) recData.hasFilterSituation = hasFilterSituation;
       }
 
   return recData;
@@ -1018,6 +1021,47 @@ function get_transition_object(head_vars, binding) {
   return transition_object;
 }
 
+function get_precondition_object(head_vars, binding) {
+
+  let data_prefix_length = "http://anonymous.org/data/".length;
+  let data_prefix = "http://anonymous.org/data/";
+
+  let precondition_object = {
+    id: undefined,
+    display: undefined,
+    code: undefined,
+    system: undefined
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+    //for each heading, add a field
+
+    //for each heading, add a field
+    switch (headVar) {
+      case "pred_id":
+        precondition_object.id = value ;
+        precondition_object.code = value.slice(data_prefix_length) ;
+        precondition_object.system = data_prefix ;
+        break;
+      case "lbl":
+        precondition_object.display = value;
+      break
+    }
+  }
+ 
+  return precondition_object;
+}
+
 function get_CB_object(head_vars, binding) {
   logger.debug(head_vars);
   logger.debug(binding);
@@ -1331,5 +1375,6 @@ module.exports = {
   get_sparqlquery_arr,
   get_CB_uris_from_bindings,
   set_cig_id,
+  get_precondition_object,
   set_uri
 };

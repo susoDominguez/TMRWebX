@@ -120,6 +120,7 @@ router.post("/all/get/", async function (req, res) {
   if (!(req.body.uri || req.body.id)) return res.status(406).send('Missing Id or URI parameter.');
 
     let {status, head_vars, bindings} = await utils.getCareActionData("careActions", req.body.id, req.body.uri);
+    
   if(status < 400) {
     let data = auxFunct.get_care_action(head_vars, bindings[0]);
     return res.status(status).json(data);

@@ -67,7 +67,7 @@ function nList(list, n) {
  */
 async function sparqlQuery(dataset_id, query) {
   
-  logger.info(`query: ${query}`);
+  //logger.info(`query: ${query}`);
 
   //add URL to axios config
   let url = `${jena_baseUrl}/${dataset_id}/query`;
@@ -87,7 +87,7 @@ async function sparqlQuery(dataset_id, query) {
       fuseki_headers
     );
     
-    logger.debug(`data is ${JSON.stringify(data)}`);
+    //logger.debug(`data is ${JSON.stringify(data)}`);
 
     let response = { status: status, bindings: [], head_vars: [] };
     if (data.hasOwnProperty("head") && data.head.hasOwnProperty("vars"))
@@ -509,6 +509,21 @@ module.exports = {
   /**
    *
    * @param {string} dataset_id
+   * @param {string} TrUri
+   */
+  getPreconditionData: async function (dataset_id, TrUri) {
+    let query = ` SELECT  ?pred_id ?lbl
+      WHERE {
+      ?pred_id a ?type .
+      ?pred_id rdfs:label ?lbl .
+      FILTER (?pred_id = <${TrUri}> && (?type = vocab:PredicateType || ?type = vocab:PreconditionType ) ) . }
+		`;
+    return sparqlQuery(dataset_id, query);
+  },
+
+  /**
+   *
+   * @param {string} dataset_id
    * @param {string | undefined} id
    * @param {string | undefined} uri
    */
@@ -854,18 +869,7 @@ module.exports = {
     const recProvURI = `<` + recAssertUri + `_provenance>`;
     const recPubURI = `<` + recAssertUri + `_publicationinfo>`;
 
-
-
-    const actUrl =
-      "<http://" +
-      config.JENA_HOST +
-      ":" +
-      config.JENA_PORT +
-      "/" +
-      actDsId +
-      "/query>";
-
-    let query = ` SELECT DISTINCT ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime
+    let query = ` SELECT DISTINCT ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime ?pred
         (GROUP_CONCAT( DISTINCT ?wasDerivedFrom;   SEPARATOR=",") AS ?derivedFrom)
 	    WHERE { 
 		   GRAPH ${recAssertURI} {
@@ -877,11 +881,12 @@ module.exports = {
 			?cbUri vocab:contribution ?contrib .
 			OPTIONAL { ?recId vocab:extractedFrom ?extractedFrom . } 
 			OPTIONAL { ?recId vocab:partOf ?partOf . } 
+      OPTIONAL { ?recId vocab:hasFilterSituation ?pred . }
 			} 
       GRAPH ${recProvURI} {
         OPTIONAL { ?recId prov:wasDerivedFrom ?wasDerivedFrom . }
       }
- 	   }  GROUP BY ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime `;
+ 	   }  GROUP BY ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime ?pred `;
 
     return sparqlQuery(cigId, query);
   },

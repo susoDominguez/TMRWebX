@@ -64,7 +64,7 @@ router.post("/delete", async function (req, res) {
 });
 
 router.post("/all/get/", async function (req, res, next) {
-  const id =  "data:CB"+req.body.id;
+  const id =  req.body.uri ? req.body.uri : req.body.id.includes('CB') ? "data:"+req.body.id : "data:CB"+req.body.id;
 
   try{
   let {status,head_vars,bindings} = await utils.getBeliefData("beliefs",id,"transitions","careActions");
