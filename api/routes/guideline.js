@@ -665,6 +665,9 @@ router.post("/add", async function (req, res, next) {
 
   let { cig_from, cig_to, subguidelines, recommendations } = req.body;
 
+  //logger.debug(`subguidelines is : ${subguidelines}`);
+  //logger.debug(`recommendations is : ${recommendations}`);
+
   //check both datasets are given
   if (!(cig_from && cig_to)) {
     logger.error(

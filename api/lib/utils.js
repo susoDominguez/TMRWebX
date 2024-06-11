@@ -869,7 +869,7 @@ module.exports = {
     const recProvURI = `<` + recAssertUri + `_provenance>`;
     const recPubURI = `<` + recAssertUri + `_publicationinfo>`;
 
-    let query = ` SELECT DISTINCT ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime ?pred
+    let query = ` SELECT DISTINCT ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?extractedFrom ?attributedTo ?generatedAtTime ?pred
         (GROUP_CONCAT( DISTINCT ?wasDerivedFrom;   SEPARATOR=",") AS ?derivedFrom)
 	    WHERE { 
 		   GRAPH ${recAssertURI} {
@@ -886,7 +886,7 @@ module.exports = {
       GRAPH ${recProvURI} {
         OPTIONAL { ?recId prov:wasDerivedFrom ?wasDerivedFrom . }
       }
- 	   }  GROUP BY ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?attributedTo ?generatedAtTime ?pred `;
+ 	   }  GROUP BY ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?extractedFrom ?attributedTo ?generatedAtTime ?pred `;
 
     return sparqlQuery(cigId, query);
   },
