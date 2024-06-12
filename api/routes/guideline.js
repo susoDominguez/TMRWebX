@@ -847,8 +847,9 @@ router.post("/all/get", async function (req, res) {
 
   let results = [];
   let status = 200;
+  let {cig_id} = req.body
 
-  const cigId = set_cig_id(req.body.cig_id);
+  const cigId = set_cig_id(cig_id);
 
   try {
     //get rec URIs

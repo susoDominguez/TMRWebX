@@ -9,11 +9,13 @@ const dataUri_short = "data:";
 const sctUri = `http://snomed.info/sct/`;
 
 function set_cig_id (id,no_prefix=false){
-  if(!id) throw new error("no CIG id has been added");
+  if(!id) throw new Error("no CIG id has been added");
 
   if(id.startsWith('CIG-')) {
+    //return id
     if(no_prefix) id = (id.trim()).substring(0,'CIG-'.length);
   } else {
+    //doesnt start with CIG- but it is required
     if(!no_prefix) id = `CIG-${id.trim()}`;
   }
   return id;
