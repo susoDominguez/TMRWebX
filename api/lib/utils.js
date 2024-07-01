@@ -13,8 +13,8 @@ let reasoner_config = {
   baseURL: `http://${config.PROLOG_HOST}:${config.PROLOG_PORT}`,
   timeout: 1000,
   auth: {
-    username: `${config.FUSEKI_USER}`,
-    password: `${config.FUSEKI_PASSWORD}`,
+    username: `${config.FUSEKI_USER || 'admin'}`,
+    password: `${config.FUSEKI_PASSWORD || 'road2h'}`,
   },
   headers: {
     "Content-Type": "application/x-www-form-urlencoded",
@@ -332,34 +332,9 @@ module.exports = {
    * @param {string} data RDF-based dataset for querying
    */
   callPrologServer: async function (path, data) {
-    return reasoner_instance.post("/" + path, { data: data });
+    const reasoner_instance = axios.create(reasoner_config);
 
-    /*
-  function (error, response, body) {
-        if (!error && response && response.statusCode < 400 && body) {
-          callback(null, body);
-        } else {
-          let err =
-            "Failed to call prolog server with path: " +
-            URL +
-            ". Data: " +
-            data +
-            ". Error: " +
-            error
-              ? error
-              : "unknown" +
-                ". Body: " +
-                (body ? body : "None") +
-                ". Status: " +
-                (response && response.statusCode
-                  ? response.statusCode
-                  : "No response.") +
-                ".";
-          logger.error(err);
-          callback(err, null);
-        }
-      }
-    );*/
+    return reasoner_instance.post("/" + path, { data: data });
   },
 
   /**

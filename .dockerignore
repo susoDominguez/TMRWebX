@@ -6,3 +6,4 @@ logs/
 *.txt
 backend/tmr/
 backend/TMR-CIG-COPD/
+backend/backend/tmr-cig-exec-engine_use_cases
