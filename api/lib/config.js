@@ -9,6 +9,7 @@ module.exports = {
 	FUSEKI_USER: (process.env.FUSEKI_USER || "admin"),
 	PORT: (process.env.PORT || "8888")
 };
+
 /*
 SERVICE `+ actUrl + ` {
 	?actAdmin a owl:NamedIndividual .

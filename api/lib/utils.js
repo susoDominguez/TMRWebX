@@ -472,9 +472,9 @@ module.exports = {
       OPTIONAL { ?TrId  vocab:affects  ?propUri .
          ?propUri a  vocab:TropeType ;
            rdfs:label ?propLabel  } .
-      OPTIONAL { ?sitFromId vocab:snomedCode  ?sitFromIdSCT } .
-      OPTIONAL { ?sitToId vocab:snomedCode  ?sitToIdSCT } .
-      OPTIONAL { ?propUri vocab:snomedCode  ?propUriSCT } .
+      OPTIONAL { ?sitFromId vocab:sctid  ?sitFromIdSCT } .
+      OPTIONAL { ?sitToId vocab:sctid  ?sitToIdSCT } .
+      OPTIONAL { ?propUri vocab:sctid  ?propUriSCT } .
       }
 		`;
 
@@ -518,10 +518,10 @@ module.exports = {
      OPTIONAL { ?actId vocab:hasComponent ?component . }  
 			   ?drugTid a owl:NamedIndividual , ?drugType  ;
 			         rdfs:label ?drugLabel .
-			OPTIONAL { ?drugTid vocab:snomedCode  ?snomed . }
+			OPTIONAL { ?drugTid vocab:sctid  ?snomed . }
       OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
       OPTIONAL { ?drugTid owl:sameAs ?same . } 
-			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:inoculationOf ) ) .
+			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
 		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?snomed ?drugTid ?adminT
 		`;
     //logger.debug(query);
@@ -627,13 +627,13 @@ module.exports = {
            vocab:derivative ?deriv .
         OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
              rdfs:label ?propLabel } .	
-        OPTIONAL { ?propUri vocab:snomedCode ?propUriSCT } .	        
+        OPTIONAL { ?propUri vocab:sctid ?propUriSCT } .	        
         ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitFromLabel .
-        OPTIONAL { ?sitFromId vocab:snomedCode ?sitFromIdSCT } .
+        OPTIONAL { ?sitFromId vocab:sctid ?sitFromIdSCT } .
         ?sitToId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitToId vocab:snomedCode ?sitToIdSCT } .
+        OPTIONAL { ?sitToId vocab:sctid ?sitToIdSCT } .
       }
     }
     `;
@@ -728,7 +728,7 @@ module.exports = {
         ?actId a owl:NamedIndividual ;
        a ?actType ;
         rdfs:label ?actLabel .
-        OPTIONAL { ?actId vocab:snomedCode  ?sctDrg . }
+        OPTIONAL { ?actId vocab:sctid  ?sctDrg . }
         OPTIONAL { ?actId vocab:hasComponent  ?hasComponent . 
           ?hasComponent  a owl:NamedIndividual ;
                         a ?compAdminT ;
@@ -764,9 +764,9 @@ module.exports = {
                         rdfs:label ?sitFromLabel .
         ?sitToId a vocab:SituationType ;
                      rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitFromId vocab:snomedCode ?sitFromSctId .   
-          ?PropUri  vocab:snomedCode ?propSctId	.	
-          ?sitToId vocab:snomedCode ?sitToSctId . }
+        OPTIONAL { ?sitFromId vocab:sctid ?sitFromSctId .   
+          ?PropUri  vocab:sctid ?propSctId	.	
+          ?sitToId vocab:sctid ?sitToSctId . }
         OPTIONAL { ?sitFromId vocab:stateOf ?sitFromStateOf . 
             ?sitToId vocab:stateOf ?sitToStateOf . }
       }
