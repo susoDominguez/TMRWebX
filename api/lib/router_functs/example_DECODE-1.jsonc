@@ -1,0 +1,103 @@
+{
+  "id": "http://anonymous.org/data/RecHT-Diuretic", // internal id for recommendation
+  "text": "recommend a product containing thiazide to reduce blood pressure in the patient", //text extracted, and possibly edited, from HT guideline
+  "suggestion": "recommend", // recommend || nonrecommend. Suggestion to recommend or avoid the administration of the care action detailed below
+  "type": { // SCT definition for starting a drug treatment (possibly to be discarded)
+    "system": "http://snomed.info/sct/",
+    "code": "306807008",
+    "display": "Recommendation to start drug treatment (procedure)"
+  },
+  "partOf": "CIG-HT", //guideline from which the recommendation has been taken
+  "derivedFrom": ["http://hdl.handle.net/10222/43703"], //link or URI to HT guideline
+  "care_action": { //medical care action such as the administration of a drug|vaccine|drugs_combination. The TMR model works with types not specific medicaitons
+    "id": "http://anonymous.org/data/ActAdministerThiazide", //internal care action id
+    "type": "DrugAdministrationType", // type of care action. in this case, a care action involving solely one drug(type)
+    "text": "administer medicinal product containing thiazide and acting as diuretic agent", //textual representation of the administration of the care action (created using the data inside JSON object 'administers')
+    "subsumes": ["http://anonymous.org/data/ActAdministerBendroflumethiazide"], //mostly used by the internal TMR interaction engine to find potential conflicts among recommendations
+    "administers": { // what is this care action administering? In this case a type of drug
+      "type": "DrugCategory", // The adminsitered drug is a drug category (mostly applied for TMR logic)
+      "id": "http://anonymous.org/data/DrugCatThiazide", // internal TMR id of this drug
+      "value": { 
+        "coding": [ //The first element of the coding list is ALWAYS the TMR representation. To be used when no other terminologies are given
+          {
+            "code": "DrugCatThiazide",
+            "system": "http://anonymous.org/tmr/data",
+            "display": "thiazide" // TMR representation added by knowledge engineer
+          },
+          { //The second element of the coding list is ALWAYS a SCT, when available in the TMR representation
+            "code": "45518007",
+            "system": "http://snomed.info/sct/",
+            "display": "medicinal product containing thiazide and acting as diuretic agent"
+          }
+        ],
+        "text": "medicinal product containing only thiazide" //a less formal representation of the value. Could be taken from the existing coding or provided as new
+      }
+    }
+  }, // A list of beliefs on how the administration of the care action will affect the properties defined below (currently using one elemnt only)
+  "causation_beliefs": [
+    {
+      "id": "http://anonymous.org/data/CBThiazideBP", //internal TMR id
+      "contribution": "positive", // positive || negative || neutral. How this causation belief contributes towards the overall health of the patient
+      "probability": "always", //never || often || sometimes || rarely || always. Fixed to always unless the value can be extracted from the guideline (can be discarded when displaying a respopnse to the EHR system)
+      "evidence": "l1", // level of evidence on the effects of the care action on the given property
+      "careActionTypeRef": "http://anonymous.org/data/ActAdministerThiazide", // reference to the care action
+      "transition": { // The expected effect of this care action
+        "id": "http://anonymous.org/data/TrDecreaseBP", //internal TMR id
+        "effect": "decrease", // increase || decrease || maintain
+        "property": { //measured property being affected by this care action
+          "id": "http://anonymous.org/data/PropBP",//internal TMR id
+          "value": { //coded property value (as above)
+            "coding": [
+              {
+                "code": "PropBP",
+                "display": "Blood pressure",
+                "system": "http://anonymous.org/tmr/data"
+              }
+            ],
+            "text": "blood pressure"
+          }
+        },
+        "situationTypes": [
+          {
+            "id": "http://anonymous.org/data/SitHighBP",
+            "type": "hasTransformableSituation",
+            "value": {
+              "coding": [
+                {
+                  "code": "SitHighBP",
+                  "display": "high blood pressure",
+                  "system": "http://anonymous.org/tmr/data"
+                },
+                {
+                  "system": "http://snomed.info/sct/",
+                  "display": "On examination - initial high blood pressure (finding)",
+                  "code": "170581003"
+                }
+              ],
+              "text": "On examination - initial high blood pressure"
+            }
+          },
+          {
+            "id": "http://anonymous.org/data/SitNormalBP",
+            "type": "hasExpectedSituation",
+            "value": {
+              "coding": [
+                {
+                  "code": "SitNrmlBP",
+                  "display": "normal blood pressure",
+                  "system": "http://anonymous.org/tmr/data"
+                },
+                {
+                  "system": "http://snomed.info/sct/",
+                  "display": "Normal blood pressure (finding)",
+                  "code": "2004005"
+                }
+              ],
+              "text": "Normal blood pressure"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

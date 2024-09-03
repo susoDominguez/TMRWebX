@@ -8,28 +8,414 @@ const dataUri = "http://anonymous.org/data/";
 const dataUri_short = "data:";
 const sctUri = `http://snomed.info/sct/`;
 
-function set_cig_id (id,no_prefix=false){
-  if(!id) throw new Error("no CIG id has been added");
+//schema
+const care_action_template = {
+  id: undefined,
+  display: undefined,
+  //internal to find out what type of care action is
+  type: undefined,
+  same_as: undefined,
+  subsumes: undefined,
+  has_grouping_criteria: undefined,
+  administers: {
+    id: undefined,
+    type: undefined,
+    has_components: undefined,
+    value: {
+      coding: [
+        // TMR coding at 0
+        {
+          code: undefined,
+          system: undefined,
+          display: undefined,
+        },
+        // SCT coding -if available-- at 1
+        {
+          code: undefined,
+          system: undefined,
+          display: undefined,
+        },
+      ],
+      text: undefined,
+    },
+  },
+};
 
-  if(id.startsWith('CIG-')) {
+// Create a factory function that returns a deep copy of the causation belief template
+function create_care_action_data(overrides = {}) {
+  // Use JSON.parse and JSON.stringify to create a deep copy
+  const care_action_copy = JSON.parse(JSON.stringify(care_action_template));
+
+  // Apply any overrides provided
+  return { ...care_action_copy, ...overrides };
+}
+
+// causation belief template
+const causation_belief_template = {
+  id: undefined,
+  author: undefined,
+  contribution: undefined,
+  derivedFrom: undefined,
+  hasSource: undefined,
+  wasAttributedTo: undefined,
+  generatedAtTime: undefined,
+  probability: undefined,
+  evidence: undefined,
+  careActionTypeRef: undefined,
+  transition: {}
+};
+
+// Create a factory function that returns a deep copy of the causation belief template
+function create_causation_belief_data(overrides = {}) {
+  // Use JSON.parse and JSON.stringify to create a deep copy
+  const cbDataCopy = JSON.parse(JSON.stringify(causation_belief_template));
+
+  // Apply any overrides provided
+  return { ...cbDataCopy, ...overrides };
+}
+
+const transition_template = {
+  id: undefined,
+  situationTypes: [
+    {
+      type: "hasTransformableSituation",
+      id: undefined,
+      value: {
+          coding: [
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+          ],
+        text: undefined,
+      },
+    },
+    {
+      type: "hasExpectedSituation",
+      id: undefined,
+      value: {
+          coding: [
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+          ],
+        text: undefined,
+      },
+    },
+  ],
+  property: {
+    id: undefined,
+    value: {
+        coding: [
+          {
+            code: undefined,
+            display: undefined,
+            system: undefined,
+          },
+          {
+            code: undefined,
+            display: undefined,
+            system: undefined,
+          },
+        ],
+      text: undefined,
+    }
+  },
+};
+
+// Create a factory function that returns a deep copy of the transition template
+function create_transition_data(overrides = {}) {
+  // Use JSON.parse and JSON.stringify to create a deep copy
+  const transitionDataCopy = JSON.parse(JSON.stringify(transition_template));
+
+  // Apply any overrides provided
+  return { ...transitionDataCopy, ...overrides };
+}
+
+/**
+ *
+ * @param {array} head_vars
+ * @param {object} binding
+ */
+function get_care_action(head_vars, binding = []) {
+  if (binding == []) return {};
+
+  let careAction = {};
+  let administers = {};
+  let code = {
+    coding: [
+      {
+        code: undefined,
+        system: undefined,
+        display: undefined,
+      },
+      {
+        code: undefined,
+        system: undefined,
+        display: undefined,
+      },
+    ],
+    label: undefined,
+  };
+
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
+
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+
+    //for each heading, add a field
+    switch (headVar) {
+      case "actId":
+        careAction.id = value;
+        break;
+      case "adminLabel":
+        careAction.display = value;
+        break;
+      case "subsumes":
+        careAction.subsumes = value.split(", ");
+        break;
+      case "hasGroupingCriteria":
+        careAction.has_grouping_criteria = value.split(", ");
+        break;
+      case "sameAs":
+        careAction.same_as = value.split(", ");
+        break;
+      case "adminT":
+        careAction.type = value.slice(value.lastIndexOf("/") + 1);
+        break;
+      case "drugTid":
+        administers.id = value;
+        //TMR coding
+        code.coding[0].code = value.slice(value.lastIndexOf("/") + 1);
+        code.coding[0].system = value.substring(0, value.lastIndexOf("/"));
+        break;
+      case "drugType":
+        administers.type = value.slice(value.lastIndexOf("/") + 1);
+        break;
+      case "drugLabel":
+        //currently, applied to all coding displays and labels
+        code.coding.display = value;
+        code.label = value;
+        break;
+      case "snomed":
+        code.coding[1].code = value;
+        code.coding[1].system = sctUri;
+        //currently, we use the same label for all care actions
+        break;
+      case "components":
+        administers.has_components = value.split(", ");
+        break;
+    }
+  } //endOf loop
+
+  //return null if not found
+  if (typeof careAction.id === "undefined") careAction = null;
+
+  if (careAction) {
+    careAction.administers = administers;
+    careAction.administers.code = code;
+
+    careAction = create_care_action_data(careAction);
+  }
+
+  return careAction;
+}
+
+/**
+ *
+ * @param {array} head_vars
+ * @param {object} binding
+ * @returns
+ */
+function get_transition_object(head_vars, binding) {
+  //logger.debug(head_vars);
+  //logger.debug(binding);
+
+  let data_prefix_length = "http://anonymous.org/data/".length;
+  let vocab_prefix_length = "http://anonymous.org/vocab/".length;
+
+  le transition_object = {
+    situationTypes: [
+      {
+        type: "hasTransformableSituation",
+        id: undefined,
+        value: {
+            coding: [
+              {
+                code: undefined,
+                display: undefined,
+                system: undefined,
+              },
+              {
+                code: undefined,
+                display: undefined,
+                system: undefined,
+              },
+            ],
+          text: undefined,
+        },
+      },
+      {
+        type: "hasExpectedSituation",
+        id: undefined,
+        value: {
+            coding: [
+              {
+                code: undefined,
+                display: undefined,
+                system: undefined,
+              },
+              {
+                code: undefined,
+                display: undefined,
+                system: undefined,
+              },
+            ],
+          text: undefined,
+        },
+      },
+    ],
+    property: {
+      id: undefined,
+      value: {
+          coding: [
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+          ],
+        text: undefined,
+      }
+    },
+  }
+  
+  //format rdf by looping through head vars
+  for (let pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
+    logger.debug(`headVar is ${headVar}`);
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
+
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    logger.debug(`binding value is ${value}`);
+
+    //for each heading, add a field
+    switch (headVar) {
+      case "TrId":
+        transition_object.id = value;
+        break;
+      case "sitFromId":
+        transition_object.situationTypes[0].id = value;
+        //extract code
+        var type = value.slice(data_prefix_length);
+        transition_object.situationTypes[0].value.code = transition_object
+          .situationTypes[0].value.code
+          ? transition_object.situationTypes[0].value.code
+          : type;
+        break;
+      case "sitToId":
+        transition_object.situationTypes[1].id = value;
+        //extract code
+        var type = value.slice(data_prefix_length);
+        transition_object.situationTypes[1].value.code = transition_object
+          .situationTypes[1].value.code
+          ? transition_object.situationTypes[1].value.code
+          : type;
+        break;
+      case "propUri":
+        //extract code
+        transition_object.property.id = value;
+        var type = value.slice(data_prefix_length);
+        transition_object.property.code = transition_object.property.code
+          ? transition_object.property.code
+          : type;
+        break;
+      case "sitFromLabel":
+        transition_object.situationTypes[0].value.display = value;
+        break;
+      case "sitToLabel":
+        transition_object.situationTypes[1].value.display = value;
+        break;
+      case "propLabel":
+        transition_object.property.display = value;
+        break;
+      case "deriv":
+        //var type = value.slice(vocab_prefix_length);
+        transition_object.effect = value.toLowerCase();
+        break;
+      case "sitFromIdSCT":
+        if (value) {
+          transition_object.situationTypes[0].value.code = value;
+          transition_object.situationTypes[0].value.system = sctUri;
+        }
+        break;
+      case "sitToIdSCT":
+        if (value) {
+          transition_object.situationTypes[1].value.code = value;
+          transition_object.situationTypes[1].value.system = sctUri;
+        }
+        break;
+      case "propUriSCT":
+        if (value) {
+          transition_object.property.code = value;
+          transition_object.property.system = sctUri;
+        }
+        break;
+    }
+  }
+  return transition_object;
+}
+
+function set_cig_id(id, no_prefix = false) {
+  if (!id) throw new Error("no CIG id has been added");
+
+  if (id.startsWith("CIG-")) {
     //return id
-    if(no_prefix) id = (id.trim()).substring(0,'CIG-'.length);
+    if (no_prefix) id = id.trim().substring(0, "CIG-".length);
   } else {
     //doesnt start with CIG- but it is required
-    if(!no_prefix) id = `CIG-${id.trim()}`;
+    if (!no_prefix) id = `CIG-${id.trim()}`;
   }
   return id;
 }
-
 
 /**
  *
  * @param {String} label label representing the knowledge as a full URI or a shortened version
  * @param {String} prefix prefix to add to label
  * @param {Boolean} fullUri set the label argument as a full URI? otherwise, just the identifying section of the URI
- *  @param {Boolean} shortenedURI set the label argument as a shortened URI? 
+ *  @param {Boolean} shortenedURI set the label argument as a shortened URI?
  */
-function set_uri(label, prefix=null, fullUri=false, shortenedURI=false) {
+function set_uri(label, prefix = null, fullUri = false, shortenedURI = false) {
   //if its already full URI, return
   if (label.includes(dataUri)) return label.trim();
 
@@ -43,7 +429,7 @@ function set_uri(label, prefix=null, fullUri=false, shortenedURI=false) {
 
   //construe URI
   output = fullUri
-    ?  dataUri + output
+    ? dataUri + output
     : shortenedURI
     ? dataUri_short + output
     : output;
@@ -56,9 +442,9 @@ function set_uri(label, prefix=null, fullUri=false, shortenedURI=false) {
  * @param {String} label label representing the knowledge as a full URI or a shortened version
  * @param {String} prefix prefix to add to label
  * @param {Boolean} fullUri set the label argument as a full URI? otherwise, just the identifying section of the URI
- *  @param {Boolean} shortenedURI set the label argument as a shortened URI? 
+ *  @param {Boolean} shortenedURI set the label argument as a shortened URI?
  */
-function setUri(label, prefix=null, fullUri=false, shortenedURI=false) {
+function setUri(label, prefix = null, fullUri = false, shortenedURI = false) {
   //if its already full URI, return
   if (label.includes(dataUri)) return label;
 
@@ -81,7 +467,6 @@ function setUri(label, prefix=null, fullUri=false, shortenedURI=false) {
 }
 
 function get_rec_data(recURI, guidelineData, type) {
-  
   //recommendation template object
   let recData = {
     id: recURI,
@@ -396,34 +781,35 @@ function mergeArraysToMap(keys = [], values = []) {
 }
 
 /**
- * 
- * @param {Array} bindings 
+ *
+ * @param {Array} bindings
  * @returns Map
  */
-async function get_CB_uris_from_bindings(bindings=[]) {
+async function get_CB_uris_from_bindings(bindings = []) {
+  const expr_uri = jsonata("cbUri.value[]");
+  const expr_contrib = jsonata("contrib.value[]");
 
-  const expr_uri = jsonata('cbUri.value[]');
-  const expr_contrib = jsonata('contrib.value[]');
-  
-
-  const result = await Promise.all([ expr_uri.evaluate(bindings), expr_contrib.evaluate(bindings)]) ;
+  const result = await Promise.all([
+    expr_uri.evaluate(bindings),
+    expr_contrib.evaluate(bindings),
+  ]);
 
   const keys = result[0]; // CB URIs
   const values = result[1]; // CB contributions to given Rec
 
   const contribMap = (keys, values) => {
     const map = new Map();
-    for(let i = 0; i < keys.length; i++){
-       map.set(keys[i], values[i]);
-    };
+    for (let i = 0; i < keys.length; i++) {
+      map.set(keys[i], values[i]);
+    }
     return map;
- };
+  };
 
   //create map
-  return { uris: keys, contribs: contribMap(keys,values) };
+  return { uris: keys, contribs: contribMap(keys, values) };
 }
-function get_gpRec_data(head_vars, binding) {
 
+function get_gpRec_data(head_vars, binding) {
   //recommendation template object
   let gpRec_data = {
     id: undefined,
@@ -432,62 +818,59 @@ function get_gpRec_data(head_vars, binding) {
     type: {
       code: "223464006",
       display: "Procedure education (procedure)",
-      system: sctUri
+      system: sctUri,
     },
     hasSource: undefined,
     wasAttributedTo: undefined,
     generatedAtTime: undefined,
     hasFilterSituation: undefined,
     title: undefined,
-    clinicalStatements: []
-  } ;
+    clinicalStatements: [],
+  };
 
+  //format data by looping through head vars
+  for (const pos in head_vars) {
+    //variable name
+    let headVar = head_vars[pos];
 
-    //format data by looping through head vars
-    for (const pos in head_vars) {
-      //variable name
-      let headVar = head_vars[pos];
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(headVar)) continue;
 
-      //check there is a corresponding binding, if not, next head var
-      if (!binding.hasOwnProperty(headVar)) continue;
+    //otherwise, retrieve value
+    let value = binding[headVar].value;
+    //temporary var
+    let temp;
 
-      //otherwise, retrieve value
-      let value = binding[headVar].value;
-      //temporary var
-      let temp;
-
-      logger.debug(`head var is ${headVar} and value is ${value}`);
-      //for each head var found
-      switch (headVar) {
-        case "wasDerivedFrom":
-          gpRec_data.hasSource = value;
-          break;
-        case "partOf":
-          gpRec_data.partOf = value;
-          break;
-        case "gpRecId":
-            gpRec_data.id = value;
-            break;
-        case "extractedFrom":
-          gpRec_data.extractedFrom = value;
-          break;
-        case "label":
-          gpRec_data.title = value;
-          break;
-        case "stUris":
-           temp = value.split(",");
-            gpRec_data.clinicalStatements = temp;
-          break;
-      }
-    } //endOf headVars
+    logger.debug(`head var is ${headVar} and value is ${value}`);
+    //for each head var found
+    switch (headVar) {
+      case "wasDerivedFrom":
+        gpRec_data.hasSource = value;
+        break;
+      case "partOf":
+        gpRec_data.partOf = value;
+        break;
+      case "gpRecId":
+        gpRec_data.id = value;
+        break;
+      case "extractedFrom":
+        gpRec_data.extractedFrom = value;
+        break;
+      case "label":
+        gpRec_data.title = value;
+        break;
+      case "stUris":
+        temp = value.split(",");
+        gpRec_data.clinicalStatements = temp;
+        break;
+    }
+  } //endOf headVars
 
   return gpRec_data;
 }
 
-
-function get_ST_data(head_vars,binding){
-
-  if (binding == undefined  || binding.length === 0) return {};
+function get_ST_data(head_vars, binding) {
+  if (binding == undefined || binding.length === 0) return {};
 
   let stData = {
     id: undefined,
@@ -527,23 +910,21 @@ function get_ST_data(head_vars,binding){
         stData.hasStatementText = value;
         break;
       case "organizationName":
-        stData.organization =  value.split(", ");
+        stData.organization = value.split(", ");
         break;
       case "jurisdiction":
         stData.jurisdiction = value.split(", ");
         break;
       case "derivedFromSt":
-          stData.derivedFrom = value.split(", ");
-          break;
+        stData.derivedFrom = value.split(", ");
+        break;
       case "hasSources":
-            stData.hasTarget = value.split(", ");
-         break;
+        stData.hasTarget = value.split(", ");
+        break;
     }
   } //endOf loop
 
-
   logger.debug(`stData is ${JSON.stringify(stData)}`);
-
 
   return stData;
 }
@@ -552,7 +933,7 @@ function get_rec_json_data(recURI, head_vars, binding, type) {
   //recommendation template object
   let recData = {
     id: recURI,
-    type:undefined,
+    type: undefined,
     partOf: undefined, //combined dataset or original
     extractedFrom: undefined, //original dataset
     label: undefined,
@@ -561,7 +942,7 @@ function get_rec_json_data(recURI, head_vars, binding, type) {
     wasAttributedTo: undefined,
     generatedAtTime: undefined,
     care_action: undefined,
-    hasFilterSituation: undefined, 
+    hasFilterSituation: undefined,
     causation_beliefs: [],
   };
   let hasFilterSituation = {
@@ -572,74 +953,73 @@ function get_rec_json_data(recURI, head_vars, binding, type) {
     composedOf: undefined,
   };
 
+  //format data by looping through head vars
+  for (const pos in head_vars) {
+    //variable name
+    let var_name = head_vars[pos];
 
-    //format data by looping through head vars
-    for (const pos in head_vars) {
-      //variable name
-      let var_name = head_vars[pos];
+    //check there is a corresponding binding, if not, next head var
+    if (!binding.hasOwnProperty(var_name)) continue;
 
-      //check there is a corresponding binding, if not, next head var
-      if (!binding.hasOwnProperty(var_name)) continue;
+    //otherwise, retrieve value
+    let val = binding[var_name]["value"];
+    logger.debug(`value is ${val} and binding var is ${var_name}`);
 
-      //otherwise, retrieve value
-      let val = binding[var_name]['value'];
-      logger.debug( `value is ${val} and binding var is ${var_name}`);
-
-      //temporary var
-      let temp;
-      switch (var_name) {
-          //precondition
-          case "pred":
-            hasFilterSituation.id = val;
-            break;
-          case "compoundSituation": //TODO
-            // precond.composedOf = value;
-            break;
-          //recommendation
-          case "partOf":
-            temp = val.split("/");
-            temp = temp[temp.length - 1];
-            recData.partOf = temp;
-            break;
-          case "extractedFrom":
-            temp = val.split("/");
-            temp = temp[temp.length - 1];
-            recData.extractedFrom = temp;
-            break;
-          case "text":
-            recData.label = val;
-            break;
-          case "strength":
-            temp = val.split("/");
-            temp = temp[temp.length - 1];
-            recData.suggestion =
-              temp.toLowerCase() == "should"
-                ? "recommend"
-                : (temp.toLowerCase() == "should-not" || temp.toLowerCase() == "shouldnot")
-                ? "nonrecommend"
-                : temp.toLowerCase();
-            break;
-          case "derivedFrom":
-            temp = val.split(",");
-            recData.derivedFrom = temp;
-            break;
-          case "hasSources":
-            temp = val.split(",");
-            recData.hasSource = temp;
-            break;
-          case "attributedTo":
-            recData.wasAttributedTo = val;
-            break;
-          case "generatedTime":
-            recData.generatedAtTime = val;
-            break;
-          case "actAdmin":
-            recData.care_action = val;
-            break;
-
-        }
-        if (hasFilterSituation.id) recData.hasFilterSituation = hasFilterSituation;
-      }
+    //temporary var
+    let temp;
+    switch (var_name) {
+      //precondition
+      case "pred":
+        hasFilterSituation.id = val;
+        break;
+      case "compoundSituation": //TODO
+        // precond.composedOf = value;
+        break;
+      //recommendation
+      case "partOf":
+        temp = val.split("/");
+        temp = temp[temp.length - 1];
+        recData.partOf = temp;
+        break;
+      case "extractedFrom":
+        temp = val.split("/");
+        temp = temp[temp.length - 1];
+        recData.extractedFrom = temp;
+        break;
+      case "text":
+        recData.label = val;
+        break;
+      case "strength":
+        temp = val.split("/");
+        temp = temp[temp.length - 1];
+        recData.suggestion =
+          temp.toLowerCase() == "should"
+            ? "recommend"
+            : temp.toLowerCase() == "should-not" ||
+              temp.toLowerCase() == "shouldnot"
+            ? "nonrecommend"
+            : temp.toLowerCase();
+        break;
+      case "derivedFrom":
+        temp = val.split(",");
+        recData.derivedFrom = temp;
+        break;
+      case "hasSources":
+        temp = val.split(",");
+        recData.hasSource = temp;
+        break;
+      case "attributedTo":
+        recData.wasAttributedTo = val;
+        break;
+      case "generatedTime":
+        recData.generatedAtTime = val;
+        break;
+      case "actAdmin":
+        recData.care_action = val;
+        break;
+    }
+    if (hasFilterSituation.id) recData.hasFilterSituation = hasFilterSituation;
+  }
 
   return recData;
 }
@@ -734,10 +1114,13 @@ function action_rec(req, res, insertOrDelete) {
     `.
       }`;
 
-      return {id2CIG:id2CIG, query:`GRAPH ${head} GRAPH ${body} GRAPH ${provenance} GRAPH ${publication}`};
+  return {
+    id2CIG: id2CIG,
+    query: `GRAPH ${head} GRAPH ${body} GRAPH ${provenance} GRAPH ${publication}`,
+  };
   utils.sparqlUpdate(
     "CIG-" + req.body.cig_id,
-    
+
     insertOrDelete,
     function (err, status) {
       if (status === 200) {
@@ -777,14 +1160,9 @@ function insert_CB_in_rec(req, res, insertOrDelete) {
     `. }`;
 
   const graph = `GRAPH ${body}`;
-  utils.sparqlUpdate(
-    "CIG-" + req.body.cig_id,
-    graph);
-    
+  utils.sparqlUpdate("CIG-" + req.body.cig_id, graph);
 
-      res.status(status).end();
-    
-  
+  res.status(status).end();
 }
 
 function insert_precond_in_rec(req, res, insertOrDelete) {
@@ -829,202 +1207,7 @@ function filter_vocab_rec_type(RecUris) {
   return result;
 }
 
-/**
- *
- * @param {array} head_vars
- * @param {object} binding
- */
-function get_care_action(head_vars, binding = []) {
-  if (binding == []) return {};
-
-  logger.debug(head_vars);
-  logger.debug(binding);
-
-  //schema
-  let careAction = {
-    id: undefined,
-    display: undefined,
-    //internal to find out what type of care action is
-    type: undefined,
-    same_as: undefined,
-    subsumes: undefined,
-    has_grouping_criteria: undefined,
-    administers : {
-      id: undefined,
-      code: undefined,
-      system: undefined,
-      display: undefined,
-      type: undefined,
-      has_components: undefined
-    }
-  };
-
-  //format rdf by looping through head vars
-  for (let pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-    logger.debug(`headVar is ${headVar}`);
-
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
-
-    //otherwise, retrieve value
-    let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`);
-    //for each heading, add a field
-    switch (headVar) {
-      case "actId":
-        careAction.id = value;
-        break;
-      case "adminLabel":
-        careAction.display = value;
-        break;
-      case "subsumes":
-        careAction.subsumes = value.split(", ");
-        break;
-      case "hasGroupingCriteria":
-        careAction.has_grouping_criteria = value.split(", ");
-        break;
-      case "sameAs":
-          careAction.same_as = value.split(", ");
-          break;
-      case "adminT":
-        careAction.type = value.slice(value.lastIndexOf('/')+1);
-        break;
-      case "drugTid":
-        careAction.administers.id = value;
-        if(typeof careAction.administers.code === 'undefined') {
-          careAction.administers.code = value.slice(value.lastIndexOf('/')+1);
-          careAction.administers.system = value.substring(0,value.lastIndexOf('/'));
-        }
-        break;
-      case "drugType":
-         careAction.administers.type = value.slice(value.lastIndexOf('/')+1);
-        break;
-      case "drugLabel":
-        careAction.administers.display = value;
-        break;
-      case "snomed":
-        careAction.administers.code = value;
-        careAction.administers.system = sctUri;
-        break;
-      case "components":
-        careAction.administers.has_components = value.split(", ");
-        break;
-    }
-  } //endOf loop
-
-  //return null if not found
-  if(typeof careAction.id === 'undefined') careAction = null;
-
-  return careAction;
-}
-
-function get_transition_object(head_vars, binding) {
-  logger.debug(head_vars);
-  logger.debug(binding);
-
-  let data_prefix_length = "http://anonymous.org/data/".length;
-  let vocab_prefix_length = "http://anonymous.org/vocab/".length;
-
-  let transition_object = {
-    id: undefined,
-    situationTypes: [
-      {
-        type: "hasTransformableSituation",
-        id: undefined,
-        value: {
-          code: undefined,
-          display: undefined,
-          system: undefined,
-        },
-      },
-      {
-        type: "hasExpectedSituation",
-        id: undefined,
-        value: {
-          code: undefined,
-          display: undefined,
-          system: undefined,
-        },
-      },
-    ],
-    property: {
-      id: undefined,
-      display: undefined,
-      code: undefined,
-      system: undefined,
-    },
-  };
-
-  //format rdf by looping through head vars
-  for (let pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-    logger.debug(`headVar is ${headVar}`);
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
-
-    //otherwise, retrieve value
-    let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`);
-    //for each heading, add a field
-
-    //for each heading, add a field
-    switch (headVar) {
-      case "TrId":
-        transition_object.id = value;
-        break;
-      case "sitFromId":
-        transition_object.situationTypes[0].id = value;
-        //extract code
-        var type = value.slice(data_prefix_length);
-        transition_object.situationTypes[0].value.code = transition_object.situationTypes[0].value.code ? transition_object.situationTypes[0].value.code : type;
-        break;
-      case "sitToId":
-        transition_object.situationTypes[1].id = value;
-        //extract code
-        var type = value.slice(data_prefix_length);
-        transition_object.situationTypes[1].value.code = transition_object.situationTypes[1].value.code ? transition_object.situationTypes[1].value.code :  type;
-        break;
-      case "propUri":
-        //extract code
-        transition_object.property.id = value;
-        var type = value.slice(data_prefix_length);
-        transition_object.property.code = transition_object.property.code ?  transition_object.property.code : type;
-        break;
-      case "sitFromLabel":
-        transition_object.situationTypes[0].value.display = value;
-        break;
-      case "sitToLabel":
-        transition_object.situationTypes[1].value.display = value;
-        break;
-      case "propLabel":
-        transition_object.property.display = value;
-        break;
-      case "deriv":
-        //var type = value.slice(vocab_prefix_length);
-        transition_object.effect = value.toLowerCase();
-        break;
-      case "sitFromIdSCT":
-        transition_object.situationTypes[0].value.code = value;
-        transition_object.situationTypes[0].value.system = sctUri;
-        break;
-      case "sitToIdSCT":
-        transition_object.situationTypes[1].value.code = value;
-        transition_object.situationTypes[1].value.system = sctUri;
-        break;
-      case "propUriSCT":
-        transition_object.property.code = value;
-        transition_object.property.system = sctUri;
-        break;
-    }
-  }
-  return transition_object;
-}
-
 function get_precondition_object(head_vars, binding) {
-
   let data_prefix_length = "http://anonymous.org/data/".length;
   let data_prefix = "http://anonymous.org/data/";
 
@@ -1032,7 +1215,7 @@ function get_precondition_object(head_vars, binding) {
     id: undefined,
     display: undefined,
     code: undefined,
-    system: undefined
+    system: undefined,
   };
 
   //format rdf by looping through head vars
@@ -1051,16 +1234,16 @@ function get_precondition_object(head_vars, binding) {
     //for each heading, add a field
     switch (headVar) {
       case "pred_id":
-        precondition_object.id = value ;
-        precondition_object.code = value.slice(data_prefix_length) ;
-        precondition_object.system = data_prefix ;
+        precondition_object.id = value;
+        precondition_object.code = value.slice(data_prefix_length);
+        precondition_object.system = data_prefix;
         break;
       case "lbl":
         precondition_object.display = value;
-      break
+        break;
     }
   }
- 
+
   return precondition_object;
 }
 
@@ -1084,10 +1267,16 @@ function get_CB_object(head_vars, binding) {
       effect: undefined,
       property: {
         id: undefined,
-        code: undefined,
-        sctId: undefined,
-        system: undefined,
-        display: undefined,
+        code: {
+          coding: [
+            {
+              code: undefined,
+              system: undefined,
+              display: undefined,
+            },
+          ],
+          label: undefined,
+        },
       },
       situationTypes: [
         {
@@ -1095,7 +1284,6 @@ function get_CB_object(head_vars, binding) {
           type: "hasTransformableSituation",
           value: {
             stateOfProp: undefined,
-            sctId: undefined,
             system: undefined,
             display: undefined,
             code: undefined,
@@ -1106,7 +1294,6 @@ function get_CB_object(head_vars, binding) {
           type: "hasExpectedSituation",
           value: {
             stateOfProp: undefined,
-            sctId: undefined,
             system: undefined,
             display: undefined,
             code: undefined,
@@ -1160,9 +1347,9 @@ function get_CB_object(head_vars, binding) {
         cbData.probability = temp.toLowerCase();
         break;
       case "strength":
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.evidence = temp.toLowerCase();
+        temp = value.split("/");
+        temp = temp[temp.length - 1];
+        cbData.evidence = temp.toLowerCase();
       case "evidence":
         temp = value.split("/");
         temp = temp[temp.length - 1];
@@ -1227,7 +1414,7 @@ function get_CB_object(head_vars, binding) {
       case "sitToIdSCT":
         cbData.transition.situationTypes[1].value.code = value;
         cbData.transition.situationTypes[1].value.system = sctUri;
-        break;    
+        break;
       default:
         logger.debug(
           "switch headVar param: " + headVar + " with value : " + value
@@ -1254,7 +1441,7 @@ async function get_sparqlquery_arr(arr_resp) {
   const result = await expr
     .evaluate(arr_resp)
     .catch((err) => logger.error(err));
- 
+
   return result;
 }
 
@@ -1267,95 +1454,89 @@ function sparql_drop_named_graphs(ds_id, id) {
   return ` DROP SILENT GRAPH ${head_graph} ;  DROP SILENT GRAPH ${assert_graph} ; DROP SILENT GRAPH ${prov_graph} ; DROP SILENT GRAPH ${pubInfo_graph} `;
 }
 
+/**
+ *
+ * @param {string} cigFrom original CIG
+ * @param {string} cigTo destination CIG
+ * @param {string} nanoHead
+ * @param {string} nanoAssert
+ * @param {string} nanoProv
+ * @param {string} nanoPubInfo
+ */
+function addGraphsDataFromToCig(
+  cigFrom,
+  cigTo,
+  nanoHead,
+  nanoAssert,
+  nanoProv,
+  nanoPub
+) {
+  let insertGraphsData = ``;
+  let graphs;
+  let assertGraphs = ``;
+  let provGraphs = ``;
+  let headGraphs = ``;
+  let nanopubGraphs = ``;
+  let graphDescrDel = ``;
+  let graphDescrIns = ``;
 
-  /**
-   *
-   * @param {string} cigFrom original CIG
-   * @param {string} cigTo destination CIG
-   * @param {string} nanoHead
-   * @param {string} nanoAssert
-   * @param {string} nanoProv
-   * @param {string} nanoPubInfo
-   */
-function  addGraphsDataFromToCig(
-    cigFrom,
-    cigTo,
-    nanoHead,
-    nanoAssert,
-    nanoProv,
-    nanoPub ) {
-    let insertGraphsData = ``;
-    let graphs;
-    let assertGraphs = ``;
-    let provGraphs = ``;
-    let headGraphs = ``;
-    let nanopubGraphs = ``;
-    let graphDescrDel = ``;
-    let graphDescrIns = ``;
+  let deleteTriples;
 
-    let deleteTriples;
+  const cigFromUrl =
+    "http://" +
+    config.JENA_HOST +
+    ":" +
+    config.JENA_PORT +
+    "/" +
+    cigFrom +
+    "/query";
 
-    const cigFromUrl =
-      "http://" +
-      config.JENA_HOST +
-      ":" +
-      config.JENA_PORT +
-      "/" +
-      cigFrom +
-      "/query";
+  assertGraphs = `\nGRAPH <` + nanoAssert + `> { ?a  ?b ?c } `;
+  provGraphs = `\nGRAPH <` + nanoProv + `> { ?d  ?e ?f } `;
+  nanopubGraphs = `\nGRAPH <` + nanoPub + `> { ?g ?h ?i } `;
+  headGraphs = `\nGRAPH <` + nanoHead + `> { ?j ?k ?l } `;
 
-    assertGraphs = `\nGRAPH <` + nanoAssert + `> { ?a  ?b ?c } `;
-    provGraphs = `\nGRAPH <` + nanoProv + `> { ?d  ?e ?f } `;
-    nanopubGraphs = `\nGRAPH <` + nanoPub + `> { ?g ?h ?i } `;
-    headGraphs = `\nGRAPH <` + nanoHead + `> { ?j ?k ?l } `;
+  graphDescrDel +=
+    `\nGRAPH <` +
+    nanoAssert +
+    `> { <` +
+    nanoAssert +
+    `> vocab:partOf data:` +
+    cigFrom +
+    ` } `;
 
-    graphDescrDel +=
-      `\nGRAPH <` +
-      nanoAssert +
-      `> { <` +
-      nanoAssert +
-      `> vocab:partOf data:` +
-      cigFrom +
-      ` } `;
-
-    graphDescrIns +=
-      `\nGRAPH <` +
-      nanoAssert +
-      `> { <${nanoAssert}> vocab:partOf data:${cigTo} ;
+  graphDescrIns +=
+    `\nGRAPH <` +
+    nanoAssert +
+    `> { <${nanoAssert}> vocab:partOf data:${cigTo} ;
           vocab:extractedFrom data:${cigFrom} . } `;
 
-    let graphDescrInsDef =
-      `\n <` +
-      nanoAssert +
-      `> vocab:partOf data:` +
-      cigTo +
-      ` . `;
+  let graphDescrInsDef =
+    `\n <` + nanoAssert + `> vocab:partOf data:` + cigTo + ` . `;
 
-    insertGraphsData =
-      `\nINSERT {` +
-      graphDescrInsDef +
-      headGraphs +
-      assertGraphs +
-      graphDescrIns +
-      nanopubGraphs +
-      provGraphs +
-      `} \nWHERE { SERVICE <` +
-      cigFromUrl +
-      `> { ` +
-      headGraphs +
-      assertGraphs +
-      nanopubGraphs +
-      provGraphs +
-      ` } } ; `;
+  insertGraphsData =
+    `\nINSERT {` +
+    graphDescrInsDef +
+    headGraphs +
+    assertGraphs +
+    graphDescrIns +
+    nanopubGraphs +
+    provGraphs +
+    `} \nWHERE { SERVICE <` +
+    cigFromUrl +
+    `> { ` +
+    headGraphs +
+    assertGraphs +
+    nanopubGraphs +
+    provGraphs +
+    ` } } ; `;
 
-    deleteTriples = `\nDELETE WHERE { ` + graphDescrDel + ` } ; `;
+  deleteTriples = `\nDELETE WHERE { ` + graphDescrDel + ` } ; `;
 
-    ///UPDATE GRAPH STORE///
+  ///UPDATE GRAPH STORE///
 
-
-    return insertGraphsData + deleteTriples;
-  }
-
+  return insertGraphsData + deleteTriples;
+}
 
 module.exports = {
   filter_vocab_rec_type,
@@ -1378,5 +1559,5 @@ module.exports = {
   get_CB_uris_from_bindings,
   set_cig_id,
   get_precondition_object,
-  set_uri
+  set_uri,
 };
