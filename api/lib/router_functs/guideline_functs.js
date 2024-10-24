@@ -255,7 +255,7 @@ function get_transition_object(head_vars, binding) {
   let data_prefix_length = "http://anonymous.org/data/".length;
   let vocab_prefix_length = "http://anonymous.org/vocab/".length;
 
-  le transition_object = {
+  let transition_object = {
     situationTypes: [
       {
         type: "hasTransformableSituation",

@@ -8,8 +8,8 @@ const guidelines = require("./prefixes.js");
 const logger = require("../config/winston");
 
 let reasoner_config = {
-  //default
-  url: null, //to be added from args
+  // Default settings
+  url: null, // to be added from args
   baseURL: `http://${config.PROLOG_HOST}:${config.PROLOG_PORT}`,
   timeout: 1000,
   auth: {
@@ -18,11 +18,12 @@ let reasoner_config = {
   },
   headers: {
     "Content-Type": "application/x-www-form-urlencoded",
-    Authorization: `Basic ${new Buffer(
-      config.FUSEKI_USER + ":" + config.FUSEKI_PASSWORD
+    Authorization: `Basic ${Buffer.from(
+      `${config.FUSEKI_USER || 'admin'}:${config.FUSEKI_PASSWORD || 'road2h'}`
     ).toString("base64")}`,
   },
 };
+
 
 const jena_baseUrl = `http://${config.JENA_HOST || "127.0.0.1"}:${
   config.JENA_PORT || "3030"

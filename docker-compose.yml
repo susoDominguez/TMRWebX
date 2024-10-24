@@ -1,6 +1,6 @@
-version: "3"
-services:
+version: '3.8'
 
+services:
   busybox:
     image: busybox
     container_name: fuseki-data
@@ -10,10 +10,7 @@ services:
       - "drug_volume:/fuseki"
     
   store_app:
-    #build: 
-      #context: ./fuseki/
-      #dockerfile: Dockerfile
-    image: stain/jena-fuseki:latest #4.0.0 
+    image: stain/jena-fuseki:5.1.0  # Pin to a specific version
     container_name: store_service
     restart: unless-stopped
     ports: 
@@ -30,6 +27,7 @@ services:
       - JVM_ARGS=-Xmx2g
     depends_on: 
       - busybox
+  
   interaction_app:
     build: 
       context: ./api/
@@ -37,24 +35,16 @@ services:
     image: road2h-interaction_ms
     container_name: interaction_service
     restart: unless-stopped
-    #expose: 
-    #  - 8888
     ports:
       - "8888:8888"
     networks: 
       - cig_handler
     environment:
-      #name of Store container
       - JENA_HOST=store_service
-      #name of Reasoner container
       - PROLOG_HOST=reasoner_service
-      #Store container external port
       - JENA_PORT=3030
-      #Reasoner container external port
       - PROLOG_PORT=1234
-      #Interaction container port
       - PORT=8888
-      #password to access Store container Jena database
       - FUSEKI_PASSWORD=road2h
     depends_on:
       - reasoner_app
@@ -66,10 +56,8 @@ services:
     image: road2h-reasoner_ms
     container_name: reasoner_service
     restart: unless-stopped
-    stdin_open: true # docker run -i
-    tty: true        # docker run -t
-    #expose:
-    #  - 1234
+    stdin_open: true  # Keep container interactive
+    tty: true         # Allocate a pseudo-TTY
     ports: 
       - "1234:1234"
     networks: 
@@ -78,7 +66,9 @@ services:
       - FUSEKI_HOST_PORT=http://store_service:3030/
     depends_on: 
       - store_app
+
 volumes:
   drug_volume: {}
+
 networks:
   cig_handler: {}
