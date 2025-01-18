@@ -3,41 +3,43 @@
 :- use_module(library(semweb/rdf_zlib_plugin)).
 :- use_module(library(semweb/rdf_http_plugin)).
 :- use_module(library(http/http_ssl_plugin)).
-:- use_module(library(semweb/rdf_ntriples)).
 :- use_module(library(semweb/rdf11)).
-%:- use_module(library(semweb/rdf_db)).
+:- use_module(library(semweb/rdf_db)).
 :- use_module(library(semweb/rdfs)).
 :- use_module(library(dcg/basics)).
 :- use_module(library(dif)).
 
+rdf_db:rdf_reasoner(rdfs).
+% rdf_db:rdf_reasoner(owl).
+
+
 :- rdf_prefix(data, 'http://anonymous.org/data/').
 :- rdf_prefix(vocab, 'http://anonymous.org/vocab/').
 :- rdf_prefix(vocab4i, 'http://anonymous.org/vocab4i/').
-:- rdf_prefix(oa, 'http,//www.w3.org/ns/oa#'). 
+:- rdf_prefix(oa, 'http://www.w3.org/ns/oa#'). 
 :- rdf_prefix(prov, 'http://www.w3.org/ns/prov#').
 :- rdf_prefix(nanopub, 'http://www.nanopub.org/nschema#').
 
 
-% set properties of RDF predicates
-:- rdf_set_predicate(vocab4i:'comparedWith', symmetric(true)) .
-:- rdf_set_predicate(vocab4i:'comparedWith', transitive(false)) .
-:- rdf_set_predicate(owl:'sameAs', symmetric(true)) .
-:- rdf_set_predicate(owl:'sameAs', transitive(true)) .
-:- rdf_set_predicate(vocab:'subsumes', transitive(true)) .
-:- rdf_set_predicate(vocab:'subsumes', symmetric(false)) .
-:- rdf_set_predicate(vocab:'administrationOf', transitive(false)) .
-:- rdf_set_predicate(vocab:'administrationOf', symmetric(false)) .
-:- rdf_set_predicate(vocab:'hasComposition', transitive(true)) .
-:- rdf_set_predicate(vocab:'hasComposition', symmetric(false)) .
-:- rdf_set_predicate(vocab:'incompatibleWith', symmetric(true)) .
-:- rdf_set_predicate(vocab:'hasEqOrder', symmetric(true)) .
-:- rdf_set_predicate(vocab:'hasEqOrder', transitive(true)) .
-:- rdf_set_predicate(vocab:'hasHigherOrderThan', transitive(true)) .
-:- rdf_set_predicate(vocab:'hasHigherOrderThan', symmetric(false)) .
-:- rdf_set_predicate(vocab:'subsumedBy', transitive(true)) .
-:- rdf_set_predicate(vocab:'subsumedBy', symmetric(false)) .
-:- rdf_set_predicate(vocab:'subsumedBy', inverse_of('http://anonymous.org/vocab/subsumes')) .
-%%%%%%%%%%%%%%%%%%%
+
+% set RDF predicate properties
+set_predicate_properties :-
+    forall(member(Predicate, [
+        vocab4i:'comparedWith'-[symmetric(true), transitive(false)],
+        owl:'sameAs'-[symmetric(true), transitive(true)],
+        vocab:'subsumes'-[transitive(true), symmetric(false)],
+        vocab:'administrationOf'-[transitive(false), symmetric(false)],
+        vocab:'hasComposition'-[transitive(true), symmetric(false)],
+        vocab:'incompatibleWith'-[symmetric(true), transitive(false)],
+        vocab:'hasEqOrder'-[symmetric(true), transitive(true)],
+        vocab:'hasHigherOrderThan'-[transitive(true), symmetric(false)],
+        vocab:'subsumedBy'-[transitive(true), symmetric(false), inverse_of(vocab:'subsumes')]
+    ]),
+    (   Predicate = Prop-[PropOptions],
+        maplist(rdf_set_predicate(Prop), PropOptions)
+    )).
+
+:- set_predicate_properties.
 
 % given an URI, create the predicate logic formula that represents 
 % its precondition. 
@@ -74,42 +76,38 @@ build_tree(URI, ~(Part)) :-
 
 %%%%%%%%%%
 %TODO: Reg could be given by service to contextualize the interactions search
-%this version of the predicate discards the CBs so no iteration of regulates occurs for each CB in Norm
+
+% this version of the predicate discards the CBs so no iteration of regulates occurs for each CB in Norm
 regulates(Reg, Norm, ActionT, Strength):-
     rdfs_individual_of(Reg, vocab:'ClinicalGuideline'), %for each available CG. This must be filtered to the contextualized CG
-    rdf(Norm, vocab:'isPartOf', Reg, Reg),
+    rdf(Norm, vocab:'isPartOf', Reg, Reg), % TODO: check this is true
     rdfs_individual_of(Norm, vocab:'ClinicalRecommendation'),
-    rdf(Norm, vocab:'partOf', Reg, Norm),%potentially, this Reg could be distinct to the one above when combining guidelines by specifying a new isPartOf object
+    rdf(Norm, vocab:'partOf', Reg, Norm), % potentially, this Reg could be distinct to the one above when combining guidelines by specifying a new isPartOf object
     rdf(Norm, vocab:'strength', Strength, Norm),
     rdf(Norm, vocab:'aboutExecutionOf', ActionT, Norm).
+
 regulates(Reg, Norm, ActionT, Strength, CBelief):-
     regulates(Reg, Norm, ActionT, Strength),
     rdf(Norm, vocab:'basedOn', CBelief, Norm).
+
 regulates(Reg, Norm, ActionT, Strength, CBelief, Contrib):-
     regulates(Reg, Norm, ActionT, Strength, CBelief),
     rdf(CBelief, vocab:contribution, Contrib, Norm).
 
 /* *********************************** */
 
-has_relation_symm(Act1, Act2, Norm1, Norm2):-
-            (related_effect_symm(Act1, Act2) 
-             -> true 
-            ;
-             subsumed_due_to_effect_symm(Act1, Act2, Norm1, Norm2)
-             -> true 
-            ).
+% a pair of care action types are related if they are the same syntactically or semantically, or if there is a subsumption relation
+has_relation_action_types(Action1, Action2, Norm1, Norm2):-
+    ( related_action_types(Action1, Action2) 
+    ; subsumed_due_to_effect_symm(Action1, Action2, Norm1, Norm2) -> true 
+    ).
 
-related_effect_symm(CareAction1, CareAction2) :-
-    nonvar(CareAction1),
-    nonvar(CareAction2),
-    (
-        rdf_equal(CareAction1, CareAction2) 
-        -> true %T if same care action
-    ;   %they are the same semantically or can be reached using semantic same transitive closure
-        semanticallySameAs(CareAction1 , CareAction2) 
-        ->  true
-    ;
-        related_to_symm(CareAction1,CareAction2) 
+related_action_types(Action1, Action2) :-
+    nonvar(Action1),
+    nonvar(Action2),
+    ( rdf_equal(Action1, Action2) %T if same care action
+    ; semanticallySameAs(Action1, Action2) 
+    ; related_to_symm(Action1, Action2) 
     ).
 
 
@@ -142,59 +140,59 @@ hasActiveGroupingCriterion(DrugType,Action,Norm,Tr) :-
     causes(Action, Tr, _, CBelief).
     
 
-%symmetric predicate to find out whether to given Action types have a relation (same, subsumes, hasComponent)
-related_to_symm(CareAction1,CareAction2) :- 
-    nonvar(CareAction1),
-    nonvar(CareAction2),
+%symmetric predicate to find out whether two given Action types have a relation (same, subsumes, hasComponent)
+related_to_symm(Action1,Action2) :- 
+    nonvar(Action1),
+    nonvar(Action2),
     (   
-       %if CareAction1 is related to CareAction2
-        isRelatedTo(CareAction1, CareAction2) 
-        -> true  %checks also for CareAction3 s.t. its owl:same as CareAction2
-    ;   %if CareAction2 is related to CareAction1
-        isRelatedTo(CareAction2, CareAction1) 
-        -> true %checks also for CareAction3 s.t. its owl:same as CareAction1
-    ;   %if CareAction1 is semantically the same as another careAction type 3 and the latter is related to careAction 2
-        semanticallySameAs(CareAction1,CareAction3),
-        isRelatedTo(CareAction3, CareAction2)
+       %if Action1 is related to Action2
+        isRelatedTo(Action1, Action2) 
+        -> true  %checks also for CareAction3 s.t. its owl:same as Action2
+    ;   %if Action2 is related to Action1
+        isRelatedTo(Action2, Action1) 
+        -> true %checks also for CareAction3 s.t. its owl:same as Action1
+    ;   %if Action1 is semantically the same as another careAction type 3 and the latter is related to careAction 2
+        semanticallySameAs(Action1,CareAction3),
+        isRelatedTo(CareAction3, Action2)
         -> true
     ;   %the symmetric version of above
-        semanticallySameAs(CareAction2, CareAction3),
-        isRelatedTo(CareAction3, CareAction1)
+        semanticallySameAs(Action2, CareAction3),
+        isRelatedTo(CareAction3, Action1)
     ).
 
-related_to(CareAction1,CareAction2) :- 
-        nonvar(CareAction1),
-        nonvar(CareAction2),
+related_to(Action1,Action2) :- 
+        nonvar(Action1),
+        nonvar(Action2),
         (   
-           %if CareAction1 is related to CareAction2
-            isRelatedTo(CareAction1, CareAction2) 
-            -> true  %checks also for CareAction3 s.t. its owl:same as CareAction2
+           %if Action1 is related to Action2
+            isRelatedTo(Action1, Action2) 
+            -> true  %checks also for CareAction3 s.t. its owl:same as Action2
         ;   
-            %if CareAction1 is semantically the same as another careAction type 3 and the latter is related to careAction 2
-            semanticallySameAs(CareAction1,CareAction3),
-            isRelatedTo(CareAction3, CareAction2)
+            %if Action1 is semantically the same as another careAction type 3 and the latter is related to careAction 2
+            semanticallySameAs(Action1,CareAction3),
+            isRelatedTo(CareAction3, Action2)
         ).
 
 % check if a careAction is related, but not equal, to another via subsumption, hasComponent and the composition of both
-isRelatedTo(CareAction1, CareAction2) :-
-    nonvar(CareAction1),
-    nonvar(CareAction2),
-    rdf_not_equal(CareAction1, CareAction2), %related but not equal
-    rdf(CareAction1, vocab:'administrationOf', DrugType1),
-    rdf(CareAction2, vocab:'administrationOf', DrugType2),
+isRelatedTo(Action1, Action2) :-
+    nonvar(Action1),
+    nonvar(Action2),
+    rdf_not_equal(Action1, Action2), %related but not equal
+    rdf(Action1, vocab:'administrationOf', DrugType1),
+    rdf(Action2, vocab:'administrationOf', DrugType2),
     (   
-        subsumes(CareAction1 , CareAction2) -> true  %by definition CareAction2 cannot be a Compound Drug Type so not followed by component property
+        subsumes(Action1 , Action2) -> true  %by definition Action2 cannot be a Compound Drug Type so not followed by component property
     ;
         hasComponentRelation(DrugType1,DrugType2) -> true  %the property already handles owl:same
     ;   %below are the cases where some free variables are at play
         hasComponentRelation(DrugType1, DrugType3),
         rdf(CareAction3, vocab:'administrationOf', DrugType3),
             (
-                subsumes(CareAction3, CareAction2) -> true %checks for owl:same on 2nd param
+                subsumes(CareAction3, Action2) -> true %checks for owl:same on 2nd param
             ;
                 semanticallySameAs(CareAction3, CareAction4),
-                rdf_not_equal(CareAction4, CareAction1),
-                subsumes(CareAction4, CareAction2)
+                rdf_not_equal(CareAction4, Action1),
+                subsumes(CareAction4, Action2)
             )
         
     ) .
@@ -204,18 +202,20 @@ isRelatedTo(CareAction1, CareAction2) :-
 
 /* *********************************** */
 % semanticallySameAs(Resource1, Resource2)    {if nothing is said, they are not the semanticallySameAs}
-% check if two resources are explicitly said to be the semanticallySameAs (semantic equivalence)
+% check if two resources are explicitly, and strictly, said to be the semanticallySameAs (semantic equivalence)
 %owl:semanticallySameAs must be set as a symmetric predicate
 semanticallySameAs(Resource1, Resource2) :-
-    rdf_reachable(Resource1, owl:sameAs, Resource2),
-    rdf_not_equal(Resource1, Resource2).
+    rdf_not_equal(Resource1, Resource2),
+    rdf_reachable(Resource1, owl:sameAs, Resource2).
 
+%TODO: rdf_not_equal must be removed since 2 identical resources are semantically different
 semanticallyDifferent(Resource1, Resource2) :-
     \+ semanticallySameAs(Resource1, Resource2),
     rdf_not_equal(Resource1, Resource2). %This case is required for the transitive closure of owl:same as it succeeds with R1=R1.
 
 rdf_not_equal(Resource1,Resource2) :-
     \+ rdf_equal(Resource1,Resource2).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 /* *********************************** */
@@ -223,65 +223,67 @@ rdf_not_equal(Resource1,Resource2) :-
 /* *********************************** */
 %
 
-/* *********************************** */
-%
+% TODO: improve with selection of reliable sources
+%using the transitive closure of vocab:subsumes, find all objects that are subsumed.
+%order of disjuncts matters
+% subsumes(+SType, ?Type)
+% SType subsumes Type if:
+% 1. SType is non-variable (ground).
+% 2. SType and Type are distinct.
+% 3. Type is either directly reachable via vocab:subsumes,
+%    semantically equivalent to a reachable type,
+%    or can be unified through variable exploration.
 
-
-% improve with selection of relieable sources
-%using the transitive closure of  vocab:subsumes, find all objects that are subsumed.
-%order of disjuncts matter
 subsumes(SType, Type) :-
     nonvar(SType),
     dif(SType, Type),
     (
-        nonvar(Type), 
+        % Case 1: Direct subsumption
+        nonvar(Type),
         rdf_reachable(SType, vocab:'subsumes', Type)
-        -> true 
     ;
-        nonvar(Type), 
+        % Case 2: Subsumption via semantic equivalence
+        nonvar(Type),
         semanticallySameAs(Type, Type2),
         dif(SType, Type2),
         rdf_reachable(SType, vocab:'subsumes', Type2)
-        -> true 
     ;
-        var(Type), %find all unification solutions
-        dif(SType,Type2),
+        % Case 3: Variable exploration to find all valid unifications
+        var(Type),
         rdf_reachable(SType, vocab:'subsumes', Type2),
+        dif(SType, Type2),
         (
-            rdf_equal(Type2, Type) %expands goal
-            ;
+            rdf_equal(Type2, Type)
+        ;
             semanticallySameAs(Type2, Type)
-        ) 
+        )
     ).
 
-%RElation from combined Drug types to drug types
+
+%Relation from combined Drug types to drug types
 %apply sameAS to second parameter and sameAs for first parameter must be call from outside, as parameters of CType
 hasComponentRelation(CType, Type):-
     nonvar(CType),
     rdfs_individual_of(CType, vocab:'CombinedDrugType'),
     (
         nonvar(Type),
-        once(hasDirectComponent(CType,Type)) 
-        -> true
+        hasDirectComponent(CType,Type), ! % Cut to stop after direct match succeeds
     ;
         nonvar(Type), 
-        semanticallySameAs(Type,Type2),
-        once(hasDirectComponent(CType,Type2))
-        -> true
+        semanticallySameAs(Type, AltType),
+        hasDirectComponent(CType, AltType), ! % Cut to stop after direct match succeeds
     ;
         var(Type), %This case requires to find all possible unifications
-        hasDirectComponent(CType,Type2),
+        hasDirectComponent(CType, CandidateType),
         (
-            rdf_equal(Type2, Type) %expands goal
-            ;
-            semanticallySameAs(Type2, Type)
+            rdf_equal(CandidateType, Type), ! 
+        ;
+            semanticallySameAs(CandidateType, Type)
         )     
     ).
 
 %tests whether Type is a direct component of CType, or finds a direct component of CType
 hasDirectComponent(CType,Type) :-
-    nonvar(CType),
-    dif(CType, Type);
     rdf_reachable(CType, vocab:'hasComponent', Type),
     semanticallyDifferent(CType,Type).
 
@@ -575,24 +577,24 @@ detect_contradiction :-
     %rdf_equal(vocab:'Always', VarName),
     forall(
         ( 
-          regulates(Reg, Norm1, Act1, 'should', CB1),
+          regulates(Reg, Norm1, Action1, 'should', CB1),
           dif(Norm1,Norm2),
-     	  regulates(Reg, Norm2, Act2, Strength, CB2),
-     	  causes(Act1, Tr1, 'always', CB1),
-     	  causes(Act2, Tr2, 'always', CB2),
+     	  regulates(Reg, Norm2, Action2, Strength, CB2),
+     	  causes(Action1, Tr1, 'always', CB1),
+     	  causes(Action2, Tr2, 'always', CB2),
      	  ( 
             Strength = 'should',
-            semanticallyDifferent(Act1,Act2),
+            semanticallyDifferent(Action1,Action2),
             inverseTrTypes(Tr1,Tr2)
             -> true
             ;
             %shouldnot
             Strength = 'should-not',
             (
-                related_effect_symm(Act1, Act2)
+                related_action_types(Action1, Action2)
                 -> true
  	        ;
-                semanticallyDifferent(Act1,Act2),
+                semanticallyDifferent(Action1,Action2),
                 \+inverseTrTypes(Tr1,Tr2)
                 -> true
             )
@@ -609,8 +611,8 @@ detect_repetition :-
         forall(
                 ( 
                 dif(Norm1,Norm2),
-                regulates(Reg, Norm1, Act1, 'should'),
-                regulates(Reg, Norm2, Act2, 'should'),
+                regulates(Reg, Norm1, Action1, 'should'),
+                regulates(Reg, Norm2, Action2, 'should'),
                 %split search space
                 \+rdf(Norm2,vocab4i:comparedWith,Norm1,IntTypeFullUri),
                 rdf_assert(Norm1,vocab4i:comparedWith,Norm2,IntTypeFullUri),
@@ -618,7 +620,7 @@ detect_repetition :-
                 %assert deontic values are positive
                 %is_greater_or_eq_modifier_than(should, DeonticValUriThreshold),
                 %is_greater_or_eq_modifier_than(DeonticValUri2, DeonticValUriThreshold),
-                once(has_relation_symm(Act1, Act2, Norm1, Norm2))
+                once(has_relation_action_types(Action1, Action2, Norm1, Norm2))
                 ), 
                 existsInteraction(IntTypeFullUri, Norm1, Norm2)
             ),
@@ -659,20 +661,20 @@ detect_repairable_transition :-
         forall(
                 (
                 dif(Norm1, Norm2),
-                regulates(Reg, Norm1, Act1, 'should-not'),
-                regulates(Reg, Norm2, Act2, 'should'),
+                regulates(Reg, Norm1, Action1, 'should-not'),
+                regulates(Reg, Norm2, Action2, 'should'),
                 %split search space
                 %\+rdf(Norm2,vocab4i:comparedWith,Norm1,IntTypeFullUri),
                 %rdf_assert(Norm1,vocab4i:comparedWith,Norm2,IntTypeFullUri),
                 %endOf split search space
-                semanticallyDifferent(Act1,Act2),
+                semanticallyDifferent(Action1,Action2),
                 %is_greater_or_eq_modifier_than(should, vocab:'Should'),
                 %\+is_greater_or_eq_modifier_than(DeonticValUri2, vocab:'Should'),
-                \+has_relation_symm(Act1, Act2, Norm1, Norm2),
+                \+has_relation_action_types(Action1, Action2, Norm1, Norm2),
                 basedOn(Norm1, CB1, Cntrb1),
                 basedOn(Norm2, CB2, Cntrb2),
-                causes(Act1, Tr1, 'always', CB1),
-                causes(Act2, Tr2, 'always', CB2),
+                causes(Action1, Tr1, 'always', CB1),
+                causes(Action2, Tr2, 'always', CB2),
                 inverseTrTypes(Tr1, Tr2)
                 ),
                     existsInteraction(IntTypeURI, Norm1, Norm2)

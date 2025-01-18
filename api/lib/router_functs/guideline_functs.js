@@ -8,79 +8,15 @@ const dataUri = "http://anonymous.org/data/";
 const dataUri_short = "data:";
 const sctUri = `http://snomed.info/sct/`;
 
-//schema
-const care_action_template = {
-  id: undefined,
-  display: undefined,
-  //internal to find out what type of care action is
-  type: undefined,
-  same_as: undefined,
-  subsumes: undefined,
-  has_grouping_criteria: undefined,
-  administers: {
+function create_transtition_tmplt() {
+  return {
     id: undefined,
-    type: undefined,
-    has_components: undefined,
-    value: {
-      coding: [
-        // TMR coding at 0
-        {
-          code: undefined,
-          system: undefined,
-          display: undefined,
-        },
-        // SCT coding -if available-- at 1
-        {
-          code: undefined,
-          system: undefined,
-          display: undefined,
-        },
-      ],
-      text: undefined,
-    },
-  },
-};
-
-// Create a factory function that returns a deep copy of the causation belief template
-function create_care_action_data(overrides = {}) {
-  // Use JSON.parse and JSON.stringify to create a deep copy
-  const care_action_copy = JSON.parse(JSON.stringify(care_action_template));
-
-  // Apply any overrides provided
-  return { ...care_action_copy, ...overrides };
-}
-
-// causation belief template
-const causation_belief_template = {
-  id: undefined,
-  author: undefined,
-  contribution: undefined,
-  derivedFrom: undefined,
-  hasSource: undefined,
-  wasAttributedTo: undefined,
-  generatedAtTime: undefined,
-  probability: undefined,
-  evidence: undefined,
-  careActionTypeRef: undefined,
-  transition: {}
-};
-
-// Create a factory function that returns a deep copy of the causation belief template
-function create_causation_belief_data(overrides = {}) {
-  // Use JSON.parse and JSON.stringify to create a deep copy
-  const cbDataCopy = JSON.parse(JSON.stringify(causation_belief_template));
-
-  // Apply any overrides provided
-  return { ...cbDataCopy, ...overrides };
-}
-
-const transition_template = {
-  id: undefined,
-  situationTypes: [
-    {
-      type: "hasTransformableSituation",
-      id: undefined,
-      value: {
+    //at 0 -> pre-situation. at 1 -> post-situation
+    situationTypes: [
+      {
+        type: "hasTransformableSituation",
+        id: undefined,
+        value: {
           coding: [
             {
               code: undefined,
@@ -93,13 +29,13 @@ const transition_template = {
               system: undefined,
             },
           ],
-        text: undefined,
+          text: undefined,
+        },
       },
-    },
-    {
-      type: "hasExpectedSituation",
-      id: undefined,
-      value: {
+      {
+        type: "hasExpectedSituation",
+        id: undefined,
+        value: {
           coding: [
             {
               code: undefined,
@@ -112,13 +48,14 @@ const transition_template = {
               system: undefined,
             },
           ],
-        text: undefined,
+          text: undefined,
+        },
       },
-    },
-  ],
-  property: {
-    id: undefined,
-    value: {
+    ],
+    property: {
+      id: undefined,
+      value: {
+        // at 0-> TMR Id; at 1 -> SCTID if available
         coding: [
           {
             code: undefined,
@@ -131,116 +68,94 @@ const transition_template = {
             system: undefined,
           },
         ],
-      text: undefined,
-    }
-  },
-};
+        text: undefined,
+      },
+    },
+  };
+}
 
-// Create a factory function that returns a deep copy of the transition template
-function create_transition_data(overrides = {}) {
-  // Use JSON.parse and JSON.stringify to create a deep copy
-  const transitionDataCopy = JSON.parse(JSON.stringify(transition_template));
-
-  // Apply any overrides provided
-  return { ...transitionDataCopy, ...overrides };
+// causation belief template
+function create_cb_tmplt() {
+  return {
+    id: undefined,
+    author: undefined,
+    contribution: undefined,
+    derivedFrom: undefined,
+    hasSource: undefined,
+    wasAttributedTo: undefined,
+    generatedAtTime: undefined,
+    probability: undefined,
+    evidence: undefined,
+    careActionTypeRef: undefined,
+    transitionTypeRef: undefined,
+  };
 }
 
 /**
- *
- * @param {array} head_vars
- * @param {object} binding
+ * Map data bindings to TMR serializations
+ * @param {array} head_vars - Variable names to map.
+ * @param {object} binding - Data bindings.
+ * @param {object} handlers - Custom mapping handlers.
+ * @returns {object|undefined} - The dynamically created object or undefined.
  */
-function get_care_action(head_vars, binding = []) {
-  if (binding == []) return {};
+function handleDynamicObject(head_vars = [], binding = {}, handlers = {}) {
+  const result = {};
 
-  let careAction = {};
-  let administers = {};
-  let code = {
-    coding: [
-      {
-        code: undefined,
-        system: undefined,
-        display: undefined,
-      },
-      {
-        code: undefined,
-        system: undefined,
-        display: undefined,
-      },
-    ],
-    label: undefined,
-  };
-
-  //format rdf by looping through head vars
-  for (let pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-    logger.debug(`headVar is ${headVar}`);
-
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
-
-    //otherwise, retrieve value
-    let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`);
-
-    //for each heading, add a field
-    switch (headVar) {
-      case "actId":
-        careAction.id = value;
-        break;
-      case "adminLabel":
-        careAction.display = value;
-        break;
-      case "subsumes":
-        careAction.subsumes = value.split(", ");
-        break;
-      case "hasGroupingCriteria":
-        careAction.has_grouping_criteria = value.split(", ");
-        break;
-      case "sameAs":
-        careAction.same_as = value.split(", ");
-        break;
-      case "adminT":
-        careAction.type = value.slice(value.lastIndexOf("/") + 1);
-        break;
-      case "drugTid":
-        administers.id = value;
-        //TMR coding
-        code.coding[0].code = value.slice(value.lastIndexOf("/") + 1);
-        code.coding[0].system = value.substring(0, value.lastIndexOf("/"));
-        break;
-      case "drugType":
-        administers.type = value.slice(value.lastIndexOf("/") + 1);
-        break;
-      case "drugLabel":
-        //currently, applied to all coding displays and labels
-        code.coding.display = value;
-        code.label = value;
-        break;
-      case "snomed":
-        code.coding[1].code = value;
-        code.coding[1].system = sctUri;
-        //currently, we use the same label for all care actions
-        break;
-      case "components":
-        administers.has_components = value.split(", ");
-        break;
+  head_vars.forEach((headVar) => {
+    const value = binding[headVar]?.value;
+    if (value !== undefined && handlers[headVar]) {
+      handlers[headVar](result, value);
     }
-  } //endOf loop
+  });
 
-  //return null if not found
-  if (typeof careAction.id === "undefined") careAction = null;
-
-  if (careAction) {
-    careAction.administers = administers;
-    careAction.administers.code = code;
-
-    careAction = create_care_action_data(careAction);
-  }
-
-  return careAction;
+  // Validate required field 'id' to determine if the object is valid
+  return result?.id ? result : undefined;
 }
+
+
+
+// Handlers for care_action mapping
+const care_action_handlers = {
+  actId: (result, value) => (result.id = value),
+  adminLabel: (result, value) => (result.display = value),
+  subsumes: (result, value) => (result.subsumes = value.split(", ")),
+  hasGroupingCriteria: (result, value) => (result.has_grouping_criteria = value.split(", ")),
+  sameAs: (result, value) => (result.same_as = value.split(", ")),
+  adminT: (result, value) => (result.type = value.slice(value.lastIndexOf("/") + 1)),
+  drugTid: (result, value) => {
+    result.administers ??= {};
+    result.administers.id = value;
+    result.administers.value ??= { coding: [] };
+    result.administers.value.coding[0] = {
+      code: value.slice(value.lastIndexOf("/") + 1),
+      system: "http://anonymous.org/data/", //value.substring(0, value.lastIndexOf("/")),
+    };
+  },
+  drugType: (result, value) => {
+    result.administers ??= {};
+    result.administers.type = value.slice(value.lastIndexOf("/") + 1);
+  },
+  drugLabel: (result, value) => {
+    result.administers ??= {};
+    result.administers.value ??= { coding: [] };
+    result.administers.value.coding.forEach((c) => (c.display = value));
+    result.administers.value.text = value;
+  },
+  snomed: (result, value) => {
+    result.administers ??= {};
+    result.administers.value ??= { coding: [] };
+    result.administers.value.coding[1] = {
+      code: value,
+      system: 'http://snomed.info/sct/',
+    };
+  },
+  components: (result, value) => {
+    result.administers ??= {};
+    result.administers.has_components = value.split(", ");
+  },
+};
+
+
 
 /**
  *
@@ -261,44 +176,6 @@ function get_transition_object(head_vars, binding) {
         type: "hasTransformableSituation",
         id: undefined,
         value: {
-            coding: [
-              {
-                code: undefined,
-                display: undefined,
-                system: undefined,
-              },
-              {
-                code: undefined,
-                display: undefined,
-                system: undefined,
-              },
-            ],
-          text: undefined,
-        },
-      },
-      {
-        type: "hasExpectedSituation",
-        id: undefined,
-        value: {
-            coding: [
-              {
-                code: undefined,
-                display: undefined,
-                system: undefined,
-              },
-              {
-                code: undefined,
-                display: undefined,
-                system: undefined,
-              },
-            ],
-          text: undefined,
-        },
-      },
-    ],
-    property: {
-      id: undefined,
-      value: {
           coding: [
             {
               code: undefined,
@@ -311,11 +188,49 @@ function get_transition_object(head_vars, binding) {
               system: undefined,
             },
           ],
+          text: undefined,
+        },
+      },
+      {
+        type: "hasExpectedSituation",
+        id: undefined,
+        value: {
+          coding: [
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+            {
+              code: undefined,
+              display: undefined,
+              system: undefined,
+            },
+          ],
+          text: undefined,
+        },
+      },
+    ],
+    property: {
+      id: undefined,
+      value: {
+        coding: [
+          {
+            code: undefined,
+            display: undefined,
+            system: undefined,
+          },
+          {
+            code: undefined,
+            display: undefined,
+            system: undefined,
+          },
+        ],
         text: undefined,
-      }
+      },
     },
-  }
-  
+  };
+
   //format rdf by looping through head vars
   for (let pos in head_vars) {
     //variable name
@@ -1549,7 +1464,7 @@ module.exports = {
   get_rec_data,
   sctUri,
   setUri,
-  get_care_action,
+  care_action_handlers,
   get_transition_object,
   get_rdf_atom_as_array,
   sparql_drop_named_graphs,

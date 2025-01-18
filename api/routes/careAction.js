@@ -10,168 +10,162 @@ const utils = require("../lib/utils");
 const logger = require("../config/winston");
 //const { ErrorHandler } = require("../lib/errorHandler");
 
-const DrugT = 'DrugT';
-const DrugType = 'DrugType';
-const NonDrugT = 'NonDrugT';
-const NonDrugType = 'NonDrugType';
-const DrugCat = 'DrugCat';
-const DrugCategory = 'DrugCategory';
-const CombDrugT = 'CombDrugT';
-const DrugCombinationType = 'DrugCombinationType';
-const VacT = 'VacT';
-const VaccineType = 'VaccineType';
-const VacCat = 'VacCat';
-const VaccineCategory = 'VaccineType';
-const VaccinationType = 'VaccinationType';
-const DrugCombinationAdministrationType = 'DrugCombinationAdministrationType';
-const DrugAdministrationType = 'DrugAdministrationType';
-const combinedAdministrationOf = 'combinedAdministrationOf';
-const administrationOf = 'administrationOf';
-const vaccinationWith = 'vaccinationWith';
+const DrugT = "DrugT";
+const DrugType = "DrugType";
+const NonDrugT = "NonDrugT";
+const NonDrugType = "NonDrugType";
+const DrugCat = "DrugCat";
+const DrugCategory = "DrugCategory";
+const CombDrugT = "CombDrugT";
+const DrugCombinationType = "DrugCombinationType";
+const VacT = "VacT";
+const VaccineType = "VaccineType";
+const VacCat = "VacCat";
+const VaccineCategory = "VaccineType";
+const VaccinationType = "VaccinationType";
+const DrugCombinationAdministrationType = "DrugCombinationAdministrationType";
+const DrugAdministrationType = "DrugAdministrationType";
+const combinedAdministrationOf = "combinedAdministrationOf";
+const administrationOf = "administrationOf";
+const vaccinationWith = "vaccinationWith";
 
 // CREATE
 
 // drug type
 router.post("/drug/individual/add", async function (req, res) {
   let sprql_str = careActDef(req, DrugT);
-   let {status, data} = await postDrugs(sprql_str, config.INSERT);
-     res.status(status).send(data);
+  let { status, data } = await postDrugs(sprql_str, config.INSERT);
+  res.status(status).send(data);
 });
 
 // non drug type (therapies) but not administrative actions yet
 router.post("/nondrug/individual/add", async function (req, res) {
   let sprql_str = careActDefNonDrug(req, NonDrugT);
-   let {status, data} = await postDrugs(sprql_str, config.INSERT);
-     res.status(status).send(data);
+  let { status, data } = await postDrugs(sprql_str, config.INSERT);
+  res.status(status).send(data);
 });
 
 // Drug category
 router.post("/drug/category/add", async function (req, res) {
   let sprql_str = careActDef(req, DrugCat);
   logger.debug(`sprql_str is ${sprql_str}`);
-   let {status, data} = await postDrugs(sprql_str, config.INSERT);
-     res.status(status).send(data);
+  let { status, data } = await postDrugs(sprql_str, config.INSERT);
+  res.status(status).send(data);
 });
 
 // Drug combination type
 router.post("drug/combination/add", async function (req, res) {
   let sprql_str = careActDef(req, CombDrugT);
-   let {status, data} = await postDrugs(sprql_str, config.INSERT);
-     res.status(status).send(data);
+  let { status, data } = await postDrugs(sprql_str, config.INSERT);
+  res.status(status).send(data);
 });
 
 // Vaccine type
 router.post("/vaccine/individual/add", async function (req, res) {
   let sprql_str = careActDef(req, VacT);
-   let {status, data} = await postDrugs(sprql_str, config.INSERT);
-     res.status(status).send(data);
+  let { status, data } = await postDrugs(sprql_str, config.INSERT);
+  res.status(status).send(data);
 });
 
 // Vaccine category
 router.post("/vaccine/category/add", async function (req, res) {
   let sprql_str = careActDef(req, VacCat);
   logger.debug(`sprql_str is ${sprql_str}`);
-   let {status, data} = await postDrugs(sprql_str, config.INSERT);
-     res.status(status).send(data);
+  let { status, data } = await postDrugs(sprql_str, config.INSERT);
+  res.status(status).send(data);
 });
-
 
 /////////////////////////////////////////
 
 //DELETE
 
-
 router.post("/drug/individual/delete", async function (req, res) {
   let sprql_str = delete_def(DrugT, req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, DrugT, req.body.id) ;
-   res.status(status? status : '500').send(data? data : 'Error');
+  let { status, data } = await postDrugs(
+    sprql_str,
+    config.DELETE,
+    DrugT,
+    req.body.id
+  );
+  res.status(status ? status : "500").send(data ? data : "Error");
 });
 
 router.post("/drug/category/delete", async function (req, res) {
   let sprql_str = delete_def(DrugCat, req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, DrugCat, req.body.id) ;
-   res.status(status).send(data);
+  let { status, data } = await postDrugs(
+    sprql_str,
+    config.DELETE,
+    DrugCat,
+    req.body.id
+  );
+  res.status(status).send(data);
 });
 
 router.post("/nondrug/individual/delete", async function (req, res) {
   let sprql_str = delete_def(NonDrugT, req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, NonDrugT, req.body.id) ;
-   res.status(status).send(data);
+  let { status, data } = await postDrugs(
+    sprql_str,
+    config.DELETE,
+    NonDrugT,
+    req.body.id
+  );
+  res.status(status).send(data);
 });
 
 router.post("/drug/combination/delete", async function (req, res) {
   let sprql_str = delete_def(CombDrugT, req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, CombDrugT, req.body.id) ;
-   res.status(status).send(data);
+  let { status, data } = await postDrugs(
+    sprql_str,
+    config.DELETE,
+    CombDrugT,
+    req.body.id
+  );
+  res.status(status).send(data);
 });
 
 router.post("/vaccine/individual/delete", async function (req, res) {
   let sprql_str = delete_def(VacT, req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, VacT, req.body.id) ;
-   res.status(status).send(data);
+  let { status, data } = await postDrugs(
+    sprql_str,
+    config.DELETE,
+    VacT,
+    req.body.id
+  );
+  res.status(status).send(data);
 });
 
 router.post("/vaccine/category/delete", async function (req, res) {
   let sprql_str = delete_def(VacCat, req.body.id);
-  let {status, data} = await postDrugs(sprql_str, config.DELETE, VacCat, req.body.id) ;
-   res.status(status).send(data);
+  let { status, data } = await postDrugs(
+    sprql_str,
+    config.DELETE,
+    VacCat,
+    req.body.id
+  );
+  res.status(status).send(data);
 });
 
 /////////////////////////////////////////
 
-//TODO: not operative
-router.post("/effect/get", async function (req, res) {
-  let postData = "";
-
-  if (req.body.drug_category_id) {
-    postData = require("querystring").stringify({
-      drugCat_id: "http://anonymous.org/tmr/data/DrugCat" + req.body.drugCat_id,
-    });
-  } else {
-    if (req.body.drug_type_id) {
-      postData = require("querystring").stringify({
-        drugT_id: "http://anonymous.org/tmr/data/DrugT" + req.body.drugT_id,
-      });
-    } else {
-      if (req.body.nonDrug_type_id) {
-        postData = require("querystring").stringify({
-          nonDrugT_id:
-            "http://anonymous.org/tmr/data/NonDrugT" + req.body.nonDrugT_id,
-        });
-      } else {
-        postData = require("querystring").stringify({
-          act_URI: req.body.act_URI,
-        });
-      }
-    }
-  }
-
-  utils.callPrologServer("drugeffects", postData, res, function (err, data) {
-    if (err) {
-      res.status(404).end();
-      return;
-    }
-
-    res.status(200).send(data);
-  });
-});
 
 //get all RDF data on a single care action
 router.post("/all/get/", async function (req, res) {
   //no params
-  if (!(req.body.uri || req.body.id)) return res.status(406).send('Missing Id or URI parameter.');
+  if (!(req.body.uri || req.body.id))
+    return res.status(406).send("Missing Id or URI parameter.");
 
-    let {status, head_vars, bindings} = await utils.getCareActionData("careActions", req.body.id, req.body.uri);
-    
-  if(status < 400) {
+  let { status, head_vars, bindings } = await utils.getCareActionData(
+    "careActions",
+    req.body.id,
+    req.body.uri
+  );
+
+  if (status < 400) {
     let data = auxFunct.get_care_action(head_vars, bindings[0]);
     return res.status(status).json(data);
   } else {
     return res.status(status).end();
   }
-
-
-     
 });
 
 /*
@@ -215,35 +209,55 @@ router.post('/all/get/', function(req, res) {
 
 //////////////////////////////
 
-async function postDrugs(careActData, insertOrDelete, type, id) { 
-
+async function postDrugs(careActData, insertOrDelete, type, id) {
   const del_str = ` ?s ?p ?o `;
 
   let content = insertOrDelete === config.INSERT ? careActData : del_str;
-  
-  let sparql_query_str = `${insertOrDelete} ${insertOrDelete === config.INSERT ? "DATA" : ""} { ${content} } `;
 
-  if(insertOrDelete === config.DELETE){
+  let sparql_query_str = `${insertOrDelete} ${
+    insertOrDelete === config.INSERT ? "DATA" : ""
+  } { ${content} } `;
+
+  if (insertOrDelete === config.DELETE) {
     let query_post_str = ` WHERE {  ${del_str} . ${careActData} }`;
-    sparql_query_str += query_post_str ;
+    sparql_query_str += query_post_str;
   }
 
-   return await  utils.sparqlUpdate('careActions', sparql_query_str); 
+  return await utils.sparqlUpdate("careActions", sparql_query_str);
 }
 
 //Defines drug types and categories, providing an english label.
 function drugDef(type, id, englishLbl) {
-  englishLbl = type !== CombDrugT ? englishLbl : englishLbl + " combination therapy";
+  englishLbl =
+    type !== CombDrugT ? englishLbl : englishLbl + " combination therapy";
 
-  return `data:` + type + id + ` a vocab:${ type === DrugCat
-          ? DrugCategory
-          : type === CombDrugT
-          ? DrugCombinationType
-          : DrugType }, owl:NamedIndividual ; rdfs:label "` + englishLbl + `"@en `;
+  return (
+    `data:` +
+    type +
+    id +
+    ` a vocab:${
+      type === DrugCat
+        ? DrugCategory
+        : type === CombDrugT
+        ? DrugCombinationType
+        : DrugType
+    }, owl:NamedIndividual ; rdfs:label "` +
+    englishLbl +
+    `"@en `
+  );
 }
 
 function vaccineDef(type, id, englishLbl) {
-  return `data:` + type + id + ` a vocab:${ type === VacCat ? VaccineCategory : VaccineType }, owl:NamedIndividual ; rdfs:label "` + englishLbl + `"@en `;
+  return (
+    `data:` +
+    type +
+    id +
+    ` a vocab:${
+      type === VacCat ? VaccineCategory : VaccineType
+    }, owl:NamedIndividual ; rdfs:label "` +
+    englishLbl +
+    `"@en `
+  );
 }
 
 //Defines non-drug related care actions
@@ -257,19 +271,26 @@ function nonDrugDef(type, id, label) {
 //Administration action care general to vaccine, drug type and category
 function drugAdminActDef(type, id, englishLabel) {
   let drugAdministration = `data:ActAdminister${id} a vocab:${
-    type === VacT || type == VacCat? VaccinationType
-      : type === CombDrugT ? DrugCombinationAdministrationType
+    type === VacT || type == VacCat
+      ? VaccinationType
+      : type === CombDrugT
+      ? DrugCombinationAdministrationType
       : DrugAdministrationType
   }, owl:NamedIndividual ;
                       rdfs:label "administer ${englishLabel} "@en ;
-                      vocab:${type === CombDrugT ? combinedAdministrationOf: type == VacT || type == VacCat ? vaccinationWith: administrationOf} data:${type + id} `;
+                      vocab:${
+                        type === CombDrugT
+                          ? combinedAdministrationOf
+                          : type == VacT || type == VacCat
+                          ? vaccinationWith
+                          : administrationOf
+                      } data:${type + id} `;
 
   return drugAdministration;
 }
 
 //Administration non drug action care
 function nonDrugAdminActDef(type, id, actLabel) {
-
   return `data:ActAdminister${id}  a vocab:NonDrugAdministrationType , owl:NamedIndividual ;
                               rdfs:label "${actLabel}"@en ;
                               vocab:applicationOf data:${type + id} `;
@@ -335,10 +356,13 @@ function careActDef(req, drug_type) {
   let subsumed_list = req.body.subsumed_ids || null;
   let components_ids = req.body.components_ids || null;
 
-  let drugT_def = (type === VacCat || type === VacT) ? vaccineDef(drug_type, id, label) : drugDef(drug_type, id, label) ;
-  
+  let drugT_def =
+    type === VacCat || type === VacT
+      ? vaccineDef(drug_type, id, label)
+      : drugDef(drug_type, id, label);
+
   drugT_def += insertCodes(req);
-  
+
   let careAct_def = drugAdminActDef(drug_type, id, action_label);
   //extras:
 
@@ -365,7 +389,6 @@ function careActDef(req, drug_type) {
 
 //defines non drug careActT and careActT Admin
 function careActDefNonDrug(req, type) {
-
   let action = nonDrugDef(
     type,
     req.body.id,

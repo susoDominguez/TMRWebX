@@ -12,6 +12,7 @@
 :- use_module(library(semweb/rdf_db)).
 :- use_module(library(semweb/rdf_ntriples)).
 :- use_module(library(thread_pool)).
+:- use_module(library(http/json)).
               
 
 % Prefixes
@@ -53,6 +54,29 @@ show_interactions(Request) :-
   maplist(recommendation_term, Recommendations, _Terms),
   findall(interaction(Interaction,Label,Elems,External), interaction(Recommendations, Interaction, Label, Elems, External), Interactions),
   print_list(Interactions).
+
+  show_interactions_json(Request) :-
+    rdf_reset_db,
+    loadBaseOntologies,
+    loadOntologies,
+    http_parameters(Request, [ guideline_id(Dataset_id, [ string ]) ]),
+    load_guideline_group(Dataset_id, Dataset_graph_id),
+    inferInternalInteractions,
+    format('Content-type: application/json; charset=UTF-8~n~n'),
+    atom_concat('http://anonymous.org/data/', Dataset_id, CIG_URI), % TODO: switch to rdf_global_id.
+    guideline_recommendations(CIG_URI, Recommendations),
+    findall(
+        _{
+            interaction: Interaction,
+            label: Label,
+            elements: Elems,
+            external: External
+        },
+        interaction(Recommendations, Interaction, Label, Elems, External),
+        InteractionList
+    ),
+    reply_json_dict(_{ interactions: InteractionList }).
+
   
   % These functions below dont work becuase they only remove the named graph not the whole dataset
   % unloadOntologies,     

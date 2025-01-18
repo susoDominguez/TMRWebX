@@ -1,0 +1,72 @@
+@prefix vocab: <http://anonymous.org/vocab/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix owl2: <http://www.w3.org/2006/012/owl2#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+#@prefix rdfg: <http://www.w3.org/2004/03/trix/rdfg-1/> .
+@prefix nanopub: <http://www.nanopub.org/nschema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix vocab4i: <http://anonymous.org/vocab4i/> .
+@base <http://anonymous.org/vocab/> .
+
+<http://anonymous.org/vocab/> rdf:type owl:Ontology .
+
+#################################################################
+#
+#    TMR4I 3.0 - Interactions
+#
+#################################################################
+
+vocab4i:Interaction rdf:type owl:Class .
+
+# Interactions identified within combined guidelines
+vocab4i:InternalInteraction rdf:type owl:Class, rdfs:Class ;
+    rdfs:subClassOf vocab4i:Interaction .
+
+vocab4i:Repetition rdf:type owl:Class, rdfs:Class ;
+    rdfs:label "recommendations suggesting the same care action"@en;
+    rdfs:subClassOf vocab4i:InternalInteraction .
+
+vocab4i:AlternativeActions rdf:type owl:Class ;
+    rdfs:label "recommendations contributing to the same effect through different care actions"@en;
+    rdfs:subClassOf vocab4i:InternalInteraction .
+
+# TODO: distinguish between types of contradictions depending on where the conflict is identified
+vocab4i:Contradiction rdf:type owl:Class ;
+    rdfs:label "recommendations suggesting opposing effects, leading to a direct conflict"@en;
+    rdfs:subClassOf vocab4i:InternalInteraction .
+
+vocab4i:Repairable rdf:type owl:Class ;
+    rdfs:label "negative contribution on one recommendation can potentially be mitigated or reversed by another recommendation (repairable transition)"@en;
+    rdfs:subClassOf vocab4i:InternalInteraction .
+
+vocab4i:SideEffect rdf:type owl:Class ;
+    rdfs:label "unintended negative contribution on one recommendation (side-effect) conflicts with intended positive contribution effect on another recommendation"@en;
+    rdfs:subClassOf vocab4i:InternalInteraction .
+
+vocab4i:DivergentCausations rdf:type owl:Class ;
+    rdfs:label "divergent beliefs on same action effect"@en;
+    rdfs:subClassOf vocab4i:InternalInteraction .
+
+vocab4i:SafetyRecommendation rdf:type owl:Class ;
+    rdfs:label "recommendation considered safe in relation to another"@en;
+    rdfs:subClassOf vocab4i:InternalInteraction .
+
+#vocab4i:Compliance rdf:type owl:Class ;
+#    rdfs:label "divergent beliefs on action effect"@en;
+#    rdfs:subClassOf vocab4i:InternalInteraction .
+
+
+#################################################################
+#
+#    Object Properties
+#
+#################################################################
+
+# Interaction identifies causation belief which relates to Norm
+
+vocab4i:relates a owl:ObjectProperty ;
+    rdfs:domain vocab4i:Interaction.
+
+vocab4i:identifies a owl:ObjectProperty ;
+    rdfs:domain vocab4i:Interaction.

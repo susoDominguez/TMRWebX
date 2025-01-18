@@ -16,10 +16,10 @@
 % Base ontologies.
 
 loadBaseOntologies :-
-  rdf_load('current_logic/modelTmr4Iv3.1.trig', [format('trig'), register_namespaces(false), base_uri('http://anonymous.org/vocab/'), graph('http://anonymous.org/vocab')]).
+  rdf_load('current_logic/tmr_concepts.trig', [format('trig'), register_namespaces(false), base_uri('http://anonymous.org/vocab/'), graph('http://anonymous.org/vocab')]),
+  rdf_load('current_logic/interactions_tmr4i.trig', [format('trig'), register_namespaces(false), base_uri('http://anonymous.org/vocab/'), graph('http://anonymous.org/vocab')]).
 
 % User ontologies, at Jena endpoint.
-
 loadOntologies :-
   getenv("FUSEKI_HOST_PORT", FUSEKI_HOST_PORT),
   atom_concat(FUSEKI_HOST_PORT, "careActions", FUSEKI_DRUGS_URL),
