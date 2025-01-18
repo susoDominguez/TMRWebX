@@ -4,7 +4,6 @@
 
 <img src="Kings_College_London-logo.png" width="150">
 
-
 <img src="Imperial-College-London-logo.jpeg" width="150">
 
 #### Integrated with
@@ -14,7 +13,7 @@
 ## Getting Started
 
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
-Notice this the the CIG authoring microservice architecture as describe on 
+Notice this the the CIG authoring microservice architecture as describe on
 
 `A Microservice Architecture for the Design of Computer-Interpretable Guideline Processing Tools
 Chapman, M. D. & Curcin, V., 2019, 18th IEEE International Conference on Smart Technologies. IEEE Computer Society Press Research output.
@@ -43,7 +42,7 @@ Run main container storage:
 docker run --name fuseki-data -v /fuseki busybox
 ```
 
-Run main container, supply port (3030, recommended), password,  container store, specify 3 dataset labels (careActions, transitions, beliefs) using TDB version 2, and extend the amount of memory for the Java heap:
+Run main container, supply port (3030, recommended), password, container store, specify 3 dataset labels (careActions, transitions, beliefs) using TDB version 2, and extend the amount of memory for the Java heap:
 
 ```
 docker run -e TDB=2 -e FUSEKI_DATASET_1=careActions -e FUSEKI_DATASET_2=transitions -e FUSEKI_DATASET_3=beliefs -e ADMIN_PASSWORD=[pwd] -e JVM_ARGS=-Xmx2g -d --name fuseki -p 3030:3030 --volumes-from fuseki-data stain/jena-fuseki
@@ -65,12 +64,6 @@ Change into the backend directory:
 cd backend
 ```
 
-Clone the TMR repository:
-
-```
-git clone https://github.com/susoDominguez/TMR-CIG-COPD.git
-```
-
 Enter Prolog environment, and include address of Fuseki server as environment variable:
 
 ```
@@ -89,7 +82,7 @@ Start server on a given port (1234, recommended):
 ?- server(1234).
 ```
 
-### Interaction microservice: TMRWeb  API
+### Interaction microservice: TMRWeb API
 
 Change to the API folder.
 
@@ -142,7 +135,7 @@ The server runs by default on port 8888.
 
 ## Load TMR vocabulary
 
-go to 
+go to
 
 ```
 http://localhost:3030/
@@ -150,7 +143,7 @@ http://localhost:3030/
 
 where 3030 is the fuseki port.
 
-Load TMR data contained in directory 
+Load TMR data contained in directory
 
 ```
 TMR-CIG-COPD/
@@ -158,17 +151,19 @@ TMR-CIG-COPD/
 
 from the cloned repository as follows.
 
-click on dataset icon and select 
+click on dataset icon and select
 
 ```
 /careActions
 ```
-dataset. Go to 
+
+dataset. Go to
 
 ```
 Upload files
 ```
-tab and click on 
+
+tab and click on
 
 ```
 select files
@@ -180,7 +175,7 @@ then search for, and select,
 TMRWebX/backend/TMR-CIG-COPD/careActions.trig
 ```
 
-then click on 
+then click on
 
 ```
 Upload now
@@ -203,6 +198,7 @@ TMRWebX/backend/TMR-CIG-COPD/guidelines/CIG-COPD_shorten.trig
 ```
 
 respectively.
+
 ## Usage
 
 See [documentation](api/README.md).
@@ -255,7 +251,7 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduc
 
 Originally produced as part of the [CONSULT project](https://consult.kcl.ac.uk/).
 
-Extended as part of the  [ROAD2H project](https://www.road2h.org/).
+Extended as part of the [ROAD2H project](https://www.road2h.org/).
 
 <img src="road2h_logo.png" width="150">
 
@@ -265,5 +261,5 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
-* Original source code can be found at [github.com/kclconsult/tmrweb](https://github.com/kclconsult/tmrweb)
-* Redesigned processing tool: [github.com/veruskacz/CG-RDF](https://github.com/veruskacz/CG-RDF)
+- Original source code can be found at [github.com/kclconsult/tmrweb](https://github.com/kclconsult/tmrweb)
+- Redesigned processing tool: [github.com/veruskacz/CG-RDF](https://github.com/veruskacz/CG-RDF)
