@@ -4,8 +4,13 @@
 :- use_module(library(semweb/rdfs)).
 :- use_module(library(dcg/basics)).
 
-:- include(kb_rules).
+:- use_module(rdf_prefixes).
+:- rdf_prefix(vocab, 'http://anonymous.org/vocab#').
+
+:- use_module(tmr_concepts).
+:- use_module(tmr41).
+
+:- use_module(interaction_rules).
 
 :- inferInternalInteractions. 
-
 

@@ -1,0 +1,620 @@
+#:- use_module(rdf_prefixes).
+#:- rdf_prefix(vocab, 'http://anonymous.org/vocab#').
+# to be applied at end of file
+:- use_module(predicate_properties).
+
+
+<http://anonymous.org/vocab/> rdf:type owl:Ontology .
+
+#################################################################
+#
+#    Classes of TMR 3.0
+#
+#################################################################
+#   General & Event-related Classes
+#################################################################
+
+#TODO: for library rdfs, do we need to define rdfs:Class?
+vocab:Type rdf:type owl:Class, rdfs:Class ;
+    rdfs:subClassOf owl:Thing .
+
+vocab:Category rdf:type owl:Class, rdfs:Class ;
+    rdfs:subClassOf vocab:Type ;
+    owl:disjointWith vocab:ObjectType , vocab:SituationType , vocab:EventType , vocab:Belief , vocab:Source , vocab:Regulation , vocab:Norm .
+
+vocab:ObjectType rdf:type owl:Class , rdfs:Class ;
+    rdfs:subClassOf vocab:Type ;
+    owl:disjointWith vocab:Category , vocab:SituationType , vocab:EventType , vocab:Belief , vocab:Source , vocab:Regulation , vocab:Norm .
+
+vocab:SituationType rdf:type owl:Class , rdfs:Class ;
+    rdfs:subClassOf vocab:Type ;
+    owl:disjointWith vocab:Category , vocab:ObjectType , vocab:EventType , vocab:Belief , vocab:Source , vocab:Regulation , vocab:Norm .
+
+vocab:EventType rdf:type owl:Class , rdfs:Class ;
+    rdfs:subClassOf vocab:Type ;
+    owl:disjointWith vocab:Category , vocab:ObjectType , vocab:SituationType , vocab:Belief , vocab:Source , vocab:Regulation , vocab:Norm .
+
+vocab:AtomicSituation rdf:type owl:Class , rdfs:Class ;
+    rdfs:subClassOf vocab:SituationType .
+
+vocab:CompoundSituation rdf:type owl:Class , rdfs:Class ;
+    rdfs:subClassOf vocab:SituationType .
+
+vocab:TransitionType rdf:type owl:Class ;
+    rdfs:subClassOf vocab:EventType ;
+    owl:disjointWith vocab:TropeType , vocab:CareActionType .
+
+# syntactic sugar for completion purposes when building JSON for DSS (property type)
+vocab:TropeType rdf:type owl:Class ;
+    rdfs:subClassOf vocab:ObjectType ;
+    owl:disjointWith vocab:TransitionType , vocab:CareActionType .
+
+vocab:ActionType rdf:type owl:Class ;
+    rdfs:subClassOf vocab:EventType ;
+    owl:disjointWith vocab:TransitionType , vocab:TropeType .
+
+vocab:CareActionType rdf:type owl:Class ;
+    rdfs:subClassOf vocab:ActionType ;
+    owl:disjointWith vocab:TransitionType , vocab:TropeType .
+
+# special case for actions that do not involve therapies (pharma- or otherwise) (eg. examinations)
+vocab:NonDrugAdministrationType rdf:type owl:Class ;
+    rdfs:subClassOf vocab:CareActionType ;
+    owl:disjointWith vocab:DrugAdministrationType , vocab:VaccinationType .
+
+# general type for care actions involving drugs
+vocab:DrugAdministrationType rdf:type owl:Class ;
+    rdfs:subClassOf vocab:CareActionType ;
+    owl:disjointWith vocab:NonDrugAdministrationType  .
+
+# general type for care actions involving vaccines
+# currently identified as subclass of DrugAdminT # TODO: define own category and label interactions accordingly
+vocab:VaccinationType rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DrugAdministrationType ;
+        owl:disjointWith vocab:NonDrugAdministrationType .
+
+# type of health care elements that are not drug-related (pharmacotherapy or otherwise)
+vocab:NonDrugType rdf:type owl:Class ;
+        rdfs:subClassOf vocab:Type ;
+        owl:disjointWith vocab:DrugType , vocab:VaccineType .
+
+# type of drug-related elements
+vocab:DrugType rdf:type owl:Class ;
+        owl:disjointWith vocab:NonDrugType  ; 
+        rdfs:subClassOf vocab:Type , _:dt .
+_:dt a owl:Restriction .
+_:dt owl:onProperty vocab:subsumes .
+_:dt owl:allValuesFrom vocab:DrugType  .
+
+# type of vaccines 
+vocab:VaccineType rdf:type owl:Class ;
+        owl:disjointWith  vocab:NonDrugType , vocab:DrugCombinationType , vocab:DrugCategory ;
+        rdfs:subClassOf vocab:DrugType .
+
+# means of categorizing drugs. subclass of drug types
+vocab:DrugCategory rdf:type owl:Class ;
+    rdfs:subClassOf vocab:DrugType ;
+    owl:disjointWith vocab:VaccineType, vocab:NonDrugType, vocab:DrugCombinationType .
+
+vocab:DrugCategory rdfs:subClassOf _:a1 .
+_:a1 a owl:Restriction ;
+    owl:onProperty vocab:subsumes ;
+    owl:allValuesFrom _:a11 .
+
+_:a11 rdf:type owl:Class ;
+    owl:unionOf (vocab:DrugType vocab:DrugCombinationType) .
+
+vocab:DrugCategory rdfs:subClassOf _:a2 .
+_:a2 a owl:Restriction ;
+    owl:onProperty vocab:subsumes ;
+    owl:someValuesFrom vocab:DrugType .
+
+#################################################################
+#   Drug Effect and Combination Types
+#################################################################
+
+# Drug Effect Category
+vocab:DrugEffectCategory rdf:type owl:Class ;
+    rdfs:subClassOf vocab:DrugCategory .
+
+# Drug Combination Type
+vocab:DrugCombinationType rdf:type owl:Class ;
+    owl:disjointWith vocab:VaccineType, vocab:NonDrugType ; # Removed disjointWith vocab:DrugCategory to avoid conflict
+    rdfs:subClassOf vocab:DrugType .
+
+# Restriction: All components must belong to vocab:Type
+vocab:DrugCombinationType rdfs:subClassOf _:x .
+_:x a owl:Restriction ;
+    owl:onProperty vocab:hasComponent ;
+    owl:allValuesFrom vocab:Type .
+
+# Restriction: Must have at least one component from vocab:Type
+vocab:DrugCombinationType rdfs:subClassOf _:x1 .
+_:x1 a owl:Restriction ;
+    owl:onProperty vocab:hasComponent ;
+    owl:someValuesFrom vocab:Type .
+
+# Restriction: Must have at least 2 components
+vocab:DrugCombinationType rdfs:subClassOf _:x2 .
+_:x2 a owl:Restriction ;
+    owl:onProperty vocab:hasComponent ;
+    owl:minCardinality "2"^^xsd:nonNegativeInteger ;
+    rdfs:onClass vocab:Type .
+
+# Restriction: Must have no more than 4 components
+vocab:DrugCombinationType rdfs:subClassOf _:x3 .
+_:x3 a owl:Restriction ;
+    owl:onProperty vocab:hasComponent ;
+    owl:maxCardinality "4"^^xsd:nonNegativeInteger ;
+    rdfs:onClass vocab:Type .
+
+#################################################################
+#   Belief-related Classes
+#################################################################
+
+vocab:Belief rdf:type owl:Class ;
+        rdfs:subClassOf owl:Thing ;
+        owl:disjointWith vocab:Category , vocab:ObjectType , vocab:SituationType , vocab:EventType , vocab:Source , vocab:Regulation , vocab:Norm .
+
+vocab:Source rdf:type owl:Class ;
+        rdfs:subClassOf owl:Thing ;
+        owl:disjointWith vocab:Category , vocab:ObjectType , vocab:SituationType , vocab:EventType , vocab:Belief , vocab:Regulation , vocab:Norm , vocab:Statement .
+
+vocab:CausationBelief rdf:type owl:Class ;
+    rdfs:subClassOf vocab:Belief.
+
+vocab:IncompatibilityBelief rdf:type owl:Class ;
+    rdfs:subClassOf vocab:Belief.
+
+#################################################################
+#   Statement-related Classes (medical suggestions that do not involve care actions)
+#################################################################
+
+vocab:Statement rdf:type owl:Class ;
+        rdfs:subClassOf owl:Thing ;
+        owl:disjointWith vocab:Category , vocab:ObjectType , vocab:SituationType , vocab:EventType , vocab:Source , vocab:Regulation , vocab:Norm , vocab:Belief .
+
+vocab:ClinicalStatement rdf:type owl:Class ;
+    rdfs:subClassOf vocab:Statement.
+
+#################################################################
+#   Norm-Related Classes
+#################################################################
+
+vocab:Regulation rdf:type owl:Class ;
+    rdfs:subClassOf owl:Thing ;
+    owl:disjointWith vocab:Norm .
+
+vocab:Norm rdf:type owl:Class ;
+    rdfs:subClassOf owl:Thing ;
+    owl:disjointWith vocab:Regulation .
+
+vocab:ClinicalGuideline rdf:type owl:Class ;
+    rdfs:subClassOf vocab:Regulation .
+
+vocab:ClinicalRecommendation rdf:type owl:Class ;
+    rdfs:subClassOf vocab:Norm .
+
+vocab:GoodPracticeRecommendation rdf:type owl:Class ;
+    rdfs:subClassOf vocab:Norm .
+
+vocab:SingleDiseaseGuideline rdf:type owl:Class ;
+    rdfs:subClassOf vocab:ClinicalGuideline .
+
+vocab:ComposedGuideline rdf:type owl:Class ;
+    rdfs:subClassOf vocab:ClinicalGuideline .
+
+vocab:SubGuideline rdf:type owl:Class ;
+    rdfs:subClassOf vocab:ClinicalGuideline .
+
+#################################################################
+#   Enumerated Classes
+#################################################################
+
+vocab:Modifier rdf:type owl:Class ;
+    rdfs:subClassOf owl:Thing .
+
+vocab:ProbabilityValue rdf:type  owl:Class ;
+                rdfs:subClassOf vocab:Modifier ;
+                owl:disjointWith vocab:ContributionValue , vocab:DeonticStrengthValue , vocab:DerivativeValue , vocab:EvidenceLevelValue ;
+                rdfs:comment "probability with which a care action type is believed to promote a transition type with a certain degree of conﬁdence according to a clinical guideline or clinical knowledge base." .
+
+vocab:EvidenceLevelValue rdf:type owl:Class ;
+        rdfs:subClassOf vocab:Modifier ;
+        owl:disjointWith vocab:DeonticStrengthValue , vocab:DerivativeValue , vocab:ProbabilityValue , vocab:ContributionValue ;
+        rdfs:comment "reﬂects the certainty (evidence level) about a causation belief. In this work we are interested in the belief strength bigger than zero, which means a positive degree of conﬁdence." .
+
+vocab:ContributionValue rdf:type owl:Class, rdfs:Class ;
+        rdfs:subClassOf vocab:Modifier ;
+        owl:disjointWith vocab:DeonticStrengthValue , vocab:DerivativeValue , vocab:ProbabilityValue , vocab:EvidenceLevelValue ;
+        rdfs:comment "contribution to goals by a causation belief in the context of a clinical guideline" .
+
+vocab:DerivativeValue rdf:type owl:Class ;
+        rdfs:subClassOf vocab:Modifier ;
+        owl:disjointWith vocab:DeonticStrengthValue , vocab:ContributionValue , vocab:ProbabilityValue , vocab:EvidenceLevelValue ;
+        rdfs:comment "the direction of change of a transition attribute" .
+
+vocab:DeonticStrengthValue rdf:type owl:Class ;
+    rdfs:subClassOf vocab:Modifier ;
+    owl:disjointWith vocab:ContributionValue , vocab:DerivativeValue , vocab:ProbabilityValue , vocab:EvidenceLevelValue ;
+    rdfs:comment    "The deontic strength reﬂects a degree of obligatoriness expected for a clinical recommendation" .
+
+#### derivative values
+
+vocab:increase rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DerivativeValue ;
+        owl:disjointWith vocab:decrease , vocab:maintain ;
+        rdfs:label "increase".
+
+vocab:decrease rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DerivativeValue ;
+        owl:disjointWith vocab:increase , vocab:maintain ;
+        rdfs:label "decrease" .
+
+vocab:maintain rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DerivativeValue ;
+        owl:disjointWith vocab:increase , vocab:decrease ;
+        rdfs:label "maintain".
+
+## deontic strength values
+
+vocab:should rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DeonticStrengthValue ;
+        owl:disjointWith vocab:shouldNot , vocab:must , vocab:mustNot ;
+        rdfs:label "should".
+
+vocab:shouldNot rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DeonticStrengthValue ;
+        owl:disjointWith vocab:should , vocab:must , vocab:mustNot ;
+        rdfs:label "should not" .
+
+vocab:must rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DeonticStrengthValue ;
+        owl:disjointWith vocab:should , vocab:mustNot , vocab:shouldNot ;
+        rdfs:label "must" .
+
+vocab:mustNot rdf:type owl:Class ;
+        rdfs:subClassOf vocab:DeonticStrengthValue ;
+        owl:disjointWith vocab:should , vocab:mustNot , vocab:shouldNot ;
+        rdfs:label "must not" .
+
+
+# contribution values
+
+vocab:positive rdf:type owl:Class ;
+        rdfs:subClassOf vocab:ContributionValue ;
+        owl:disjointWith vocab:neutral , vocab:negative ;
+        rdfs:label "positive" .
+
+vocab:negative rdf:type owl:Class ;
+        rdfs:subClassOf vocab:ContributionValue ;
+        owl:disjointWith vocab:neutral , vocab:positive ;
+        rdfs:label "negative" .
+
+vocab:neutral rdf:type owl:Class ;
+        rdfs:subClassOf vocab:ContributionValue ;
+        owl:disjointWith vocab:negative, vocab:positive ;
+        rdfs:label "neutral" .
+
+## evidence level values
+
+vocab:low rdf:type owl:Class ;
+        rdfs:subClassOf vocab:EvidenceLevelValue ;
+        owl:disjointWith vocab:high , vocab:medium ;
+        rdfs:label "low level of evidence".
+
+vocab:medium rdf:type owl:Class ;
+        rdfs:subClassOf vocab:EvidenceLevelValue ;
+        owl:disjointWith vocab:high , vocab:low ;
+        rdfs:label "medium level of evidence" .
+
+vocab:high rdf:type owl:Class ;
+        rdfs:subClassOf vocab:EvidenceLevelValue ;
+        owl:disjointWith vocab:medium, vocab:low ;
+        rdfs:label "high level of evidence" .
+
+#### probability values
+
+vocab:always rdf:type owl:Class ;
+        rdfs:subClassOf vocab:ProbabilityValue ;
+        owl:disjointWith vocab:sometimes , vocab:rarely , vocab:never , vocab:often;
+        rdfs:label "always".
+
+vocab:never rdf:type owl:Class ;
+        rdfs:subClassOf vocab:ProbabilityValue ;
+        owl:disjointWith vocab:sometimes , vocab:rarely , vocab:often , vocab:always;
+        rdfs:label "never" .
+
+vocab:rarely rdf:type owl:Class ;
+        rdfs:subClassOf vocab:ProbabilityValue ;
+        owl:disjointWith vocab:sometimes , vocab:often , vocab:never , vocab:always;
+        rdfs:label "rarely" .
+
+vocab:sometimes rdf:type owl:Class ;
+        rdfs:subClassOf vocab:ProbabilityValue ;
+        owl:disjointWith vocab:often , vocab:rarely , vocab:never , vocab:always;
+        rdfs:label "sometimes".
+
+vocab:often rdf:type owl:Class ;
+            rdfs:subClassOf vocab:ProbabilityValue ;
+            owl:disjointWith vocab:sometimes , vocab:rarely , vocab:never , vocab:always;
+            rdfs:label "often" .
+
+# All disjoint enumerations for Contribution Values
+_:allDisjointContributionValues a owl:AllDisjointClasses ;
+    owl:members (vocab:positive vocab:negative vocab:neutral) .
+
+# All disjoint enumerations for Probability Values
+_:allDisjointProbabilityValues a owl:AllDisjointClasses ;
+    owl:members (vocab:always vocab:sometimes vocab:rarely vocab:never vocab:often) .
+
+# Evidence Level Values
+_:allDisjointEvidenceLevels a owl:AllDisjointClasses ;
+    owl:members (vocab:low vocab:medium vocab:high) .
+
+#################################################################
+#
+#    Object Properties of TMR 2.0
+#
+#################################################################
+
+# Subsumption Properties
+vocab:subsumes rdf:type owl:ObjectProperty, owl:TransitiveProperty, owl2:IrreflexiveProperty, owl2:AsymmetricProperty ;
+    rdfs:domain vocab:Type ;
+    rdfs:range vocab:Type .
+    rdfs:comment "Indicates that one type is more general than another." .
+
+vocab:subsumedBy rdf:type owl:ObjectProperty, owl:TransitiveProperty, owl2:IrreflexiveProperty, owl2:AsymmetricProperty ;
+    owl:inverseOf vocab:subsumes ;
+    rdfs:domain vocab:Type ;
+    rdfs:range vocab:Type .
+    rdfs:comment "Indicates that one type is more specific than another." .
+
+# Part-Whole Relationship
+vocab:hasComponent rdf:type owl:ObjectProperty, owl:TransitiveProperty, owl2:IrreflexiveProperty, owl2:AsymmetricProperty ;
+    rdfs:domain vocab:DrugCombinationType ;
+    rdfs:range vocab:Type ;
+    rdfs:comment "Indicates that a drug combination type is composed of other drug types or components." .
+
+# Axioms for Consistency
+vocab:hasComponent owl:propertyDisjointWith vocab:subsumes .
+vocab:hasComponent owl:propertyDisjointWith vocab:subsumedBy .
+
+#############
+
+vocab:hasHigherOrderThan a owl:ObjectProperty , owl2:IrreflexiveProperty, owl2:AsymmetricProperty , owl:TransitiveProperty ;
+    rdfs:domain vocab:Modifier ;
+    rdfs:range vocab:Modifier .
+
+vocab:always vocab:hasHigherOrderThan vocab:often .
+vocab:often vocab:hasHigherOrderThan vocab:sometimes .
+vocab:sometimes vocab:hasHigherOrderThan vocab:rarely .
+vocab:rarely vocab:hasHigherOrderThan vocab:never .
+vocab:high vocab:hasHigherOrderThan vocab:medium .
+vocab:medium vocab:hasHigherOrderThan vocab:low .
+vocab:positive vocab:hasHigherOrderThan vocab:negative .
+vocab:positive vocab:hasHigherOrderThan vocab:neutral .
+vocab:neutral vocab:hasHigherOrderThan vocab:negative .
+vocab:must vocab:hasHigherOrderThan vocab:should .
+vocab:should vocab:hasHigherOrderThan vocab:shouldNot .
+vocab:shouldNot vocab:hasHigherOrderThan vocab:mustNot .
+
+#####
+
+vocab:hasEqOrder a owl:ObjectProperty , owl:ReflexiveProperty, owl:SymmetricProperty ;
+        rdfs:domain vocab:Modifier ;
+        rdfs:range vocab:Modifier .
+
+vocab:always vocab:hasEqOrder vocab:always .
+vocab:often vocab:hasEqOrder vocab:often .
+vocab:sometimes vocab:hasEqOrder vocab:sometimes .
+vocab:rarely vocab:hasEqOrder vocab:rarely .
+vocab:high vocab:hasEqOrder vocab:high .
+vocab:medium vocab:hasEqOrder vocab:medium .
+vocab:low vocab:hasEqOrder vocab:low .
+vocab:positive vocab:hasEqOrder vocab:positive .
+vocab:negative vocab:hasEqOrder vocab:negative .
+vocab:neutral vocab:hasEqOrder vocab:neutral .
+vocab:should vocab:hasEqOrder vocab:should .
+vocab:shouldNot vocab:hasEqOrder vocab:shouldNot .
+vocab:must vocab:hasEqOrder vocab:must .
+vocab:mustNot vocab:hasEqOrder vocab:mustNot .
+vocab:increase vocab:hasEqOrder vocab:increase .
+vocab:decrease vocab:hasEqOrder vocab:decrease .
+vocab:maintain vocab:hasEqOrder vocab:maintain .
+
+######
+
+vocab:hasGroupingCriteria a owl:ObjectProperty;
+    rdfs:domain vocab:DrugCategory ;
+    rdfs:range vocab:GroupingCriteria .
+
+vocab:participationOf a owl:ObjectProperty ;
+    rdfs:domain vocab:EventType;
+    rdfs:range vocab:ObjectType .
+
+vocab:administrationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:participationOf ;
+    rdfs:domain vocab:DrugAdministrationType;
+    rdfs:range vocab:DrugType .
+
+#same as administratioOf but for nonDrug types
+vocab:applicationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:participationOf ;
+    rdfs:domain vocab:NonDrugAdministrationType;
+    rdfs:range vocab:NonDrugType .
+
+vocab:inoculationOf a owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:administrationOf ; # TODO: participationOf in future iterations
+    rdfs:domain vocab:VaccinationType;
+    rdfs:range vocab:VaccineType .
+
+vocab:hasSituation rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:SituationType .
+
+# measured health property A affects
+vocab:affects rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:TransitionType ;
+    rdfs:domain vocab:TropeType . #TODO
+
+vocab:hasTransformableSituation rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:hasSituation ;
+    rdfs:domain vocab:TransitionType .
+
+vocab:hasExpectedSituation rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:hasSituation ;
+    rdfs:domain vocab:TransitionType .
+
+### preconditions
+
+vocab:hasFilterSituation rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:SituationType ;
+    rdfs:domain vocab:Norm .
+
+vocab:and rdf:type owl:ObjectProperty ;
+    rdfs:domain vocab:SituationType ;
+    rdfs:range vocab:SituationType .
+
+vocab:or rdf:type owl:ObjectProperty ;
+    rdfs:domain vocab:SituationType ;
+    rdfs:range vocab:SituationType .
+
+vocab:neg rdf:type owl:ObjectProperty ;
+    rdfs:domain vocab:SituationType ;
+    rdfs:range vocab:SituationType .
+
+vocab:inverseToTransition rdf:type owl:ObjectProperty ,
+                            owl:SymmetricProperty.
+
+vocab:causes rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:EventType ;
+    rdfs:domain vocab:EventType .
+
+vocab:incompatibleWith rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:EventType ;
+    rdfs:domain vocab:EventType .
+
+#################################################################
+#   Belief-related Properties
+#################################################################
+
+vocab:about rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:Belief ;
+    rdfs:domain owl:Thing .
+
+vocab:hasSource rdf:type owl:ObjectProperty ;
+    #rdfs:range vocab:Belief or Norm;
+    rdfs:domain vocab:Source .
+
+vocab:hasAsCause rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:about ;
+    rdfs:range vocab:CausationBelief ;
+    rdfs:domain vocab:EventType .
+
+vocab:hasAsEffect rdf:type owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:about ;
+    rdfs:range vocab:CausationBelief ;
+    rdfs:domain vocab:EventType .
+
+vocab:similarTo rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:CausationBelief ;
+    rdfs:domain vocab:CausationBelief .
+
+vocab:opposedTo rdf:type owl:ObjectProperty ;
+    rdfs:range vocab:CausationBelief ;
+    rdfs:domain vocab:CausationBelief .
+
+#################################################################
+#   Regulation-related Properties
+#################################################################
+
+#is a subguideline of a particular clinical guideline
+vocab:isSubGuidelineOf rdf:type owl:FunctionalProperty ,
+                    owl:ObjectProperty ;
+            rdfs:range vocab:Regulation ;
+            rdfs:domain vocab:SubGuideline .
+
+#the nanopublication, which it is a graph, is part of one or more clinical guidelines
+# added to preserve the source guideline when reasoning with combined guidelines
+vocab:isPartOf rdf:type owl:ObjectProperty ;
+            rdfs:range vocab:Regulation ;
+            rdfs:domain nanopub:Nanopublication .
+
+
+#################################################################
+#   Norm-related Properties
+#################################################################
+
+#:derivesFrom rdf:type owl:ObjectProperty .
+
+vocab:partOf rdf:type owl:FunctionalProperty ,
+                    owl:ObjectProperty ;
+            rdfs:range vocab:Regulation ;
+            rdfs:domain vocab:Norm .
+
+vocab:aboutExecutionOf rdf:type owl:ObjectProperty ;
+    rdfs:domain vocab:Norm ;
+    rdfs:range vocab:ActionType .
+
+vocab:basedOn rdf:type owl:ObjectProperty ;
+    rdfs:domain vocab:Norm ;
+    rdfs:range vocab:CausationBelief .
+
+vocab:aboutNotificationOf rdf:type owl:ObjectProperty ;
+    rdfs:domain vocab:GoodPracticeRecommendation ;
+    rdfs:range vocab:ClinicalStatement .
+
+#############################################
+#
+#   Range of Data properties
+#
+############################################
+
+#################################################################
+#
+#    Data properties
+#
+#################################################################
+
+vocab:OrganizationJurisdiction rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:GoodPracticeRecommendation .
+
+vocab:OrganizationName rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:GoodPracticeRecommendation .
+
+vocab:hasStatementText rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:ClinicalStatement .
+
+vocab:hasStatementTitle rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:ClinicalStatement .
+
+vocab:frequency rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:CausationBelief .
+
+vocab:strength rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:Norm .
+
+#Motivation on applying a particular recommendation; also, explanation.
+vocab:motivation rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:Norm .
+
+#derivative of a transition -syntactic sugar for DSS [Maintain | Increase | Decrease]
+vocab:derivative rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:TransitionType .
+
+#contribution of this causation belief to the recommendation [positive | negative]
+vocab:contribution rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:CausationBelief .
+    
+#state of the situation with respect to the affected property. E.g., severe, mild, low risk, etc
+vocab:stateOf rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:SituationType .
+
+#the probability of achieving a contribution's transition
+vocab:probability rdf:type owl:DatatypeProperty ;
+    rdfs:domain vocab:CausationBelief .
+
+##########
+# Initializes the predicate properties module
+#########
+:- predicate_properties

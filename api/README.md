@@ -16,7 +16,7 @@ Additionally, it provides as set of logic rules to identify potential interactio
 Scenario
 ========
 
-![Guideline set *HT* (hypertension), consisting of *Diueretic2* and
+![Guideline set *HT* (hypertension), consisting of *Diuretic2* and
 *Diuretic*.[]{label="HT"}](CIG-HT.png){#HT width="0.8\linewidth"}
 
 Figure [1](#HT){reference-type="ref" reference="HT"} shows two
