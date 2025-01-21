@@ -34,21 +34,27 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_ENV: development
+        SKIP_COPY: true # Skip copying source code in the image
     image: road2h-interaction_ms
     container_name: interaction_service
     restart: unless-stopped
     ports:
-      - "8888:8888"
+      - "8888:8888" # Application port
+      - "9229:9229" # Debugger port
+    command: ["npx", "nodemon", "--inspect=0.0.0.0:9229", "./bin/www"]
     networks:
       - cig_handler
+    volumes:
+      - ./api/:/usr/src/app/ # Bind mount the local source code
+      - /usr/src/app/node_modules/ # Ensure node_modules inside the container is preserved
     environment:
+      - NODE_ENV=development
       - JENA_HOST=store_service
       - PROLOG_HOST=reasoner_service
       - JENA_PORT=3030
       - PROLOG_PORT=1234
       - PORT=8888
       - FUSEKI_PASSWORD=road2h
-      - NODE_ENV=development
     depends_on:
       - reasoner_app
 
