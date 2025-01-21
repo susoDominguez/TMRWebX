@@ -4,9 +4,9 @@ FROM swipl:latest
 # Set the working directory
 WORKDIR /usr/server/backend/
 
-# Set build-time arguments
-ARG buildtime_FUSEKI_PORT=3012
-ARG buildtime_FUSEKI_HOST=fuseki
+# Set build-time arguments with defaults
+ARG buildtime_FUSEKI_PORT=3030
+ARG buildtime_FUSEKI_HOST=store_service
 
 # Configure environment variables
 ENV HOST=${buildtime_FUSEKI_HOST}
@@ -16,7 +16,7 @@ ENV FUSEKI_HOST_PORT=http://${HOST}:${PORT}/
 # Copy only necessary files to reduce image size
 COPY . .
 
-# Ensure compatibility with ARM64 (e.g., M2 Max) by installing dependencies
+# Install necessary dependencies for compatibility (including ARM64)
 RUN apt-get update && apt-get install -y \
     build-essential \
     && apt-get clean \

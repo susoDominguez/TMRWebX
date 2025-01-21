@@ -112,16 +112,16 @@ function handleDynamicObject(head_vars = [], binding = {}, handlers = {}) {
   return result?.id ? result : undefined;
 }
 
-
-
 // Handlers for care_action mapping
 const care_action_handlers = {
   actId: (result, value) => (result.id = value),
   adminLabel: (result, value) => (result.display = value),
   subsumes: (result, value) => (result.subsumes = value.split(", ")),
-  hasGroupingCriteria: (result, value) => (result.has_grouping_criteria = value.split(", ")),
+  hasGroupingCriteria: (result, value) =>
+    (result.has_grouping_criteria = value.split(", ")),
   sameAs: (result, value) => (result.same_as = value.split(", ")),
-  adminT: (result, value) => (result.type = value.slice(value.lastIndexOf("/") + 1)),
+  adminT: (result, value) =>
+    (result.type = value.slice(value.lastIndexOf("/") + 1)),
   drugTid: (result, value) => {
     result.administers ??= {};
     result.administers.id = value;
@@ -146,7 +146,7 @@ const care_action_handlers = {
     result.administers.value ??= { coding: [] };
     result.administers.value.coding[1] = {
       code: value,
-      system: 'http://snomed.info/sct/',
+      system: "http://snomed.info/sct/",
     };
   },
   components: (result, value) => {
@@ -154,8 +154,6 @@ const care_action_handlers = {
     result.administers.has_components = value.split(", ");
   },
 };
-
-
 
 /**
  *
