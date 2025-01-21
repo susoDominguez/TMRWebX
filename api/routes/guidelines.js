@@ -7,73 +7,58 @@ const { reportError } = require("../lib/parser/parserError");
 const utils = Promise.promisifyAll(require("../lib/utils"));
 const logger = require("../config/winston");
 const { ErrorHandler } = require("../lib/errorHandler");
-//const { error } = require("console");
-//const { json } = require("body-parser");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
-//const e = require("express");
-//const { throws } = require("assert");
+const querystring = require("querystring");
 
-router.post("/interactions", function (req, res, next) {
-  if (!req.body.cig_id) {
-    res.status(406).send({ error: "cig_id param missing" });
-    return;
-  }
+router.post("/interactions", async (req, res) => {
+  try {
+    if (!req.body.cig_id) {
+      return res.status(406).json({ error: "cig_id param missing" });
+    }
 
-  let cigId = req.body.cig_id.startsWith(`CIG-`)
-    ? req.body.cig_id
-    : `CIG-` + req.body.cig_id;
+    const cigId = req.body.cig_id.startsWith("CIG-")
+      ? req.body.cig_id
+      : `CIG-${req.body.cig_id}`;
 
-  let postData = require("querystring").stringify({
-    //Jena dataset name
-    guideline_id: cigId,
-  });
+    const postData = querystring.stringify({ guideline_id: cigId });
+    logger.info(
+      "Determining interactions with data: " + JSON.stringify(postData)
+    );
 
-  logger.info(
-    "Determining interactions with data: " + JSON.stringify(postData)
-  );
+    const data = await utils.callPrologServer("interactions", postData);
+    logger.info("Data sent to grammar parser is: " + data);
 
-  utils
-    .callPrologServer("interactions", postData)
-    .then((data) => {
-      logger.info("data sent to grammar parser is: " + data);
+    const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar), {
+      keepHistory: true,
+    });
 
-      //use grammar to parse response into a JSON object
-      const parser = new nearley.Parser(nearley.Grammar.fromCompiled(grammar), {
-        keepHistory: true,
-      });
+    try {
+      parser.feed(data);
+      const result = parser.results[0];
 
-      let result;
-
-      try {
-        parser.feed(data);
-
-        result = parser.results[0];
-        //convert type of first recommendation to secondary when type of interaction is repairable
-        for (let val of result) {
+      if (result) {
+        // Convert type of first recommendation to secondary when type of interaction is repairable
+        result.forEach((val) => {
           if (val.type === "repairable") {
             val.interactionNorms[0].type = "secondary";
           }
-        }
-      } catch (e) {
-        reportError(e, parser);
-        throw ErrorHandler(400, "result of parsing failed");
-      }
+        });
 
-      if (result) {
         return res.status(200).json(result);
       } else {
-        throw ErrorHandler(400, "result of parsing failed");
+        throw new ErrorHandler(400, "Result of parsing failed");
       }
-    })
-    .catch((err) => {
-      res.status(400).json({
-        status: "error",
-        error: err,
-      });
+    } catch (parseError) {
+      reportError(parseError, parser);
+      throw new ErrorHandler(400, "Result of parsing failed");
+    }
+  } catch (error) {
+    logger.error(`Error in /interactions: ${error.message}`);
+    res.status(error.statusCode || 500).json({
+      status: "error",
+      error: error.message,
     });
+  }
 });
-
-
-
 
 module.exports = router;

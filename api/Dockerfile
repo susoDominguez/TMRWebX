@@ -1,5 +1,6 @@
 # Use a specific version of the Node.js image
-FROM node:lts-alpine@sha256:76badf0d0284ad838536d49d8a804988b4985fc6bc7242dfff4f8216c851438b
+# Use a lightweight Node.js 23 image
+FROM node:23-alpine
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init

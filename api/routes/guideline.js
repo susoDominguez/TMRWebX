@@ -1,13 +1,10 @@
 const express = require("express");
 const router = express.Router();
-//const axios = require("axios");
 const bodyParser = require("body-parser");
-//const Promise = require("bluebird");
 const config = require("../lib/config");
-const guidelines = require("../lib/prefixes");
 const utils = require("../lib/utils");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
-const { handleError, ErrorHandler } = require("../lib/errorHandler");
+const { ErrorHandler } = require("../lib/errorHandler");
 const logger = require("../config/winston");
 const {
   insert_precond_in_rec,
@@ -16,8 +13,9 @@ const {
   set_uri,
   get_rec_json_data,
   set_cig_id,
-  get_precondition_object
+  get_precondition_object,
 } = require("../lib/router_functs/guideline_functs.js");
+
 const { error } = require("console");
 
 const dataUri = "http://anonymous.org/data";
@@ -95,11 +93,11 @@ async function get_rec_contents(cigId, recURI) {
   let promise_array = new Array();
 
   //then causation beliefs
- 
+
   //retrieve each CB and associated data
   let { uris, contribs } = await get_CB_uris_from_bindings(bindings);
 
-  promise_array = uris.map( (uri) =>
+  promise_array = uris.map((uri) =>
     utils.getBeliefData("beliefs", uri, "transitions", "careActions")
   );
 
@@ -111,8 +109,10 @@ async function get_rec_contents(cigId, recURI) {
   //if filter situation, add it as last element
   let hasPrecondition = false;
 
-  if (rec_json.hasOwnProperty("hasFilterSituation") && typeof rec_json['hasFilterSituation'] !== 'undefined') {
-
+  if (
+    rec_json.hasOwnProperty("hasFilterSituation") &&
+    typeof rec_json["hasFilterSituation"] !== "undefined"
+  ) {
     hasPrecondition = true;
 
     promise_array.push(
@@ -127,7 +127,14 @@ async function get_rec_contents(cigId, recURI) {
 
   try {
     //get results
-    promise_rslt = await Promise.all(promise_array).catch(err=> {logger.error(`Error when retrieving CBs,care_actions_predicates: ${JSON.stringify(err)}`); throw err;});
+    promise_rslt = await Promise.all(promise_array).catch((err) => {
+      logger.error(
+        `Error when retrieving CBs,care_actions_predicates: ${JSON.stringify(
+          err
+        )}`
+      );
+      throw err;
+    });
 
     //get precondition results, if any
     if (hasPrecondition) filter_situation_rslt = promise_rslt.pop();
@@ -142,21 +149,24 @@ async function get_rec_contents(cigId, recURI) {
     logger.error(`Error in get guideline recommendation : ${err}`);
     throw err;
   }
- 
-  //add CBs 
+
+  //add CBs
   rec_json["causation_beliefs"] = promise_rslt.map(
     ({ status, head_vars, bindings }) => {
       let cb_obj = auxFuncts.get_CB_object(head_vars, bindings[0]);
-      cb_obj['contribution'] = contribs.get(cb_obj.id);
+      cb_obj["contribution"] = contribs.get(cb_obj.id);
       return cb_obj;
     }
   );
- 
+
   //if precondition, add
   if (hasPrecondition) {
-    rec_json["hasFilterSituation"] = get_precondition_object(filter_situation_rslt.head_vars, filter_situation_rslt.bindings[0]); 
+    rec_json["hasFilterSituation"] = get_precondition_object(
+      filter_situation_rslt.head_vars,
+      filter_situation_rslt.bindings[0]
+    );
   }
-  
+
   //add care_Actions
   let ca_data = auxFuncts.get_care_action(
     care_action_rslt.head_vars,
@@ -622,7 +632,9 @@ router.post("/rec/all/get/", async function (req, res, next) {
     return res.json(result);
   } catch (err) {
     logger.error(
-      `error when retrieving clinical recommendations at get_rec_contents with cig ${cigId} and rec URI ${recURI}. Error is ${JSON.stringify(err)}`
+      `error when retrieving clinical recommendations at get_rec_contents with cig ${cigId} and rec URI ${recURI}. Error is ${JSON.stringify(
+        err
+      )}`
     );
     return res.status(500).end();
   }
@@ -847,7 +859,7 @@ router.post("/all/get", async function (req, res) {
 
   let results = [];
   let status = 200;
-  let {cig_id} = req.body
+  let { cig_id } = req.body;
 
   const cigId = set_cig_id(cig_id);
 

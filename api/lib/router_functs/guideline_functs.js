@@ -4,308 +4,696 @@ const logger = require("../../config/winston.js");
 const jsonata = require("jsonata");
 //const { ErrorHandler } = require("../lib/errorHandler");
 const config = require("../config");
-const dataUri = "http://anonymous.org/data/";
-const dataUri_short = "data:";
-const sctUri = `http://snomed.info/sct/`;
+const data_prefix = "http://anonymous.org/data/";
+const data_prefix_short = "data:";
+const sct_prefix = `http://snomed.info/sct/`;
+const data_prefix_length = "http://anonymous.org/data/".length;
+const vocab_prefix_length = "http://anonymous.org/vocab/".length;
 
-function create_transtition_tmplt() {
-  return {
-    id: undefined,
-    //at 0 -> pre-situation. at 1 -> post-situation
-    situationTypes: [
-      {
-        type: "hasTransformableSituation",
-        id: undefined,
-        value: {
-          coding: [
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-          ],
-          text: undefined,
-        },
-      },
-      {
-        type: "hasExpectedSituation",
-        id: undefined,
-        value: {
-          coding: [
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-          ],
-          text: undefined,
-        },
-      },
-    ],
-    property: {
-      id: undefined,
-      value: {
-        // at 0-> TMR Id; at 1 -> SCTID if available
-        coding: [
-          {
-            code: undefined,
-            display: undefined,
-            system: undefined,
-          },
-          {
-            code: undefined,
-            display: undefined,
-            system: undefined,
-          },
-        ],
-        text: undefined,
-      },
-    },
+function transformSPARQLResults(sparqlResults, schema, context = {}) {
+  /**
+   * Utility function to set a value in a nested object using a dot-separated path.
+   */
+  const setNestedValue = (obj, path, value) => {
+    const keys = path.split(".");
+    let current = obj;
+
+    keys.forEach((key, index) => {
+      if (index === keys.length - 1) {
+        current[key] = value; // Set the final value
+      } else {
+        current[key] = current[key] || {}; // Ensure intermediate objects exist
+        current = current[key];
+      }
+    });
   };
-}
 
-// causation belief template
-function create_cb_tmplt() {
-  return {
-    id: undefined,
-    author: undefined,
-    contribution: undefined,
-    derivedFrom: undefined,
-    hasSource: undefined,
-    wasAttributedTo: undefined,
-    generatedAtTime: undefined,
-    probability: undefined,
-    evidence: undefined,
-    careActionTypeRef: undefined,
-    transitionTypeRef: undefined,
-  };
-}
+  /**
+   * Process each binding in the SPARQL results and apply the schema.
+   */
+  return sparqlResults.results.bindings.map((binding) => {
+    const result = {};
 
-/**
- * Map data bindings to TMR serializations
- * @param {array} head_vars - Variable names to map.
- * @param {object} binding - Data bindings.
- * @param {object} handlers - Custom mapping handlers.
- * @returns {object|undefined} - The dynamically created object or undefined.
- */
-function handleDynamicObject(head_vars = [], binding = {}, handlers = {}) {
-  const result = {};
+    for (const [sourceKey, config] of Object.entries(schema)) {
+      // Check if the SPARQL result contains the sourceKey and handle missing fields
+      if (binding[sourceKey] && binding[sourceKey].value !== undefined) {
+        const value = binding[sourceKey].value;
 
-  head_vars.forEach((headVar) => {
-    const value = binding[headVar]?.value;
-    if (value !== undefined && handlers[headVar]) {
-      handlers[headVar](result, value);
+        // Apply transform function if provided
+        if (typeof config.transform === "function") {
+          config.transform(value, result, context);
+        } else {
+          // Direct mapping to the target key
+          setNestedValue(result, config.targetKey, value);
+        }
+      } else if (!binding[sourceKey]) {
+        // Handle missing data gracefully
+        if (config.defaultValue !== undefined) {
+          // If a default value is defined in the schema, use it
+          setNestedValue(result, config.targetKey, config.defaultValue);
+        } else if (typeof config.onMissing === "function") {
+          // Optionally, handle missing values with a custom onMissing function
+          config.onMissing(result, context);
+        }
+      }
     }
-  });
 
-  // Validate required field 'id' to determine if the object is valid
-  return result?.id ? result : undefined;
+    return result;
+  });
 }
 
-// Handlers for care_action mapping
-const care_action_handlers = {
-  actId: (result, value) => (result.id = value),
-  adminLabel: (result, value) => (result.display = value),
-  subsumes: (result, value) => (result.subsumes = value.split(", ")),
-  hasGroupingCriteria: (result, value) =>
-    (result.has_grouping_criteria = value.split(", ")),
-  sameAs: (result, value) => (result.same_as = value.split(", ")),
-  adminT: (result, value) =>
-    (result.type = value.slice(value.lastIndexOf("/") + 1)),
-  drugTid: (result, value) => {
-    result.administers ??= {};
-    result.administers.id = value;
-    result.administers.value ??= { coding: [] };
-    result.administers.value.coding[0] = {
-      code: value.slice(value.lastIndexOf("/") + 1),
-      system: "http://anonymous.org/data/", //value.substring(0, value.lastIndexOf("/")),
-    };
+const cb_tr_schema = {
+  cbId: { targetKey: "id", transform: (value) => value },
+  contribution: {
+    targetKey: "contribution",
+    transform: (value) => {
+      const match = value.toLowerCase().match(/(positive|negative|neutral)$/i);
+      return match ? match[1] : null; // Extract postfix or set to null if not found
+    },
   },
-  drugType: (result, value) => {
-    result.administers ??= {};
-    result.administers.type = value.slice(value.lastIndexOf("/") + 1);
+  probability: {
+    targetKey: "probability",
+    transform: (value) => {
+      const match = value
+        .toLowerCase()
+        .match(/(never|often|sometimes|rarely|always)$/i);
+      return match ? match[1] : null; // Extract postfix or set to null if not found
+    },
   },
-  drugLabel: (result, value) => {
-    result.administers ??= {};
-    result.administers.value ??= { coding: [] };
-    result.administers.value.coding.forEach((c) => (c.display = value));
-    result.administers.value.text = value;
+  evidence: {
+    targetKey: "evidence",
+    transform: (value) => {
+      const match = value.toLowerCase().match(/(high|medium|low)$/i);
+      return match ? match[1] : null; // Extract postfix or set to null if not found
+    },
   },
-  snomed: (result, value) => {
-    result.administers ??= {};
-    result.administers.value ??= { coding: [] };
-    result.administers.value.coding[1] = {
-      code: value,
-      system: "http://snomed.info/sct/",
-    };
+  actId: { targetKey: "careActionTypeRef", transform: (value) => value },
+  trId: { targetKey: "transition.id", transform: (value) => value },
+  derivedFromCB: { targetKey: "derivedFrom", transform: (value) => value },
+  hasSourcesCB: { targetKey: "hasSource", transform: (value) => value },
+  effect: { targetKey: "effect", transform: (value) => value.toLowerCase() },
+  propUri: {
+    targetKey: "transition.property",
+    transform: (value, result) => {
+      result.transition.property ??= { value: { coding: [] } };
+      result.transition.property.id = value;
+      const type = value.slice(data_prefix_length);
+      result.transition.property.value.coding[0] ??= {};
+      result.transition.property.value.coding[0].code = type;
+      result.transition.property.value.coding[0].system = data_prefix;
+    },
   },
-  components: (result, value) => {
-    result.administers ??= {};
-    result.administers.has_components = value.split(", ");
+  propLabel: {
+    targetKey: "transition.property.value.coding[0].display",
+    transform: (value, result) => {
+      result.transition.property ??= { value: { coding: [] } };
+      result.transition.property.value.coding[0] ??= {};
+      result.transition.property.value.coding[0].display = value;
+      result.transition.property.value.text ??= value;
+    },
+  },
+  propUriSCT: {
+    targetKey: "transition.property.value.coding[1].code",
+    transform: (value, result) => {
+      if (value) {
+        result.property ??= { value: { coding: [] } };
+        result.property.value.coding[1] ??= {};
+        result.property.value.coding[1].code = value;
+        result.property.value.coding[1].system = sct_prefix;
+      }
+    },
+  },
+  propLabelSCT: {
+    targetKey: "transition.property.value.coding[1].display",
+    transform: (value, result) => {
+      if (value) {
+        result.property ??= { value: { coding: [] } };
+        result.property.value.coding[1] ??= {};
+        result.property.value.coding[1].display = value;
+      }
+    },
+  },
+  sitFromId: {
+    targetKey: "transition.situationTypes[0]",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[0].id = value;
+      const type = value.slice(data_prefix_length);
+      result.transition.situationTypes[0].value.coding[0] ??= {};
+      result.transition.situationTypes[0].value.coding[0].code = type;
+      result.transition.situationTypes[0].value.coding[0].system = data_prefix;
+    },
+  },
+  sitFromLabel: {
+    targetKey: "transition.situationTypes[0].value.coding[0].display",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[0].value.coding[0] ??= {};
+      result.transition.situationTypes[0].value.coding[0].display = value;
+      result.transition.situationTypes[0].value.text ??= value;
+    },
+  },
+  sitFromIdSCT: {
+    targetKey: "transition.situationTypes[0].value.coding[1].code",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[0].value.coding[1] ??= {};
+      result.transition.situationTypes[0].value.coding[1].code = value;
+      result.transition.situationTypes[0].value.coding[1].system = sct_prefix;
+    },
+  },
+  sitFromLabelSCT: {
+    targetKey: "transition.situationTypes[0].value.coding[1].display",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[0].value.coding[1] ??= {};
+      result.transition.situationTypes[0].value.coding[1].display = value;
+    },
+  },
+  sitToId: {
+    targetKey: "transition.situationTypes[1]",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[1].id = value;
+      const type = value.slice(data_prefix_length);
+      result.transition.situationTypes[1].value.coding[0] ??= {};
+      result.transition.situationTypes[1].value.coding[0].code = type;
+      result.transition.situationTypes[1].value.coding[0].system = data_prefix;
+    },
+  },
+  sitToLabel: {
+    targetKey: "transition.situationTypes[1].value.coding[0].display",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[1].value.coding[0] ??= {};
+      result.transition.situationTypes[1].value.coding[0].display = value;
+      result.transition.situationTypes[1].value.text ??= value;
+    },
+  },
+  sitToIdSCT: {
+    targetKey: "transition.situationTypes[1].value.coding[1].code",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[1].value.coding[1] ??= {};
+      result.transition.situationTypes[1].value.coding[1].code = value;
+      result.transition.situationTypes[1].value.coding[1].system = sct_prefix;
+    },
+  },
+  sitToLabelSCT: {
+    targetKey: "transition.situationTypes[1].value.coding[1].display",
+    transform: (value, result) => {
+      result.transition.situationTypes ??= [];
+      result.transition.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.transition.situationTypes[1].value.coding[1] ??= {};
+      result.transition.situationTypes[1].value.coding[1].display = value;
+    },
   },
 };
 
-/**
- *
- * @param {array} head_vars
- * @param {object} binding
- * @returns
- */
-function get_transition_object(head_vars, binding) {
-  //logger.debug(head_vars);
-  //logger.debug(binding);
-
-  let data_prefix_length = "http://anonymous.org/data/".length;
-  let vocab_prefix_length = "http://anonymous.org/vocab/".length;
-
-  let transition_object = {
-    situationTypes: [
-      {
-        type: "hasTransformableSituation",
-        id: undefined,
-        value: {
-          coding: [
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-          ],
-          text: undefined,
-        },
-      },
-      {
-        type: "hasExpectedSituation",
-        id: undefined,
-        value: {
-          coding: [
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-            {
-              code: undefined,
-              display: undefined,
-              system: undefined,
-            },
-          ],
-          text: undefined,
-        },
-      },
-    ],
-    property: {
-      id: undefined,
-      value: {
-        coding: [
-          {
-            code: undefined,
-            display: undefined,
-            system: undefined,
-          },
-          {
-            code: undefined,
-            display: undefined,
-            system: undefined,
-          },
-        ],
-        text: undefined,
-      },
+const cb_schema = {
+  cbId: { targetKey: "id", transform: (value) => value },
+  contribution: {
+    targetKey: "contribution",
+    transform: (value) => {
+      const match = value.toLowerCase().match(/(positive|negative|neutral)$/i);
+      return match ? match[1] : null; // Extract postfix or set to null if not found
     },
-  };
+  },
+  probability: {
+    targetKey: "probability",
+    transform: (value) => {
+      const match = value
+        .toLowerCase()
+        .match(/(never|often|sometimes|rarely|always)$/i);
+      return match ? match[1] : null; // Extract postfix or set to null if not found
+    },
+  },
+  evidence: {
+    targetKey: "evidence",
+    transform: (value) => {
+      const match = value.toLowerCase().match(/(high|medium|low)$/i);
+      return match ? match[1] : null; // Extract postfix or set to null if not found
+    },
+  },
+  actId: { targetKey: "careActionTypeRef", transform: (value) => value },
+  trId: { targetKey: "transitionTypeRef", transform: (value) => value },
+  derivedFromCB: { targetKey: "derivedFrom", transform: (value) => value },
+  hasSourcesCB: { targetKey: "hasSource", transform: (value) => value },
+};
 
-  //format rdf by looping through head vars
-  for (let pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-    logger.debug(`headVar is ${headVar}`);
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
+const recommendation_schema = {
+  partOf: {
+    targetKey: "partOf",
+    transform: (value) => value.split("/").pop(),
+  },
+  isPartOf: {
+    targetKey: "source_cig",
+    transform: (value) => value.split("/").pop(),
+  },
+  extractedFrom: {
+    targetKey: "extractedFrom",
+    transform: (value) => value.split("/").pop(),
+  },
+  label: {
+    targetKey: "text",
+    transform: (value) => value,
+  },
+  strength: {
+    targetKey: "suggestion",
+    transform: (value) =>
+      /should$|must$/i.test(value) ? "recommend" : "nonRecommend",
+  },
+  cbId: {
+    targetKey: "causationBeliefTypeRef",
+    transform: (value) => value,
+  },
+  contrib: {
+    //contribution to the recommendation (redundant if only 1 CB type)
+    targetKey: "causationBeliefType.contribution",
+    transform: (value) => value,
+  },
+  derivedFrom: {
+    targetKey: "derivedFrom",
+    transform: (value) => value.split(","),
+  },
+  hasSources: {
+    targetKey: "hasSource",
+    transform: (value) => value.split(","),
+  },
+  attributedTo: {
+    targetKey: "wasAttributedTo",
+    transform: (value) => value,
+  },
+  generatedTime: {
+    targetKey: "generatedAtTime",
+    transform: (value) => value,
+  },
+  actId: {
+    targetKey: "careActionTypeRef",
+    transform: (value) => value,
+  },
+  of: {
+    targetKey: "careActionType.requestType",
+    transform: (value, result) => {
+      const temp = value.split("/").pop();
+      if (temp === "applicationOf") {
+        result.careActionType = {
+          requestType: 1,
+          type: {
+            sctId: "304541006",
+            display: "Recommendation to perform treatment (procedure)",
+          },
+        };
+      } else if (temp === "inoculationOf") {
+        result.careActionType = {
+          requestType: 2,
+          type: {
+            sctId: "830152006",
+            display: "Recommendation regarding vaccination (procedure)",
+          },
+        };
+      }
+    },
+  },
+  precondId: {
+    targetKey: "preconditions.id",
+    transform: (value) => value,
+  },
+  precondSctid: {
+    targetKey: "preconditions.value.coding[1].code",
+    transform: (value, result) => {
+      result.preconditions ??= { value: { coding: [] } };
+      result.preconditions.value.coding[1] ??= {};
+      result.preconditions.value.coding[1].code = value;
+      result.preconditions.value.coding[1].system = sct_prefix;
+    },
+  },
+  precondSctidLbl: {
+    targetKey: "preconditions.value.coding[1].display",
+    transform: (value, result) => {
+      result.preconditions ??= { value: { coding: [] } };
+      result.preconditions.value.coding[1] ??= {};
+      result.preconditions.value.coding[1].display = value;
+      result.preconditions.value.coding[1].text ??= value;
+    },
+  },
+  precondT: {
+    targetKey: "preconditions.value.coding[0].code",
+    transform: (value, result) => {
+      result.preconditions ??= { value: { coding: [] } };
+      result.preconditions.value.coding[0] ??= {};
+      result.preconditions.value.coding[0].code = value.slice(
+        value.lastIndexOf("/") + 1
+      );
+      result.preconditions.value.coding[0].system = data_prefix;
+    },
+  },
+  precondLbl: {
+    targetKey: "preconditions.value.coding[0].display",
+    transform: (value, result) => {
+      result.preconditions ??= { value: { coding: [] } };
+      result.preconditions.value.coding[0] ??= {};
+      result.preconditions.value.coding[0].display = value;
+      result.preconditions.value.coding[0].text ??= value;
+    },
+  },
+};
 
-    //otherwise, retrieve value
-    let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`);
+const care_action_schema = {
+  actId: { targetKey: "id", transform: (value) => value },
+  adminLabel: { targetKey: "display", transform: (value) => value },
+  subsumes: { targetKey: "subsumes", transform: (value) => value.split(", ") },
+  hasGroupingCriteria: {
+    targetKey: "has_grouping_criteria",
+    transform: (value) => value.split(", "),
+  },
+  sameAs: { targetKey: "same_as", transform: (value) => value.split(", ") },
+  adminT: {
+    targetKey: "type",
+    transform: (value) => value.slice(value.lastIndexOf("/") + 1),
+  },
+  drugTid: {
+    targetKey: "administers",
+    transform: (value, result) => {
+      result.administers ??= {};
+      result.administers.id = value;
+      result.administers.value ??= { coding: [] };
+      result.administers.value.coding[0] ??= {};
+      result.administers.value.coding[0].code = value.slice(
+        value.lastIndexOf("/") + 1
+      );
+      result.administers.value.coding[0].system = data_prefix;
+    },
+  },
+  drugType: {
+    targetKey: "administers.type",
+    transform: (value) => value.slice(value.lastIndexOf("/") + 1),
+  },
+  drugLabel: {
+    targetKey: "administers.value.coding[0].display",
+    transform: (value, result) => {
+      result.administers ??= {};
+      result.administers.value ??= { coding: [] };
+      result.administers.value.coding[0] ??= {};
+      result.administers.value.coding[0].display = value;
+      result.administers.value.coding[0].text ??= value;
+    },
+  },
+  sctid: {
+    targetKey: "administers.value.coding[1].code",
+    transform: (value, result) => {
+      result.administers ??= {};
+      result.administers.value ??= { coding: [] };
+      result.administers.value.coding[1] ??= {};
+      result.administers.value.coding[1].code = value;
+      result.administers.value.coding[1].system = sct_prefix;
+    },
+  },
+  sctLbl: {
+    targetKey: "administers.value.coding[1].display",
+    transform: (value, result) => {
+      result.administers ??= {};
+      result.administers.value ??= { coding: [] };
+      result.administers.value.coding[1] ??= {};
+      result.administers.value.coding[1].display = value;
+      result.administers.value.text ??= value;
+    },
+  },
+  components: {
+    targetKey: "administers.has_components",
+    transform: (value) => value.split(", "),
+  },
+};
 
-    //for each heading, add a field
-    switch (headVar) {
-      case "TrId":
-        transition_object.id = value;
-        break;
-      case "sitFromId":
-        transition_object.situationTypes[0].id = value;
-        //extract code
-        var type = value.slice(data_prefix_length);
-        transition_object.situationTypes[0].value.code = transition_object
-          .situationTypes[0].value.code
-          ? transition_object.situationTypes[0].value.code
-          : type;
-        break;
-      case "sitToId":
-        transition_object.situationTypes[1].id = value;
-        //extract code
-        var type = value.slice(data_prefix_length);
-        transition_object.situationTypes[1].value.code = transition_object
-          .situationTypes[1].value.code
-          ? transition_object.situationTypes[1].value.code
-          : type;
-        break;
-      case "propUri":
-        //extract code
-        transition_object.property.id = value;
-        var type = value.slice(data_prefix_length);
-        transition_object.property.code = transition_object.property.code
-          ? transition_object.property.code
-          : type;
-        break;
-      case "sitFromLabel":
-        transition_object.situationTypes[0].value.display = value;
-        break;
-      case "sitToLabel":
-        transition_object.situationTypes[1].value.display = value;
-        break;
-      case "propLabel":
-        transition_object.property.display = value;
-        break;
-      case "deriv":
-        //var type = value.slice(vocab_prefix_length);
-        transition_object.effect = value.toLowerCase();
-        break;
-      case "sitFromIdSCT":
-        if (value) {
-          transition_object.situationTypes[0].value.code = value;
-          transition_object.situationTypes[0].value.system = sctUri;
-        }
-        break;
-      case "sitToIdSCT":
-        if (value) {
-          transition_object.situationTypes[1].value.code = value;
-          transition_object.situationTypes[1].value.system = sctUri;
-        }
-        break;
-      case "propUriSCT":
-        if (value) {
-          transition_object.property.code = value;
-          transition_object.property.system = sctUri;
-        }
-        break;
-    }
-  }
-  return transition_object;
+const transition_schema = {
+  TrId: { targetKey: "id", transform: (value) => value },
+  effect: { targetKey: "effect", transform: (value) => value.toLowerCase() },
+  propUri: {
+    targetKey: "property",
+    transform: (value, result) => {
+      result.property ??= { value: { coding: [] } };
+      result.property.id = value;
+      const type = value.slice(data_prefix_length);
+      result.property.value.coding[0] ??= {};
+      result.property.value.coding[0].code = type;
+      result.property.value.coding[0].system = data_prefix;
+    },
+  },
+  propLabel: {
+    targetKey: "property.value.coding[0].display",
+    transform: (value, result) => {
+      result.property ??= { value: { coding: [] } };
+      result.property.value.coding[0] ??= {};
+      result.property.value.coding[0].display = value;
+      result.property.value.text ??= value;
+    },
+  },
+  propUriSCT: {
+    targetKey: "property.value.coding[1].code",
+    transform: (value, result) => {
+      if (value) {
+        result.property ??= { value: { coding: [] } };
+        result.property.value.coding[1] ??= {};
+        result.property.value.coding[1].code = value;
+        result.property.value.coding[1].system = sct_prefix;
+      }
+    },
+  },
+  propLabelSCT: {
+    targetKey: "property.value.coding[1].display",
+    transform: (value, result) => {
+      if (value) {
+        result.property ??= { value: { coding: [] } };
+        result.property.value.coding[1] ??= {};
+        result.property.value.coding[1].display = value;
+      }
+    },
+  },
+  sitFromId: {
+    targetKey: "situationTypes[0]",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[0].id = value;
+      const type = value.slice(data_prefix_length);
+      result.situationTypes[0].value.coding[0] ??= {};
+      result.situationTypes[0].value.coding[0].code = type;
+      result.situationTypes[0].value.coding[0].system = data_prefix;
+    },
+  },
+  sitFromLabel: {
+    targetKey: "situationTypes[0].value.coding[0].display",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[0].value.coding[0] ??= {};
+      result.situationTypes[0].value.coding[0].display = value;
+      result.situationTypes[0].value.text ??= value;
+    },
+  },
+  sitFromIdSCT: {
+    targetKey: "situationTypes[0].value.coding[1].code",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[0].value.coding[1] ??= {};
+      result.situationTypes[0].value.coding[1].code = value;
+      result.situationTypes[0].value.coding[1].system = sct_prefix;
+    },
+  },
+  sitFromLabelSCT: {
+    targetKey: "situationTypes[0].value.coding[1].display",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[0] ??= {
+        type: "hasTransformableSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[0].value.coding[1] ??= {};
+      result.situationTypes[0].value.coding[1].display = value;
+    },
+  },
+  sitToId: {
+    targetKey: "situationTypes[1]",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[1].id = value;
+      const type = value.slice(data_prefix_length);
+      result.situationTypes[1].value.coding[0] ??= {};
+      result.situationTypes[1].value.coding[0].code = type;
+      result.situationTypes[1].value.coding[0].system = data_prefix;
+    },
+  },
+  sitToLabel: {
+    targetKey: "situationTypes[1].value.coding[0].display",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[1].value.coding[0] ??= {};
+      result.situationTypes[1].value.coding[0].display = value;
+      result.situationTypes[1].value.text ??= value;
+    },
+  },
+  sitToIdSCT: {
+    targetKey: "situationTypes[1].value.coding[1].code",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[1].value.coding[1] ??= {};
+      result.situationTypes[1].value.coding[1].code = value;
+      result.situationTypes[1].value.coding[1].system = sct_prefix;
+    },
+  },
+  sitToLabelSCT: {
+    targetKey: "situationTypes[1].value.coding[1].display",
+    transform: (value, result) => {
+      result.situationTypes ??= [];
+      result.situationTypes[1] ??= {
+        type: "hasExpectedSituation",
+        value: { coding: [] },
+      };
+      result.situationTypes[1].value.coding[1] ??= {};
+      result.situationTypes[1].value.coding[1].display = value;
+    },
+  },
+};
+
+const gpRec_schema = {
+  wasDerivedFrom: {
+    targetKey: "hasSource",
+    transform: (value) => value,
+  },
+  partOf: {
+    targetKey: "partOf",
+    transform: (value) => value,
+  },
+  gpRecId: {
+    targetKey: "id",
+    transform: (value) => value,
+  },
+  extractedFrom: {
+    targetKey: "extractedFrom",
+    transform: (value) => value,
+  },
+  label: {
+    targetKey: "title",
+    transform: (value) => value,
+  },
+  stUris: {
+    targetKey: "clinicalStatements",
+    transform: (value) => value.split(","),
+  },
+};
+
+const stData_schema = {
+  st_id: {
+    targetKey: "id",
+    transform: (value) => value,
+  },
+  statementTitle: {
+    targetKey: "hasStatementTitle",
+    transform: (value) => value,
+  },
+  statementText: {
+    targetKey: "hasStatementText",
+    transform: (value) => value,
+  },
+  organizationName: {
+    targetKey: "organization",
+    transform: (value) => value.split(", "),
+  },
+  jurisdiction: {
+    targetKey: "jurisdiction",
+    transform: (value) => value.split(", "),
+  },
+  derivedFromSt: {
+    targetKey: "derivedFrom",
+    transform: (value) => value.split(", "),
+  },
+  hasSources: {
+    targetKey: "hasTarget",
+    transform: (value) => value.split(", "),
+  },
+};
+
+///// create SPECIFIC TMR concepts in JSON
+
+function get_care_action_data(sparqlResults, context = {}) {
+  return transformSPARQLResults(sparqlResults, care_action_schema, context);
+}
+
+function get_transition_data(sparqlResults, context = {}) {
+  return transformSPARQLResults(sparqlResults, transition_schema, context);
+}
+
+function get_causation_belief_data_short(sparqlResults, context = {}) {
+  return transformSPARQLResults(sparqlResults, cb_schema, context);
+}
+
+function get_causation_belief_w_transition_data(sparqlResults, context = {}) {
+  return transformSPARQLResults(sparqlResults, cb_tr_schema, context);
+}
+
+function get_recommendation_data_short(sparqlResults, context = {}) {
+  return transformSPARQLResults(sparqlResults, recommendation_schema, context);
+}
+
+function get_recommendation_with_cb_data(sparqlResults, context = {}) {
+  return transformSPARQLResults(
+    sparqlResults,
+    {}, //recommendation_cb_schema,
+    context
+  );
 }
 
 function set_cig_id(id, no_prefix = false) {
@@ -330,7 +718,7 @@ function set_cig_id(id, no_prefix = false) {
  */
 function set_uri(label, prefix = null, fullUri = false, shortenedURI = false) {
   //if its already full URI, return
-  if (label.includes(dataUri)) return label.trim();
+  if (label.includes(data_prefix)) return label.trim();
 
   let output = "";
 
@@ -342,9 +730,9 @@ function set_uri(label, prefix = null, fullUri = false, shortenedURI = false) {
 
   //construe URI
   output = fullUri
-    ? dataUri + output
+    ? data_prefix + output
     : shortenedURI
-    ? dataUri_short + output
+    ? data_prefix_short + output
     : output;
 
   return output;
@@ -359,7 +747,7 @@ function set_uri(label, prefix = null, fullUri = false, shortenedURI = false) {
  */
 function setUri(label, prefix = null, fullUri = false, shortenedURI = false) {
   //if its already full URI, return
-  if (label.includes(dataUri)) return label;
+  if (label.includes(data_prefix)) return label;
 
   let output = "";
 
@@ -371,312 +759,12 @@ function setUri(label, prefix = null, fullUri = false, shortenedURI = false) {
 
   //construe URI
   output = fullUri
-    ? dataUri + output
+    ? data_prefix + output
     : shortenedURI
-    ? dataUri_short + output
+    ? data_prefix_short + output
     : output;
 
   return output;
-}
-
-function get_rec_data(recURI, guidelineData, type) {
-  //recommendation template object
-  let recData = {
-    id: recURI,
-    partOf: undefined, //combined dataset or original
-    extractedFrom: undefined, //original dataset
-    type: {
-      sctId:
-        type === "nonDrugType"
-          ? "304541006"
-          : type === "vaccineType"
-          ? "830152006"
-          : "306807008",
-      display:
-        type === "nonDrugType"
-          ? "Recommendation to perform treatment (procedure)"
-          : type === "vaccineType"
-          ? "Recommendation regarding vaccination (procedure)"
-          : "Recommendation to start drug treatment (procedure)",
-    },
-    careActionType: {
-      id: undefined,
-      requestType: 0, //for drug treatments
-      code: undefined,
-      display: undefined,
-      drugLabel: undefined,
-      sctId: undefined,
-      hasComponents: undefined,
-    },
-    causationBeliefs: [],
-    derivedFrom: undefined,
-    hasSource: undefined,
-    wasAttributedTo: undefined,
-    generatedAtTime: undefined,
-    hasFilterSituation: undefined,
-  };
-  let precond = {
-    id: undefined,
-    sctId: undefined,
-    display: undefined,
-    composedOf: undefined,
-  };
-
-  let headVars = guidelineData.head.vars;
-  let bindingsList = guidelineData.results.bindings;
-  logger.debug(bindingsList.length);
-
-  for (const index in bindingsList) {
-    //results object
-    const bindingObj = bindingsList[index];
-    //one TR and CB object per CB id encountered
-    //one object per causation belief
-    const cbData = {
-      id: undefined,
-      author: undefined,
-      contribution: undefined,
-      derivedFrom: undefined,
-      hasSource: undefined,
-      wasAttributedTo: undefined,
-      generatedAtTime: undefined,
-      probability: undefined,
-      evidence: undefined,
-      transition: {
-        id: undefined,
-        effect: undefined,
-        property: {
-          sctId: undefined,
-          display: undefined,
-          code: undefined,
-          id: undefined,
-        },
-        situationTypes: [
-          {
-            id: undefined,
-            type: "hasTransformableSituation",
-            value: {
-              stateOfProp: undefined,
-              sctId: undefined,
-              display: undefined,
-              code: undefined,
-            },
-          },
-          {
-            id: undefined,
-            type: "hasExpectedSituation",
-            value: {
-              stateOfProp: undefined,
-              sctId: undefined,
-              display: undefined,
-              code: undefined,
-            },
-          },
-        ],
-      },
-    };
-
-    //format data by looping through head vars
-    for (const pos in headVars) {
-      //variable name
-      let headVar = headVars[pos];
-
-      //check there is a corresponding binding, if not, next head var
-      if (!(headVar && bindingObj.hasOwnProperty(headVar))) continue;
-
-      //otherwise, retrieve value
-      let value = bindingObj[headVar].value;
-      //temporary var
-      let temp;
-
-      //for each CB
-      switch (headVar) {
-        case "derivedFromCB":
-          temp = value.split(",");
-          cbData.derivedFrom = temp;
-          break;
-        case "hasSourcesCB":
-          temp = value.split(",");
-          cbData.hasSource = temp;
-          break;
-        case "contrb":
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.contribution = temp.toLowerCase();
-          break;
-        case "cbUri":
-          cbData.id = value;
-          break;
-        case "freq":
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.probability = temp.toLowerCase();
-          break;
-        case "evidence":
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.evidence = temp.toLowerCase();
-          break;
-        case "TrUri":
-          cbData.transition.id = value;
-          break;
-        case "propTxt":
-          cbData.transition.property.display = value;
-          break;
-        case "sctProp":
-          cbData.transition.property.sctId = value;
-          break;
-        case "PropUri":
-          cbData.transition.property.id = value;
-          //extract code
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.transition.property.code = temp;
-          break;
-        case "sitFromId":
-          cbData.transition.situationTypes[0].id = value;
-          //extract code
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.transition.situationTypes[0].value.code = temp;
-          break;
-        case "sitToId":
-          cbData.transition.situationTypes[1].id = value;
-          //extract code
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.transition.situationTypes[1].value.code = temp;
-          break;
-        case "sitFromLabel":
-          cbData.transition.situationTypes[0].value.display = value;
-          break;
-        case "stateOfPreSit":
-          cbData.transition.situationTypes[0].value.stateOfProp = value;
-          break;
-        case "sctPreSit":
-          cbData.transition.situationTypes[0].value.sctId = value;
-          break;
-        case "sitToLabel":
-          cbData.transition.situationTypes[1].value.display = value;
-          break;
-        case "stateOfPostSit":
-          cbData.transition.situationTypes[1].value.stateOfProp = value;
-          break;
-        case "sctPostSit":
-          cbData.transition.situationTypes[1].value.sctId = value;
-          break;
-        case "deriv":
-          temp = value.split("/");
-          temp = temp[temp.length - 1];
-          cbData.transition.effect = temp.toLowerCase();
-          break;
-      }
-
-      //take the first binding object and
-      //create the outer content of recoomend minus CBs
-      if (index < 1) {
-        switch (headVar) {
-          //precondition
-          case "precond":
-            precond.id = value;
-            break;
-          case "sctPrecond":
-            precond.sctId = value;
-            break;
-          case "precondLbl":
-            precond.display = value;
-            break;
-          case "compoundSituation": //TODO
-            // precond.composedOf = value;
-            break;
-          //recommendation
-          case "partOf":
-            temp = value.split("/");
-            temp = temp[temp.length - 1];
-            recData.partOf = temp;
-            break;
-          case "extractedFrom":
-            temp = value.split("/");
-            temp = temp[temp.length - 1];
-            recData.extractedFrom = temp;
-            break;
-          case "label":
-            recData.text = value;
-            break;
-          case "strength":
-            temp = value.split("/");
-            temp = temp[temp.length - 1];
-            recData.suggestion =
-              temp == "Should"
-                ? "recommend"
-                : temp == "Should_not"
-                ? "nonRecommend"
-                : temp.toLowerCase();
-            break;
-          case "derivedFrom":
-            temp = value.split(",");
-            recData.derivedFrom = temp;
-            break;
-          case "hasSources":
-            temp = value.split(",");
-            recData.hasSource = temp;
-            break;
-          case "attributedTo":
-            recData.wasAttributedTo = value;
-            break;
-          case "generatedTime":
-            recData.generatedAtTime = value;
-            break;
-          //care action
-          case "actId":
-            temp = value.split("/");
-            temp = temp[temp.length - 1];
-            recData.careActionType.id = value;
-            recData.careActionType.code = temp;
-            break;
-          case "adminLabel":
-            recData.careActionType.display = value;
-            break;
-          case "actLabel":
-            recData.careActionType.drugLabel = value;
-            break;
-          case "components":
-            temp = value.split(",");
-            recData.careActionType.hasComponents = temp;
-            break;
-          case "sctDrg":
-            recData.careActionType.sctId = value;
-            break;
-          case "of":
-            //extract code
-            temp = value.split("/");
-            temp = temp[temp.length - 1];
-            //check for therapy
-            if (temp === "applicationOf") {
-              recData.careActionType.requestType = 1;
-              recData.type.sctId = "304541006";
-              recData.type.display =
-                "Recommendation to perform treatment (procedure)";
-            }
-            //check for vaccine
-            if (temp === "inoculationOf") {
-              recData.careActionType.requestType = 2;
-              (recData.type.sctId = "830152006"),
-                (recData.type.display =
-                  "Recommendation regarding vaccination (procedure)");
-            }
-            break;
-        }
-        if (precond.id) recData.hasFilterSituation = precond;
-      }
-
-      //test values of each binding object
-      //logger.debug(`head var is ${headVar} and value is ${value}`);
-    } //endOf headVars
-    //add one CB object to Rec
-    recData.causationBeliefs.push(cbData);
-  } //endOf bindingObj
-
-  return recData;
 }
 
 function mergeArraysToMap(keys = [], values = []) {
@@ -720,221 +808,6 @@ async function get_CB_uris_from_bindings(bindings = []) {
 
   //create map
   return { uris: keys, contribs: contribMap(keys, values) };
-}
-
-function get_gpRec_data(head_vars, binding) {
-  //recommendation template object
-  let gpRec_data = {
-    id: undefined,
-    partOf: undefined, //combined dataset or original
-    extractedFrom: undefined, //original dataset
-    type: {
-      code: "223464006",
-      display: "Procedure education (procedure)",
-      system: sctUri,
-    },
-    hasSource: undefined,
-    wasAttributedTo: undefined,
-    generatedAtTime: undefined,
-    hasFilterSituation: undefined,
-    title: undefined,
-    clinicalStatements: [],
-  };
-
-  //format data by looping through head vars
-  for (const pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
-
-    //otherwise, retrieve value
-    let value = binding[headVar].value;
-    //temporary var
-    let temp;
-
-    logger.debug(`head var is ${headVar} and value is ${value}`);
-    //for each head var found
-    switch (headVar) {
-      case "wasDerivedFrom":
-        gpRec_data.hasSource = value;
-        break;
-      case "partOf":
-        gpRec_data.partOf = value;
-        break;
-      case "gpRecId":
-        gpRec_data.id = value;
-        break;
-      case "extractedFrom":
-        gpRec_data.extractedFrom = value;
-        break;
-      case "label":
-        gpRec_data.title = value;
-        break;
-      case "stUris":
-        temp = value.split(",");
-        gpRec_data.clinicalStatements = temp;
-        break;
-    }
-  } //endOf headVars
-
-  return gpRec_data;
-}
-
-function get_ST_data(head_vars, binding) {
-  if (binding == undefined || binding.length === 0) return {};
-
-  let stData = {
-    id: undefined,
-    author: undefined,
-    hasStatementTitle: undefined,
-    hasStatementText: undefined,
-    organization: undefined,
-    jurisdiction: undefined,
-    derivedFrom: undefined,
-    hasSource: undefined,
-    wasAttributedTo: undefined,
-    generatedAtTime: undefined,
-  };
-
-  //format rdf by looping through head vars
-  for (let pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
-
-    //otherwise, retrieve value
-    logger.debug(`headVar is ${headVar}`);
-    let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`);
-
-    //for each heading, add a field
-    switch (headVar) {
-      case "st_id":
-        stData.id = value;
-        break;
-      case "statementTitle":
-        stData.hasStatementTitle = value;
-        break;
-      case "statementText":
-        stData.hasStatementText = value;
-        break;
-      case "organizationName":
-        stData.organization = value.split(", ");
-        break;
-      case "jurisdiction":
-        stData.jurisdiction = value.split(", ");
-        break;
-      case "derivedFromSt":
-        stData.derivedFrom = value.split(", ");
-        break;
-      case "hasSources":
-        stData.hasTarget = value.split(", ");
-        break;
-    }
-  } //endOf loop
-
-  logger.debug(`stData is ${JSON.stringify(stData)}`);
-
-  return stData;
-}
-
-function get_rec_json_data(recURI, head_vars, binding, type) {
-  //recommendation template object
-  let recData = {
-    id: recURI,
-    type: undefined,
-    partOf: undefined, //combined dataset or original
-    extractedFrom: undefined, //original dataset
-    label: undefined,
-    derivedFrom: undefined,
-    hasSource: undefined,
-    wasAttributedTo: undefined,
-    generatedAtTime: undefined,
-    care_action: undefined,
-    hasFilterSituation: undefined,
-    causation_beliefs: [],
-  };
-  let hasFilterSituation = {
-    id: undefined,
-    system: undefined,
-    code: undefined,
-    display: undefined,
-    composedOf: undefined,
-  };
-
-  //format data by looping through head vars
-  for (const pos in head_vars) {
-    //variable name
-    let var_name = head_vars[pos];
-
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(var_name)) continue;
-
-    //otherwise, retrieve value
-    let val = binding[var_name]["value"];
-    logger.debug(`value is ${val} and binding var is ${var_name}`);
-
-    //temporary var
-    let temp;
-    switch (var_name) {
-      //precondition
-      case "pred":
-        hasFilterSituation.id = val;
-        break;
-      case "compoundSituation": //TODO
-        // precond.composedOf = value;
-        break;
-      //recommendation
-      case "partOf":
-        temp = val.split("/");
-        temp = temp[temp.length - 1];
-        recData.partOf = temp;
-        break;
-      case "extractedFrom":
-        temp = val.split("/");
-        temp = temp[temp.length - 1];
-        recData.extractedFrom = temp;
-        break;
-      case "text":
-        recData.label = val;
-        break;
-      case "strength":
-        temp = val.split("/");
-        temp = temp[temp.length - 1];
-        recData.suggestion =
-          temp.toLowerCase() == "should"
-            ? "recommend"
-            : temp.toLowerCase() == "should-not" ||
-              temp.toLowerCase() == "shouldnot"
-            ? "nonrecommend"
-            : temp.toLowerCase();
-        break;
-      case "derivedFrom":
-        temp = val.split(",");
-        recData.derivedFrom = temp;
-        break;
-      case "hasSources":
-        temp = val.split(",");
-        recData.hasSource = temp;
-        break;
-      case "attributedTo":
-        recData.wasAttributedTo = val;
-        break;
-      case "generatedTime":
-        recData.generatedAtTime = val;
-        break;
-      case "actAdmin":
-        recData.care_action = val;
-        break;
-    }
-    if (hasFilterSituation.id) recData.hasFilterSituation = hasFilterSituation;
-  }
-
-  return recData;
 }
 
 function action_rec(req, res, insertOrDelete) {
@@ -1120,46 +993,6 @@ function filter_vocab_rec_type(RecUris) {
   return result;
 }
 
-function get_precondition_object(head_vars, binding) {
-  let data_prefix_length = "http://anonymous.org/data/".length;
-  let data_prefix = "http://anonymous.org/data/";
-
-  let precondition_object = {
-    id: undefined,
-    display: undefined,
-    code: undefined,
-    system: undefined,
-  };
-
-  //format rdf by looping through head vars
-  for (let pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-    logger.debug(`headVar is ${headVar}`);
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
-
-    //otherwise, retrieve value
-    let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`);
-    //for each heading, add a field
-
-    //for each heading, add a field
-    switch (headVar) {
-      case "pred_id":
-        precondition_object.id = value;
-        precondition_object.code = value.slice(data_prefix_length);
-        precondition_object.system = data_prefix;
-        break;
-      case "lbl":
-        precondition_object.display = value;
-        break;
-    }
-  }
-
-  return precondition_object;
-}
-
 function get_CB_object(head_vars, binding) {
   logger.debug(head_vars);
   logger.debug(binding);
@@ -1276,7 +1109,7 @@ function get_CB_object(head_vars, binding) {
         break;
       case "propUriSCT":
         cbData.transition.property.code = value;
-        cbData.transition.property.system = sctUri;
+        cbData.transition.property.system = sct_prefix;
         break;
       case "propUri":
         cbData.transition.property.id = value;
@@ -1307,7 +1140,7 @@ function get_CB_object(head_vars, binding) {
         break;
       case "sctPreSit":
         cbData.transition.situationTypes[0].value.code = value;
-        cbData.transition.situationTypes[0].value.system = sctUri;
+        cbData.transition.situationTypes[0].value.system = sct_prefix;
         break;
       case "sitToLabel":
         cbData.transition.situationTypes[1].value.display = value;
@@ -1317,7 +1150,7 @@ function get_CB_object(head_vars, binding) {
         break;
       case "sitFromIdSCT":
         cbData.transition.situationTypes[0].value.code = value;
-        cbData.transition.situationTypes[0].value.system = sctUri;
+        cbData.transition.situationTypes[0].value.system = sct_prefix;
         break;
       case "deriv":
         temp = value.split("/");
@@ -1326,7 +1159,7 @@ function get_CB_object(head_vars, binding) {
         break;
       case "sitToIdSCT":
         cbData.transition.situationTypes[1].value.code = value;
-        cbData.transition.situationTypes[1].value.system = sctUri;
+        cbData.transition.situationTypes[1].value.system = sct_prefix;
         break;
       default:
         logger.debug(
@@ -1456,14 +1289,12 @@ module.exports = {
   insert_precond_in_rec,
   insert_CB_in_rec,
   action_rec,
-  get_rec_json_data,
-  get_gpRec_data,
-  get_ST_data,
-  get_rec_data,
-  sctUri,
+  get_care_action_data,
+  get_causation_belief_data_short,
+  get_causation_belief_w_transition_data,
+  get_recommendation_data_short,
+  sctUri: sct_prefix,
   setUri,
-  care_action_handlers,
-  get_transition_object,
   get_rdf_atom_as_array,
   sparql_drop_named_graphs,
   get_CB_object,
@@ -1471,6 +1302,5 @@ module.exports = {
   get_sparqlquery_arr,
   get_CB_uris_from_bindings,
   set_cig_id,
-  get_precondition_object,
   set_uri,
 };

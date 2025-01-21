@@ -1,80 +1,87 @@
-const createError = require('http-errors');
-const express = require('express');
-const path = require('path');
-const cookieParser = require('cookie-parser');
-const morgan = require('morgan');
-const logger = require('./config/winston');
-const { handleError, ErrorHandler } = require('./lib/errorHandler.js');
-//const bodyParser = require('body-parser')
+const createError = require("http-errors");
+const express = require("express");
+const path = require("path");
+const cookieParser = require("cookie-parser");
+const morgan = require("morgan");
+const logger = require("./config/winston");
+const { handleError } = require("./lib/errorHandler.js");
+require("dotenv").config(); // Load environment variables
 
-// Environment consts
-require('dotenv').config();
-
-const guidelineRouter = require('./routes/guideline');
-const careActionRouter = require('./routes/careAction');
-const beliefRouter = require('./routes/belief');
-const statementRouter = require('./routes/statement');
-const transitionRouter = require('./routes/transition');
-const guidelinesRouter = require('./routes/guidelines');
-const careActionsRouter = require('./routes/careActions');
-const beliefsRouter = require('./routes/beliefs');
-const statementsRouter = require('./routes/statements');
-const transitionsRouter = require('./routes/transitions');
+// Import Routers
+const guidelineRouter = require("./routes/guideline");
+const careActionRouter = require("./routes/careAction");
+const beliefRouter = require("./routes/belief");
+const statementRouter = require("./routes/statement");
+const transitionRouter = require("./routes/transition");
+const guidelinesRouter = require("./routes/guidelines");
+const careActionsRouter = require("./routes/careActions");
+const beliefsRouter = require("./routes/beliefs");
+const statementsRouter = require("./routes/statements");
+const transitionsRouter = require("./routes/transitions");
 
 const app = express();
 const router = express.Router();
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'pug');
+/**
+ * View Engine Setup
+ */
+app.set("views", path.join(__dirname, "views"));
+app.set("view engine", "pug");
 
-app.use(morgan('combined', { stream: logger.stream }));
+/**
+ * Middleware Setup
+ */
+app.use(morgan("combined", { stream: logger.stream }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
-router.get('/', function(req, res, next) {
-  res.end();
+/**
+ * Route Setup
+ */
+router.get("/", (req, res) => res.status(200).send("Welcome to TMR Web API"));
+router.use("/guideline", guidelineRouter);
+router.use("/careAction", careActionRouter);
+router.use("/belief", beliefRouter);
+router.use("/statement", statementRouter);
+router.use("/transition", transitionRouter);
+router.use("/guidelines", guidelinesRouter);
+router.use("/careActions", careActionsRouter);
+router.use("/beliefs", beliefsRouter);
+router.use("/statements", statementsRouter);
+router.use("/transitions", transitionsRouter);
+
+app.use("/tmrweb", router);
+
+/**
+ * Global Error Handling
+ */
+process.on("unhandledRejection", (reason, promise) => {
+  logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
 });
 
-router.use('/guideline', guidelineRouter);
-router.use('/careAction', careActionRouter);
-router.use('/belief', beliefRouter);
-router.use('/statement', statementRouter);
-router.use('/transition', transitionRouter);
-router.use('/guidelines', guidelinesRouter);
-router.use('/careActions', careActionsRouter);
-router.use('/beliefs', beliefsRouter);
-router.use('/statements', statementsRouter);
-router.use('/transitions', transitionsRouter);
-
-app.use('/tmrweb', router);
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.log('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Application specific logging, throwing an error, or other logic here
+// Catch 404 Errors
+app.use((req, res, next) => {
+  next(createError(404, "Endpoint not found"));
 });
 
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
+// General Error Handler
+app.use((err, req, res, next) => {
+  const status = err.status || 500;
+  const message = err.message || "Internal Server Error";
+
+  logger.error(
+    `${status} - ${message} - ${req.originalUrl} - ${req.method} - ${req.ip}`
+  );
+
+  res.locals.message = message;
+  res.locals.error = req.app.get("env") === "development" ? err : {};
+
+  res.status(status).json({
+    status: "error",
+    message,
+  });
 });
 
-// error handler
-app.use(function(err, req, res, next) {
-
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
-
-  logger.error(`${err.status || 500} - ${err.message} - ${req.originalUrl} - ${req.method} - ${req.ip}`);
-  
-  // render the error page
-  res.status(err.status || 500);
-  //new error handler
-  handleError(err, res);
-  res.render('error');
-});
-
-module.exports = app; //DEBUG=drug-interaction-middleware:* npm run devstart
+module.exports = app;
