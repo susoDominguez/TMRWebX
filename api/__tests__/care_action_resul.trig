@@ -1,0 +1,68 @@
+<http://anonymous.org/data/DrugTId>
+        a       <http://anonymous.org/vocab/DrugType> , <http://www.w3.org/2002/07/owl#NamedIndividual>;
+        <http://www.w3.org/2000/01/rdf-schema#label>
+                "action_label"@en;
+        <http://anonymous.org/vocab/label>
+                "text"@en;
+        <http://anonymous.org/vocab/sctid>
+                "1234" .
+
+<http://anonymous.org/data/ActAdministerId>
+        a       <http://www.w3.org/2002/07/owl#NamedIndividual> , <http://anonymous.org/vocab/DrugAdministrationType> , <http://anonymous.org/vocab/VaccineType>;
+        <http://www.w3.org/2000/01/rdf-schema#label>
+                "action_label"@en , "action_lb"@en , "action_lbl"@en;
+        <http://anonymous.org/vocab/administrationOf>
+                <http://anonymous.org/data/DrugTId> , <http://anonymous.org/data/NonDrugTId> , <http://anonymous.org/data/DrugCatId>;
+        <http://anonymous.org/vocab/combinedAdministrationOf>
+                <http://anonymous.org/data/DrugCombTId>;
+        <http://anonymous.org/vocab/label>
+                "action text"@en , "action_text"@en;
+        <http://anonymous.org/vocab/sctid>
+                "5678" , "4567" , "action_sctid";
+        <http://anonymous.org/vocab/vaccinationWith>
+                <http://anonymous.org/data/VacTId> , <http://anonymous.org/data/VacCatId> .
+
+<http://anonymous.org/data/NonDrugTId>
+        a       <http://www.w3.org/2002/07/owl#NamedIndividual> , <http://anonymous.org/vocab/NonDrugType>;
+        <http://www.w3.org/2000/01/rdf-schema#label>
+                "action_label"@en;
+        <http://anonymous.org/vocab/label>
+                "text"@en;
+        <http://anonymous.org/vocab/sctid>
+                "1234" .
+
+<http://anonymous.org/data/DrugCombTId>
+        a       <http://www.w3.org/2002/07/owl#NamedIndividual> , <http://anonymous.org/vocab/DrugCombinationType>;
+        <http://www.w3.org/2000/01/rdf-schema#label>
+                "action_lb"@en;
+        <http://anonymous.org/vocab/label>
+                "text"@en;
+        <http://anonymous.org/vocab/sctid>
+                "1234" .
+
+<http://anonymous.org/data/DrugCatId>
+        a       <http://www.w3.org/2002/07/owl#NamedIndividual> , <http://anonymous.org/vocab/DrugCategory>;
+        <http://www.w3.org/2000/01/rdf-schema#label>
+                "action_lbl"@en;
+        <http://anonymous.org/vocab/label>
+                "text"@en;
+        <http://anonymous.org/vocab/sctid>
+                "1234" .
+
+<http://anonymous.org/data/VacTId>
+        a       <http://www.w3.org/2002/07/owl#NamedIndividual> , <http://anonymous.org/vocab/VaccineType>;
+        <http://www.w3.org/2000/01/rdf-schema#label>
+                "action_label"@en;
+        <http://anonymous.org/vocab/label>
+                "456"@en;
+        <http://anonymous.org/vocab/sctid>
+                "4525" .
+
+<http://anonymous.org/data/VacCatId>
+        a       <http://www.w3.org/2002/07/owl#NamedIndividual> , <http://anonymous.org/vocab/VaccineCategory>;
+        <http://www.w3.org/2000/01/rdf-schema#label>
+                "action_label"@en;
+        <http://anonymous.org/vocab/label>
+                "text"@en;
+        <http://anonymous.org/vocab/sctid>
+                "373304005" .
