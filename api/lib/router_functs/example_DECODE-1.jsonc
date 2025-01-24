@@ -32,7 +32,16 @@
         ],
         "text": "medicinal product containing only thiazide" //a less formal representation of the value. Could be taken from the existing coding or provided as new
       }
-    }
+    },
+    "hasGroupingCriteria": [
+        "http://anonymous.org/data/TrAntinflammatory",
+        "http://anonymous.org/data/SitNonSteroidalDrug"
+    ],
+    "hasComponents": [
+        "http://anonymous.org/data/ActAdministerLABA",
+        "http://anonymous.org/data/ActAdministerLAMA",
+        "http://anonymous.org/data/ActAdministerICS"
+    ]
   }, // A list of beliefs on how the administration of the care action will affect the properties defined below (currently using one elemnt only)
   "causation_beliefs": [
     {
@@ -52,6 +61,11 @@
                 "code": "PropBP",
                 "display": "Blood pressure",
                 "system": "http://anonymous.org/tmr/data"
+              },
+              {
+                "code": "1234",
+                "display": "Blood pressure sct",
+                "system":  "http://snomed.info/sct/"
               }
             ],
             "text": "blood pressure"

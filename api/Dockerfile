@@ -1,33 +1,39 @@
-# Use a specific version of the node image with an updated SHA for security purposes
-FROM node:lts-alpine@sha256:76badf0d0284ad838536d49d8a804988b4985fc6bc7242dfff4f8216c851438b
+# Use a specific version of the Node.js image
+# Use a lightweight Node.js 23 image
+FROM node:23-alpine
 
-# Install dumb-init to handle PID 1 signals gracefully
+# Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
-# Set environment variables for production mode
-ARG NODE_ENV=development
+# Define build arguments and set environment variables
+ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
 
 # Set working directory
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json and install dependencies
+# Copy package.json and package-lock.json for dependency installation
 COPY --chown=node:node package*.json ./
 
-# Install dev dependencies in development and production dependencies in production
-RUN if [ "$NODE_ENV" = "production" ]; then npm ci --only=production; else npm install; fi
+# Install dependencies based on the environment
+RUN if [ "$NODE_ENV" = "production" ]; then \
+    npm ci --only=production && npm cache clean --force; \
+    else \
+    npm install && npm cache clean --force; \
+    fi
 
-# Copy the rest of the app’s source code
-COPY --chown=node:node . .
+# Copy the rest of the application code (conditionally skipped in development)
+ARG SKIP_COPY=false
+COPY --chown=node:node . ./
 
-# Switch to a non-root user for security reasons
+# Switch to a non-root user for security
 USER node
 
-# Expose the port the app runs on
+# Expose the application port
 EXPOSE 8888
 
-# Use dumb-init as the entrypoint for proper signal handling and to avoid zombie processes
+# Use dumb-init as the entrypoint for proper signal handling
 ENTRYPOINT ["dumb-init", "--"]
 
-# Run the app
-CMD ["node", "./bin/www"]
+# Default command for production or development
+CMD ["sh", "-c", "if [ \"$NODE_ENV\" = \"development\" ]; then npm run devstart; else npm start; fi"]

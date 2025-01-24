@@ -13,17 +13,16 @@ let reasoner_config = {
   baseURL: `http://${config.PROLOG_HOST}:${config.PROLOG_PORT}`,
   timeout: 1000,
   auth: {
-    username: `${config.FUSEKI_USER || 'admin'}`,
-    password: `${config.FUSEKI_PASSWORD || 'road2h'}`,
+    username: `${config.FUSEKI_USER || "admin"}`,
+    password: `${config.FUSEKI_PASSWORD || "road2h"}`,
   },
   headers: {
     "Content-Type": "application/x-www-form-urlencoded",
     Authorization: `Basic ${Buffer.from(
-      `${config.FUSEKI_USER || 'admin'}:${config.FUSEKI_PASSWORD || 'road2h'}`
+      `${config.FUSEKI_USER || "admin"}:${config.FUSEKI_PASSWORD || "road2h"}`
     ).toString("base64")}`,
   },
 };
-
 
 const jena_baseUrl = `http://${config.JENA_HOST || "127.0.0.1"}:${
   config.JENA_PORT || "3030"
@@ -67,7 +66,6 @@ function nList(list, n) {
  * @param {(Error, [])} callback callback returns empty array if err found
  */
 async function sparqlQuery(dataset_id, query) {
-  
   //logger.info(`query: ${query}`);
 
   //add URL to axios config
@@ -87,7 +85,7 @@ async function sparqlQuery(dataset_id, query) {
       qs.stringify({ query: prefixAndSparqlQuery }),
       fuseki_headers
     );
-    
+
     //logger.debug(`data is ${JSON.stringify(data)}`);
 
     let response = { status: status, bindings: [], head_vars: [] };
@@ -125,66 +123,50 @@ async function sparqlQuery(dataset_id, query) {
   }
 }
 
-
 /**
+ * Executes a SPARQL query against a Jena Fuseki dataset and returns the raw JSON results.
  *
- * @param {string} dataset_id identifier of CIG
- * @param {string} query SPARQL query
- * @param {(Error, JSON)} callback callback function
+ * @param {string} dataset_id - Identifier of the Fuseki dataset.
+ * @param {string} query - SPARQL query string.
+ * @returns {Promise<JSON>} - Raw SPARQL query results as JSON.
+ * @throws {Error} - If the SPARQL query fails.
  */
 async function sparqlJSONQuery(dataset_id, query) {
-  // logger.debug(`SPRQL query is ${query}`);
   const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query;
 
-  const url =
-    "http://" +
-    config.JENA_HOST +
-    ":" +
-    config.JENA_PORT +
-    "/" +
-    dataset_id +
-    "/query";
+  const url = `http://${config.JENA_HOST}:${config.JENA_PORT}/${dataset_id}/query`;
 
-  let options = {
-    uri: url,
-    method: "POST",
+  const options = {
     headers: {
-      Authorization:
-        "Basic " +
-        new Buffer(`${config.FUSEKI_USER}:${config.FUSEKI_PASSWORD}`).toString(
-          "base64"
-        ),
+      Authorization: `Basic ${Buffer.from(
+        `${config.FUSEKI_USER}:${config.FUSEKI_PASSWORD}`
+      ).toString("base64")}`,
       Accept: "application/sparql-results+json",
     },
-    form: { query: prefixAndSparqlQuery },
   };
-  axios.post(options, function (error, response, body) {
-    if (error || (response && response.statusCode !== 200)) {
-      logger.error(
-        "SPARQL query failed: " +
-          JSON.stringify(response) +
-          ". Error: " +
-          error +
-          ". Body: " +
-          body +
-          ". Status: " +
-          (response && response.statusCode
-            ? response.statusCode
-            : "No response.") +
-          "."
+
+  try {
+    const response = await axios.post(
+      url,
+      { query: prefixAndSparqlQuery },
+      options
+    );
+
+    if (response.status !== 200) {
+      throw new Error(
+        `SPARQL query failed with status code ${response.status}: ${response.statusText}`
       );
-      callback(
-        new ErrorHandler(
-          response ? response.statusCode : 500,
-          `Error: ${JSON.stringify(error)} . Body: ${JSON.stringify(body)}`
-        ),
-        null
-      );
-    } else {
-      // logger.debug("body of sparql result" + JSON.stringify(body));
-      callback(null, JSON.parse(body));
     }
-  });
+
+    return response.data; // Return raw SPARQL results
+  } catch (error) {
+    logger.error(
+      `SPARQL query failed: ${error.message}. Query: ${query}. Dataset: ${dataset_id}`
+    );
+    throw new Error(
+      `SPARQL query error: ${error.message}. Check logs for details.`
+    );
+  }
 }
 
 module.exports = {
@@ -328,14 +310,46 @@ module.exports = {
   },
 
   /**
-   * TODO: review
-   * @param {string} path path to Prolog server function
-   * @param {string} data RDF-based dataset for querying
+   * Calls the Prolog server with the specified path and data.
+   *
+   * @param {string} path - Path to the Prolog server function.
+   * @param {string} data - RDF-based dataset for querying.
+   * @returns {Promise<JSON>} - Response from the Prolog server as JSON.
+   * @throws {Error} - If the request fails.
    */
   callPrologServer: async function (path, data) {
-    const reasoner_instance = axios.create(reasoner_config);
+    try {
+      // Ensure the path does not accidentally contain leading/trailing slashes
+      const sanitizedPath = path.replace(/^\/+|\/+$/g, "");
 
-    return reasoner_instance.post("/" + path, { data: data });
+      // Create an Axios instance using the reasoner configuration
+      const reasonerInstance = axios.create(reasoner_config);
+
+      // Make a POST request to the Prolog server
+      const response = await reasonerInstance.post(`/${sanitizedPath}`, {
+        data,
+      });
+
+      // Check for non-200 HTTP status codes
+      if (response.status !== 200) {
+        throw new Error(
+          `Prolog server returned status ${response.status}: ${response.statusText}`
+        );
+      }
+
+      // Return the response data
+      return response.data;
+    } catch (error) {
+      // Log the error for debugging
+      logger.error(
+        `Prolog server call failed. Path: ${path}. Error: ${error.message}`
+      );
+
+      // Throw a user-friendly error
+      throw new Error(
+        `Failed to call Prolog server at path '${path}'. Check logs for details.`
+      );
+    }
   },
 
   /**
@@ -369,9 +383,11 @@ module.exports = {
     return sparqlQuery(dataset_id, query);
   },
 
-  get_named_subject_in_named_graphs_from_object: async function (dataset_id, instance) {
-    let query =
-      `
+  get_named_subject_in_named_graphs_from_object: async function (
+    dataset_id,
+    instance
+  ) {
+    let query = `
   SELECT DISTINCT ?s
   WHERE {
     GRAPH ?g { ?s a ${instance} } .
@@ -479,7 +495,7 @@ module.exports = {
       }
 		`;
 
-    return sparqlQuery(dataset_id, query);
+    return sparqlJSONQuery(dataset_id, query);
   },
 
   /**
@@ -494,7 +510,7 @@ module.exports = {
       ?pred_id rdfs:label ?lbl .
       FILTER (?pred_id = <${TrUri}> && (?type = vocab:PredicateType || ?type = vocab:PreconditionType ) ) . }
 		`;
-    return sparqlQuery(dataset_id, query);
+    return sparqlJSONQuery(dataset_id, query);
   },
 
   /**
@@ -506,7 +522,12 @@ module.exports = {
   getCareActionData: async function (dataset_id, id, uri) {
     let atom = id ? `data:ActAdminister${id}` : `<${uri}>`;
 
-    let query = `SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?snomed ?drugTid
+    const query = `
+      PREFIX vocab: <http://example.com/vocab#>
+      PREFIX owl: <http://www.w3.org/2002/07/owl#>
+      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    
+      SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
       (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
       (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
       (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
@@ -519,15 +540,16 @@ module.exports = {
      OPTIONAL { ?actId vocab:hasComponent ?component . }  
 			   ?drugTid a owl:NamedIndividual , ?drugType  ;
 			         rdfs:label ?drugLabel .
-			OPTIONAL { ?drugTid vocab:sctid  ?snomed . }
+			OPTIONAL { ?drugTid vocab:sctid  ?sctid . }
+      OPTIONAL { ?sctid rdfs:label ?sctid_label . }
       OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
       OPTIONAL { ?drugTid owl:sameAs ?same . } 
 			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
-		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?snomed ?drugTid ?adminT
+		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?adminT
 		`;
     //logger.debug(query);
 
-    return sparqlQuery(dataset_id, query);
+    return sparqlJSONQuery(dataset_id, query);
   },
 
   /**
@@ -535,12 +557,18 @@ module.exports = {
    * @param {string} datasetId
    * @param {string} sta_Uri
    */
-  getStatementData: async function (datasetId = "statements", sta_id = null, sta_uri = null) {
+  getStatementData: async function (
+    datasetId = "statements",
+    sta_id = null,
+    sta_uri = null
+  ) {
+    if (!sta_id && !sta_uri)
+      throw new ErrorHandler(500, `statement URI is missing.`);
 
-    if (!sta_id && !sta_uri) throw new ErrorHandler(500, `statement URI is missing.`);
-    
     const st_assert = sta_uri ? `<${sta_uri}>` : `data:ST${sta_id}`;
-    const st_prov = sta_uri ? `<${sta_uri}_provenance>` : `data:ST${sta_id}_provenance`;
+    const st_prov = sta_uri
+      ? `<${sta_uri}_provenance>`
+      : `data:ST${sta_id}_provenance`;
 
     let query = `
 	    SELECT DISTINCT 
@@ -557,7 +585,7 @@ module.exports = {
           ?id_prov  prov:wasDerivedFrom ?derivedFromSt . 
         }
 	  } `;
-    return sparqlQuery(datasetId, query);
+    return sparqlJSONQuery(datasetId, query);
   },
 
   /**
@@ -593,7 +621,7 @@ module.exports = {
       "/query>";
 
     //format belief_id
-    if(belief_id.startsWith('http')) belief_id = `<${belief_id}>`;
+    if (belief_id.startsWith("http")) belief_id = `<${belief_id}>`;
 
     let query = `
     SELECT DISTINCT 
@@ -638,7 +666,7 @@ module.exports = {
       }
     }
     `;
-    return sparqlQuery(datasetId, query);
+    return sparqlJSONQuery(datasetId, query);
   },
 
   /**
@@ -656,13 +684,10 @@ module.exports = {
     trDsId,
     caDsId
   ) {
-
-
     const recAssertURI = `<${rec_uri}>`;
     const recProvURI = `<${rec_uri}_provenance>`;
     const recPubInfoURI = `<${rec_uri}_publicationinfo>`;
     const recHeadURI = `<${rec_uri}_head>`;
-
 
     const actUrl =
       "<http://" +
@@ -774,9 +799,9 @@ module.exports = {
     }
        `;
 
-  logger.info(`query: ${query}`);
+    logger.info(`query: ${query}`);
 
-    return sparqlQuery(cigId, query);
+    return sparqlJSONQuery(cigId, query);
   },
 
   /**
@@ -787,11 +812,7 @@ module.exports = {
    * @param {string} TrDsId
    * @param {string} actDsId
    */
-  getRecStmntData: async function (
-    cigId,
-    recAssertUri,
-    StatmntsId
-  ) {
+  getRecStmntData: async function (cigId, recAssertUri, StatmntsId) {
     const recHeadURI = `<` + recAssertUri + `_head>`;
     const graphUri = `<` + recAssertUri + `>`;
     const recProvURI = `<` + recAssertUri + `_provenance>`;
@@ -823,7 +844,7 @@ module.exports = {
       } GROUP BY ?gpRecId ?label ?partOf ?extractedFrom ?wasDerivedFrom
        `;
 
-    return sparqlQuery(cigId, query);
+    return sparqlJSONQuery(cigId, query);
   },
 
   /**
@@ -864,7 +885,6 @@ module.exports = {
       }
  	   }  GROUP BY ?recId ?text ?actAdmin ?cbUri ?strength ?contrib ?partOf ?extractedFrom ?attributedTo ?generatedAtTime ?pred `;
 
-    return sparqlQuery(cigId, query);
+    return sparqlJSONQuery(cigId, query);
   },
-
 };

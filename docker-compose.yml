@@ -1,21 +1,21 @@
-version: '3.8'
+version: "3.8"
 
 services:
   busybox:
-    image: busybox
+    image: busybox:1.37.0
     container_name: fuseki-data
-    networks: 
+    networks:
       - cig_handler
-    volumes: 
+    volumes:
       - "drug_volume:/fuseki"
-    
+
   store_app:
-    image: stain/jena-fuseki:5.1.0  # Pin to a specific version
+    image: stain/jena-fuseki:5.1.0
     container_name: store_service
     restart: unless-stopped
-    ports: 
+    ports:
       - "3030:3030"
-    networks: 
+    networks:
       - cig_handler
     environment:
       - ADMIN_PASSWORD=road2h
@@ -25,21 +25,30 @@ services:
       - FUSEKI_DATASET_3=beliefs
       - FUSEKI_DATASET_4=statements
       - JVM_ARGS=-Xmx2g
-    depends_on: 
+    depends_on:
       - busybox
-  
+
   interaction_app:
-    build: 
+    build:
       context: ./api/
       dockerfile: Dockerfile
+      args:
+        NODE_ENV: development
+        SKIP_COPY: true # Skip copying source code in the image
     image: road2h-interaction_ms
     container_name: interaction_service
     restart: unless-stopped
     ports:
-      - "8888:8888"
-    networks: 
+      - "8888:8888" # Application port
+      - "9229:9229" # Debugger port
+    command: ["npx", "nodemon", "--inspect=0.0.0.0:9229", "./bin/www"]
+    networks:
       - cig_handler
+    volumes:
+      - ./api/:/usr/src/app/ # Bind mount the local source code
+      - /usr/src/app/node_modules/ # Ensure node_modules inside the container is preserved
     environment:
+      - NODE_ENV=development
       - JENA_HOST=store_service
       - PROLOG_HOST=reasoner_service
       - JENA_PORT=3030
@@ -50,25 +59,28 @@ services:
       - reasoner_app
 
   reasoner_app:
-    build: 
+    build:
       context: ./backend/
       dockerfile: Dockerfile
     image: road2h-reasoner_ms
     container_name: reasoner_service
     restart: unless-stopped
-    stdin_open: true  # Keep container interactive
-    tty: true         # Allocate a pseudo-TTY
-    ports: 
+    stdin_open: true # Keep container interactive
+    tty: true # Allocate a pseudo-TTY
+    ports:
       - "1234:1234"
-    networks: 
+    networks:
       - cig_handler
     environment:
       - FUSEKI_HOST_PORT=http://store_service:3030/
-    depends_on: 
+    depends_on:
       - store_app
 
 volumes:
   drug_volume: {}
 
 networks:
-  cig_handler: {}
+  cig_handler:
+    driver: bridge
+#docker buildx build --platform linux/amd64,linux/arm64 -t road2h-interaction_ms ./api/
+#docker buildx build --platform linux/amd64,linux/arm64 -t road2h-reasoner_ms ./backend/
