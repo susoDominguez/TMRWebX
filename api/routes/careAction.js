@@ -127,6 +127,18 @@ function deleteFilter(type, id) {
 }
 
 // Routes
+// drug type
+router.post("/drug/individual/add", async function (req, res) {
+  try {
+    const { type } = req.body;
+    const sparqlQuery = careActionDefinition(req, type);
+    const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
+    res.status(status).send(data);
+  } catch (err) {
+    logger.error(`Error adding care action: ${err}`);
+    res.status(500).send({ error: "Failed to add care action" });
+  }
+});
 router.post("/add", async (req, res) => {
   try {
     const { type } = req.body;

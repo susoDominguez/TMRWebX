@@ -745,7 +745,7 @@ function set_uri(label, prefix = null, fullUri = false, shortenedURI = false) {
  * @param {Boolean} fullUri set the label argument as a full URI? otherwise, just the identifying section of the URI
  *  @param {Boolean} shortenedURI set the label argument as a shortened URI?
  */
-function setUri(label, prefix = null, fullUri = false, shortenedURI = false) {
+function set_uri(label, prefix = null, fullUri = false, shortenedURI = false) {
   //if its already full URI, return
   if (label.includes(data_prefix)) return label;
 
@@ -993,184 +993,6 @@ function filter_vocab_rec_type(RecUris) {
   return result;
 }
 
-function get_CB_object(head_vars, binding) {
-  logger.debug(head_vars);
-  logger.debug(binding);
-
-  const cbData = {
-    id: undefined,
-    author: undefined,
-    contribution: undefined,
-    derivedFrom: undefined,
-    hasSource: undefined,
-    wasAttributedTo: undefined,
-    generatedAtTime: undefined,
-    probability: undefined,
-    evidence: undefined,
-    careActionTypeRef: undefined,
-    transition: {
-      id: undefined,
-      effect: undefined,
-      property: {
-        id: undefined,
-        code: {
-          coding: [
-            {
-              code: undefined,
-              system: undefined,
-              display: undefined,
-            },
-          ],
-          label: undefined,
-        },
-      },
-      situationTypes: [
-        {
-          id: undefined,
-          type: "hasTransformableSituation",
-          value: {
-            stateOfProp: undefined,
-            system: undefined,
-            display: undefined,
-            code: undefined,
-          },
-        },
-        {
-          id: undefined,
-          type: "hasExpectedSituation",
-          value: {
-            stateOfProp: undefined,
-            system: undefined,
-            display: undefined,
-            code: undefined,
-          },
-        },
-      ],
-    },
-  };
-
-  //format rdf by looping through head vars
-  for (let pos in head_vars) {
-    //variable name
-    let headVar = head_vars[pos];
-    logger.debug(`headVar is ${headVar}`);
-    //check there is a corresponding binding, if not, next head var
-    if (!binding.hasOwnProperty(headVar)) continue;
-
-    //otherwise, retrieve value
-    let value = binding[headVar].value;
-    logger.debug(`binding value is ${value}`);
-    //temporary var
-    let temp;
-
-    //for each CB
-    switch (headVar) {
-      case "cbUri":
-        cbData.id = value;
-        break;
-      case "derivedFromCB":
-        temp = value.split(",");
-        cbData.derivedFrom = temp;
-        break;
-      case "hasSourcesCB":
-        temp = value.split(",");
-        cbData.hasSource = temp;
-        break;
-      case "contrib":
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.contribution = temp.toLowerCase();
-        break;
-      case "actAdmin":
-        cbData.careActionTypeRef = value;
-        break;
-      case "cbUri":
-        cbData.id = value;
-        break;
-      case "freq":
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.probability = temp.toLowerCase();
-        break;
-      case "strength":
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.evidence = temp.toLowerCase();
-      case "evidence":
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.evidence = temp.toLowerCase();
-        break;
-      case "TrUri":
-        cbData.transition.id = value;
-        break;
-      case "propLabel":
-        cbData.transition.property.display = value;
-        break;
-      case "propUriSCT":
-        cbData.transition.property.code = value;
-        cbData.transition.property.system = sct_prefix;
-        break;
-      case "propUri":
-        cbData.transition.property.id = value;
-        //extract code
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.transition.property.code = temp;
-        break;
-      case "sitFromId":
-        cbData.transition.situationTypes[0].id = value;
-        //extract code
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.transition.situationTypes[0].value.id = temp;
-        break;
-      case "sitToId":
-        cbData.transition.situationTypes[1].id = value;
-        //extract code
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.transition.situationTypes[1].value.id = temp;
-        break;
-      case "sitFromLabel":
-        cbData.transition.situationTypes[0].value.display = value;
-        break;
-      case "sitFromStateOf":
-        cbData.transition.situationTypes[0].value.stateOfProp = value;
-        break;
-      case "sctPreSit":
-        cbData.transition.situationTypes[0].value.code = value;
-        cbData.transition.situationTypes[0].value.system = sct_prefix;
-        break;
-      case "sitToLabel":
-        cbData.transition.situationTypes[1].value.display = value;
-        break;
-      case "sitToStateOf":
-        cbData.transition.situationTypes[1].value.stateOfProp = value;
-        break;
-      case "sitFromIdSCT":
-        cbData.transition.situationTypes[0].value.code = value;
-        cbData.transition.situationTypes[0].value.system = sct_prefix;
-        break;
-      case "deriv":
-        temp = value.split("/");
-        temp = temp[temp.length - 1];
-        cbData.transition.effect = temp.toLowerCase();
-        break;
-      case "sitToIdSCT":
-        cbData.transition.situationTypes[1].value.code = value;
-        cbData.transition.situationTypes[1].value.system = sct_prefix;
-        break;
-      default:
-        logger.debug(
-          "switch headVar param: " + headVar + " with value : " + value
-        );
-        break;
-    }
-  } //endOf loop
-  return cbData;
-}
-
 async function get_rdf_atom_as_array(bindings) {
   let expr = jsonata("[**.value]");
   const result = await expr
@@ -1293,11 +1115,9 @@ module.exports = {
   get_causation_belief_data_short,
   get_causation_belief_w_transition_data,
   get_recommendation_data_short,
-  sctUri: sct_prefix,
-  setUri,
+  setUri: set_uri,
   get_rdf_atom_as_array,
   sparql_drop_named_graphs,
-  get_CB_object,
   addGraphsDataFromToCig,
   get_sparqlquery_arr,
   get_CB_uris_from_bindings,
