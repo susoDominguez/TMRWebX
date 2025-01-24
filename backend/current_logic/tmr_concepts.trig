@@ -1,4 +1,4 @@
-#:- use_module(rdf_prefixes).
+:- use_module(rdf_prefixes).
 #:- rdf_prefix(vocab, 'http://anonymous.org/vocab#').
 # to be applied at end of file
 :- use_module(predicate_properties).

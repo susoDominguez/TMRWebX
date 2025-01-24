@@ -1,5 +1,4 @@
-#:- use_module(rdf_prefixes).
-#:- rdf_prefix(vocab, 'http://anonymous.org/vocab#').
+:- use_module(rdf_prefixes).
 
 <http://anonymous.org/vocab/> rdf:type owl:Ontology .
 
