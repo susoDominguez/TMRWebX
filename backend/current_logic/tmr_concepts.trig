@@ -74,11 +74,15 @@ vocab:DrugAdministrationType rdf:type owl:Class ;
     owl:disjointWith vocab:NonDrugAdministrationType  .
 
 # general type for care actions involving vaccines
-# currently identified as subclass of DrugAdminT # TODO: define own category and label interactions accordingly
 vocab:VaccinationType rdf:type owl:Class ;
-        rdfs:subClassOf vocab:DrugAdministrationType ;
-        owl:disjointWith vocab:NonDrugAdministrationType .
+        rdfs:subClassOf vocab:CareActionType ;
+        owl:disjointWith vocab:NonDrugAdministrationType , vocab:DrugAdministrationType .
 
+#TODO: vocab:CombinedCareActionType
+
+#
+# Care action subtypes
+#
 # type of health care elements that are not drug-related (pharmacotherapy or otherwise)
 vocab:NonDrugType rdf:type owl:Class ;
         rdfs:subClassOf vocab:Type ;

@@ -19,11 +19,45 @@ const Types = {
   VaccineType: "VaccineType",
   VacCat: "VacCat",
   VaccineCategory: "VaccineCategory",
-  DrugAdminT : "DrugAdministrationType",
-  combinedAdminOf: "combinedAdministrationOf",
+  DrugAdminT: "DrugAdministrationType",
+  //combinedAdminOf: "combinedAdministrationOf",
   vaccWith: "vaccinationWith",
-  adminOf: "administrationOf"
+  adminOf: "administrationOf",
+  applyOf: "applicationOf"
 };
+
+function typePostfix(typeClass) {
+  return typeClass === Types.NonDrugType 
+          ? Types.NonDrugT 
+          : typeClass === Types.VacCat 
+            ? Types.VaccineCategory
+            : typeClass === VaccineType
+              ? Types.VacT
+              : typeClass === Types.DrugCategory
+                ? Types.DrugCat
+                : typeClass === Types.DrugCombinationType
+                ? Types.DrugCombT
+                : Types.DrugT ;
+} ;
+
+function typeRelationship(typeClass) {
+  return typeClass === Types.NonDrugType 
+          ? Types.applyOf
+          : (typeClass === Types.VacCat || typeClass === VaccineType)
+              ? Types.vaccWith
+              : Types.adminOf ;
+} ;
+
+function definedSct(dataId, sctid, sctid_label){
+  let sctDef = "";
+  
+  if(auxFunct.isValidArgument(sctid)){
+    sctDef += `${dataId} vocab:hasSctid snomed:${sctid} .`;
+    if(auxFunct.isValidArgument(sctid_label)){
+      sctDef += `${dataId} skos:prefLabel "${sctid_label}"@en .`
+    }
+  }
+}
 
 // SPARQL Query Helper
 async function postCareAction(sparqlQuery, operationType, type = "", id = "") {
@@ -39,112 +73,79 @@ async function postCareAction(sparqlQuery, operationType, type = "", id = "") {
 }
 
 // RDF Definitions
-function defineDrug(type, id, text) {
-  const typeClass =
-    type === Types.DrugCat
-      ? Types.DrugCategory
-      : type === Types.DrugCombT
-      ? Types.DrugCombinationType
-      : Types.DrugType;
+function defineIntervention(typeClass, id, label, sctid, label_sctid) {
+  const TypeId = typePostfix(typeClass);
+  const dataId = `data:${TypeId}${id}`;
+
+  let def = `${dataId}  a  vocab:${typeClass} , owl:NamedIndividual ;
+                        rdfs:label "${label}"@en .` ;
+
+      def += definedSct(dataId, sctid, label_sctid);
+
+  return def ;
+}
+
+function defineCareAction(typeClass, id, label, sctid, label_sctid, subsumptionList=[], groupingCriteriaList=[]) {
+  const TypeId = typePostfix(typeClass);
+  const relationship = typeRelationship(typeClass);
+  const dataId = `data:${TypeId}${id}`;
+
+  let def = `data:ActAdminister${id} a vocab:${typeClass}, owl:NamedIndividual ;
+                  rdfs:label "${label}"@en ;
+                  vocab:${relationship} ${dataId} .`;
     
-  return  `data:${type}${id} a vocab:${typeClass}, owl:NamedIndividual ; 
-            vocab:label "${text}"@en  `  ;
-}
-
-function defineVaccine(type, id, text) {
-  const typeClass =
-    type === Types.VacCat ? Types.VaccineCategory : Types.VaccineType;
-  return `data:${type}${id} a vocab:${typeClass}, owl:NamedIndividual ;
-                            vocab:label "${text}"@en `
-}
-
-function defineNonDrug(type, id, text) {
-    return `data:${type}${id} a vocab:${Types.NonDrugType}, owl:NamedIndividual ; 
-                             vocab:label "${text}"@en  `
-  } ;
-
-function defineAdminAction(type, id, action_text, action_sctid, action_label) {
-  const typeClass =
-    type === Types.VacT || type === Types.VacCat
-      ? Types.VaccineType
-      : type === Types.DrugCombT
-      ? Types.DrugAdminT
-      : Types.DrugAdminT;
-
-  const relationship =
-    type === Types.DrugCombT
-      ? Types.combinedAdminOf
-      : type === Types.VacT || type === Types.VacCat
-      ? Types.vaccWith
-      : Types.adminOf;
-
-      let data = `data:ActAdminister${id} a vocab:${typeClass}, owl:NamedIndividual ;
-                  vocab:label "${action_text}"@en ;
-                  vocab:${relationship} data:${type}${id}  `
-      
-      if(action_sctid) {
-        data += ` ; vocab:sctid  "${action_sctid}"^^xsd:string  `
-      }
-
-      if(action_sctid && action_label){
-        data+= ` ;  rdfs:label  "${action_label}"@en `
-      } else {
-        data+= ` ; rdfs:label  "${action_text}"@en `
-      }
-
-      data+= ` .`
-      
-  return   data ;
+  for (let i = 0; i < groupingCriteriaList.length; i++) {
+          def += `data:ActAdminister${id} vocab:hasGroupingCriteria data:${groupingCriteriaList[i]} .`);
   }
+
+  for (let i = 0; i < subsumptionList.length; i++) {
+    def += `data:ActAdminister${id} vocab:subsumes data:ActAdminister${subsumptionList[i]} .`);
+  }
+
+  def += definedSct(dataId, sctid, label_sctid);
+   // TODO: skos:broader ?
+
+  return def;
+}
 
 // Define Care Actions
-function careActionDefinition(req, type) {
-  const { 
-    id, 
-    text = id,
-    action_text = id,
-    label = undefined, 
-    action_label = undefined,
-    sctid,
-    action_sctid
-  } = req.body;
-  
-  let definition ;
+function careActionDefinition(req, typeClass) {
 
-  if (type === Types.VacT || type === Types.VacCat) {
-    definition = defineVaccine(type, id, text, sctid, label);
-  } else if (type === Types.NonDrugT) {
-    definition = defineNonDrug(type, id, text, sctid, label);
-  } else {
-    definition = defineDrug(type, id, text, sctid, label);
-  }
+  const { id, label_drug, label_action, label_sctid_drug, label_sctid_action, sctid_drug, sctid_action, subsumed_ids, grouping_criteria_ids, components_ids } = req.body;
+  //validate core arguments
+  if([id, label_drug,label_action].some(field => ! auxFunct.isValidArgument(field))) return res.status(400).json({ error: 'Missing or invalid required fields' });
 
-  //add SCT code
-  if(sctid) {
-    definition += ` ; vocab:sctid  "${sctid}"^^xsd:string  `
-  }
+  let definition = defineIntervention(typeClass, id, label_drug, sctid_drug, label_sctid_drug, components_ids);
 
-  if(sctid && label){
-    definition+= `  ; rdfs:label  "${action_label}"@en `
-  } else {
-    definition+= ` ; rdfs:label  "${action_text}"@en `
-  }
+  let subsumptionList = auxFunct.isValidArgument(subsumed_ids) ? subsumed_ids.split(",").map(item => item.trim()) : [];
+  let groupingCriteriaList = auxFunct.isValidArgument(grouping_criteria_ids) ? subsumed_ids.split(",").map(item => item.trim()) : [];
 
-  const adminDefinition = defineAdminAction(type, id, action_text, action_sctid, action_label);
+  const adminDefinition = defineCareAction(
+    typeClass,
+    id,
+    label_action,
+    sctid_action,
+    label_sctid_action,
+    subsumptionList,
+    groupingCriteriaList
+  );
 
   return `${definition} . \n${adminDefinition}`;
 }
 
 // DELETE Filters
-function deleteFilter(type, id) {
-  return `FILTER (?s = data:${type}${id} || ?s = data:ActAdminister${id})`;
+function deleteFilter(typeClass, id) {
+  const Type = typePostfix(typeClass);
+  return `FILTER (?s = data:${Type}${id} || ?s = data:ActAdminister${id})`;
 }
 
 // Routes
+
+
 // drug type
 router.post("/drug/individual/add", async function (req, res) {
   try {
-    const sparqlQuery = careActionDefinition(req, Types.DrugT);
+    const sparqlQuery = careActionDefinition(req, Types.DrugType);
     const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
     res.status(status).send(data);
   } catch (err) {
@@ -155,19 +156,20 @@ router.post("/drug/individual/add", async function (req, res) {
 
 router.post("/nondrug/individual/add", async function (req, res) {
   try {
-    const sparqlQuery = careActionDefinition(req, Types.NonDrugT);
+    const sparqlQuery = careActionDefinition(req, Types.NonDrugType);
     const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
     res.status(status).send(data);
   } catch (err) {
     logger.error(`Error adding non-drug related care action: ${err}`);
-    res.status(500).send({ error: "Failed to add non-drug related  care action" });
+    res
+      .status(500)
+      .send({ error: "Failed to add non-drug related  care action" });
   }
 });
 
-
 router.post("/drug/category/add", async (req, res) => {
   try {
-    const sparqlQuery = careActionDefinition(req, Types.DrugCat);
+    const sparqlQuery = careActionDefinition(req, Types.DrugCategory);
     const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
     res.status(status).send(data);
   } catch (err) {
@@ -178,18 +180,20 @@ router.post("/drug/category/add", async (req, res) => {
 
 router.post("/drug/combination/add", async (req, res) => {
   try {
-    const sparqlQuery = careActionDefinition(req, Types.DrugCombT);
+    const sparqlQuery = careActionDefinition(req, Types.DrugCombinationType);
     const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
     res.status(status).send(data);
   } catch (err) {
     logger.error(`Error adding drug combination care action: ${err}`);
-    res.status(500).send({ error: "Failed to add drug combination care action" });
+    res
+      .status(500)
+      .send({ error: "Failed to add drug combination care action" });
   }
 });
 
 router.post("/vaccine/individual/add", async (req, res) => {
   try {
-    const sparqlQuery = careActionDefinition(req, Types.VacT);
+    const sparqlQuery = careActionDefinition(req, Types.VaccineType);
     const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
     res.status(status).send(data);
   } catch (err) {
@@ -200,7 +204,7 @@ router.post("/vaccine/individual/add", async (req, res) => {
 
 router.post("/vaccine/category/add", async (req, res) => {
   try {
-    const sparqlQuery = careActionDefinition(req, Types.VacCat);
+    const sparqlQuery = careActionDefinition(req, Types.VaccineCategory);
     const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
     res.status(status).send(data);
   } catch (err) {
@@ -209,16 +213,14 @@ router.post("/vaccine/category/add", async (req, res) => {
   }
 });
 
-
 ////////////
 /// DELETE
 ///////////
 
-
 router.post("/drug/individual/delete", async (req, res) => {
   try {
     const { id } = req.body;
-    const filter = deleteFilter(Types.DrugT, id);
+    const filter = deleteFilter(Types.DrugType, id);
     const { status, data } = await postCareAction(filter, config.DELETE);
     res.status(status).send(data);
   } catch (err) {
@@ -230,7 +232,7 @@ router.post("/drug/individual/delete", async (req, res) => {
 router.post("/drug/category/delete", async (req, res) => {
   try {
     const { id } = req.body;
-    const filter = deleteFilter(Types.DrugCat, id);
+    const filter = deleteFilter(Types.DrugCategory, id);
     const { status, data } = await postCareAction(filter, config.DELETE);
     res.status(status).send(data);
   } catch (err) {
@@ -242,19 +244,21 @@ router.post("/drug/category/delete", async (req, res) => {
 router.post("/nondrug/individual/delete", async (req, res) => {
   try {
     const { id } = req.body;
-    const filter = deleteFilter(Types.NonDrugT, id);
+    const filter = deleteFilter(Types.NonDrugType, id);
     const { status, data } = await postCareAction(filter, config.DELETE);
     res.status(status).send(data);
   } catch (err) {
     logger.error(`Error deleting non-drug-related care action: ${err}`);
-    res.status(500).send({ error: "Failed to delete non-drug-related care action" });
+    res
+      .status(500)
+      .send({ error: "Failed to delete non-drug-related care action" });
   }
 });
 
 router.post("/vaccine/individual/delete", async (req, res) => {
   try {
     const { id } = req.body;
-    const filter = deleteFilter(Types.VacT, id);
+    const filter = deleteFilter(Types.VaccineType, id);
     const { status, data } = await postCareAction(filter, config.DELETE);
     res.status(status).send(data);
   } catch (err) {
@@ -266,7 +270,7 @@ router.post("/vaccine/individual/delete", async (req, res) => {
 router.post("/vaccine/category/delete", async (req, res) => {
   try {
     const { id } = req.body;
-    const filter = deleteFilter(Types.VacCat, id);
+    const filter = deleteFilter(Types.VaccineCategory, id);
     const { status, data } = await postCareAction(filter, config.DELETE);
     res.status(status).send(data);
   } catch (err) {
@@ -275,11 +279,9 @@ router.post("/vaccine/category/delete", async (req, res) => {
   }
 });
 
-
 //////////////////
 // GET  care action type
 /////////////////
-
 
 router.post("/all/get", async (req, res) => {
   try {
@@ -294,18 +296,3 @@ router.post("/all/get", async (req, res) => {
 });
 
 module.exports = router;
-
-/*
-
-curl --location 'http://localhost:8888/tmrweb/careAction/drug/individual/add' \
---header 'Content-Type: application/x-www-form-urlencoded' \
---data-urlencode 'id=Simvastatin40mg' \
---data-urlencode 'label=label' \
---data-urlencode 'text=text' \
---data-urlencode 'action_label=administer product containing Simvastatin 40mg tablets' \
---data-urlencode 'action_text=action text' \
---data-urlencode 'subsumed_ids=drug_A, drug_B' \
---data-urlencode 'sctid=42382311000001100' \
---data-urlencode 'action_sctid=423823'
-
-*/

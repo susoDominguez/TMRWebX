@@ -9,17 +9,3 @@ module.exports = {
   FUSEKI_USER: process.env.FUSEKI_USER || "admin",
   PORT: process.env.PORT || "8888",
 };
-
-/*
-SERVICE `+ actUrl + ` {
-	?actAdmin a owl:NamedIndividual .
-	?actAdmin a ?adminT .
-	?actAdmin	?Of ?actId .
-	?actAdmin rdfs:label ?adminLabel .
-	?actId a owl:NamedIndividual .
-	?actId a ?actType .
-	?actId rdfs:label ?actLabel .
-	FILTER (?actType != owl:NamedIndividual &&
-		 (?Of = tmr:administrationOf || ?Of = tmr:applicationOf || ?Of = tmr:inoculationOf) &&
-		 ?adminT != owl:NamedIndividual) .
-}*/

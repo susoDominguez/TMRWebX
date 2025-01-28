@@ -10,6 +10,11 @@ const sct_prefix = `http://snomed.info/sct/`;
 const data_prefix_length = "http://anonymous.org/data/".length;
 const vocab_prefix_length = "http://anonymous.org/vocab/".length;
 
+function isValidArgument(arg) {
+  return arg !== undefined && arg !== null && arg.trim() !== '';
+}
+
+
 function transformSPARQLResults(sparqlResults, schema, context = {}) {
   /**
    * Utility function to set a value in a nested object using a dot-separated path.
@@ -1107,6 +1112,7 @@ function addGraphsDataFromToCig(
 }
 
 module.exports = {
+  isValidArgument,
   filter_vocab_rec_type,
   insert_precond_in_rec,
   insert_CB_in_rec,
