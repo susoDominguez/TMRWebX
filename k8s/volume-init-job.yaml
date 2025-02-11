@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: volume-init-job
+spec:
+  template:
+    spec:
+      containers:
+        - name: busybox
+          image: busybox:1.37.0
+          command: ["sh", "-c", "mkdir -p /fuseki && echo 'Volume initialized' > /fuseki/init.txt"]
+          volumeMounts:
+            - name: drug-volume
+              mountPath: /fuseki
+      volumes:
+        - name: drug-volume
+          persistentVolumeClaim:
+            claimName: drug-volume-claim
+      restartPolicy: Never
+  backoffLimit: 1

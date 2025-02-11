@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fuseki-data
+spec:
+  #storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /mnt/data/fuseki
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fuseki-data-claim
+spec:
+  #storageClassName: standard
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
