@@ -1,8 +1,15 @@
-:- use_module(rdf_prefixes).
-#:- rdf_prefix(vocab, 'http://anonymous.org/vocab#').
-# to be applied at end of file
-:- use_module(predicate_properties).
-
+@prefix : <http://anonymous.org/data/> .
+@prefix data: <http://anonymous.org/data/> .
+@prefix vocab: <http://anonymous.org/vocab/> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix nanopub: <http://www.nanopub.org/nschema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix owl2: <http://www.w3.org/2006/12/owl2#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdfg: <http://www.w3.org/2004/03/trix/rdfg-1/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 <http://anonymous.org/vocab/> rdf:type owl:Ontology .
 
@@ -14,7 +21,6 @@
 #   General & Event-related Classes
 #################################################################
 
-#TODO: for library rdfs, do we need to define rdfs:Class?
 vocab:Type rdf:type owl:Class, rdfs:Class ;
     rdfs:subClassOf owl:Thing .
 
@@ -361,13 +367,13 @@ _:allDisjointEvidenceLevels a owl:AllDisjointClasses ;
 # Subsumption Properties
 vocab:subsumes rdf:type owl:ObjectProperty, owl:TransitiveProperty, owl2:IrreflexiveProperty, owl2:AsymmetricProperty ;
     rdfs:domain vocab:Type ;
-    rdfs:range vocab:Type .
+    rdfs:range vocab:Type ;
     rdfs:comment "Indicates that one type is more general than another." .
 
 vocab:subsumedBy rdf:type owl:ObjectProperty, owl:TransitiveProperty, owl2:IrreflexiveProperty, owl2:AsymmetricProperty ;
     owl:inverseOf vocab:subsumes ;
     rdfs:domain vocab:Type ;
-    rdfs:range vocab:Type .
+    rdfs:range vocab:Type ;
     rdfs:comment "Indicates that one type is more specific than another." .
 
 # Part-Whole Relationship
@@ -613,8 +619,3 @@ vocab:stateOf rdf:type owl:DatatypeProperty ;
 #the probability of achieving a contribution's transition
 vocab:probability rdf:type owl:DatatypeProperty ;
     rdfs:domain vocab:CausationBelief .
-
-##########
-# Initializes the predicate properties module
-#########
-:- predicate_properties

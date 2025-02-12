@@ -13,7 +13,7 @@
 :- use_module(library(http/json)).
 
 % Prefixes
-:- use_module(current_logic/rdf_prefixes).
+:- use_module(current_logic/rdf_tmr_prefixes).
 
 :- http_handler(root(interactions), show_interactions, []).
 :- http_handler(root(interactions_json), show_interactions_json, []).
@@ -28,8 +28,8 @@
 
 preload_ontologies :-
     rdf_reset_db, % Clear the database
-    loadBaseOntologies,
-    loadOntologies.
+    load_base_ontologies,
+    load_ontologies.
 
 
 % Start the HTTP server

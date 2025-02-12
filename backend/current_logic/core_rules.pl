@@ -5,7 +5,7 @@
     hasComponentRelation/2
 ]).
 
-:- use_module(rdf_prefixes). % Load your prefix module for vocab namespaces
+:- use_module(rdf_tmr_prefixes). % Load your prefix module for vocab namespaces
 
 :- use_module(library(semweb/rdf11)).
 :- use_module(library(semweb/rdfs)).

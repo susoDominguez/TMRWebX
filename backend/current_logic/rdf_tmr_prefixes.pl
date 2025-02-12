@@ -1,4 +1,4 @@
-:- module(rdf_prefixes, []).
+:- module(rdf_tmr_prefixes, []).
 
 :- rdf_prefix(data, 'http://anonymous.org/data/').
 :- rdf_prefix(vocab, 'http://anonymous.org/vocab/').
