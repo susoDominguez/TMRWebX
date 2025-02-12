@@ -18,7 +18,7 @@ spec:
           ports:
             - containerPort: 8888
             - containerPort: 9229
-          command: ["npx", "nodemon", "--inspect=0.0.0.0:9229", "./bin/www"]
+          command: ["sh", "-c", "if [ \"$NODE_ENV\" = \"development\" ]; then npm run devstart; else npm start; fi"]
           env:
             - name: NODE_ENV
               value: "development"

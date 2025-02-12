@@ -36,4 +36,6 @@ EXPOSE 8888
 ENTRYPOINT ["dumb-init", "--"]
 
 # Default command for production or development
+# Default command for production or development
+# Default command for production or development
 CMD ["sh", "-c", "if [ \"$NODE_ENV\" = \"development\" ]; then npm run devstart; else npm start; fi"]
