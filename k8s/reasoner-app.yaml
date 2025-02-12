@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reasoner-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reasoner-app
+  template:
+    metadata:
+      labels:
+        app: reasoner-app
+    spec:
+      containers:
+        - name: reasoner-app
+          image: road2h-reasoner_ms
+          ports:
+            - containerPort: 1234
+          env:
+            - name: FUSEKI_HOST_PORT
+              value: "http://store-service:3030/"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reasoner-service
+spec:
+  ports:
+    - port: 1234
+  selector:
+    app: reasoner-app

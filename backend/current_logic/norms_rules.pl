@@ -1,7 +1,7 @@
 :- module(norm_rules, [similarTo/2, has_relation_action_types/2, regulates/4, regulates/5, regulates/6, causes/4, causes/5, basedOn/3, incompatibleWith/3, inverse_transitions/2, inverse_transitions/3, similar_transitions/2, similar_transitions/3, is_greater_or_eq_modifier_than/2, is_greater_modifier_than/2]).
 
 :- use_module(core_rules).
-:- use_module(rdf_prefixes).
+:- use_module(rdf_tmr_prefixes).
 
 :- use_module(library(semweb/rdf11)).        % Enhanced RDF querying and typed literals
 :- use_module(library(semweb/rdf_db)).       % Core RDF database management

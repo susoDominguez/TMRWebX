@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: interaction-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: interaction-app
+  template:
+    metadata:
+      labels:
+        app: interaction-app
+    spec:
+      containers:
+        - name: interaction-app
+          image: road2h-interaction_ms
+          ports:
+            - containerPort: 8888
+            - containerPort: 9229
+          command: ["npx", "nodemon", "--inspect=0.0.0.0:9229", "./bin/www"]
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: JENA_HOST
+              value: "store-service"
+            - name: PROLOG_HOST
+              value: "reasoner-service"
+            - name: JENA_PORT
+              value: "3030"
+            - name: PROLOG_PORT
+              value: "1234"
+            - name: PORT
+              value: "8888"
+            - name: FUSEKI_PASSWORD
+              value: "road2h"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: interaction-service
+spec:
+  ports:
+    - name: http
+      port: 8888
+    - name: debugger
+      port: 9229
+  selector:
+    app: interaction-app

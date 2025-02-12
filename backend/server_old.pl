@@ -13,17 +13,8 @@
 :- use_module(library(semweb/rdf_ntriples)).
 :- use_module(library(thread_pool)).
 :- use_module(library(http/json)).
-              
 
-% Prefixes
-%:- rdf_prefix(data, 'http://anonymous.org/tmr/data/').
-:- rdf_prefix(data, 'http://anonymous.org/data/').
-%:- rdf_prefix(tmr, 'http://anonymous.org/tmr/').
-:- rdf_prefix(vocab, 'http://anonymous.org/vocab/').
-:- rdf_prefix(vocab4i, 'http://anonymous.org/vocab4i/').
-:- rdf_prefix(oa, 'http,//www.w3.org/ns/oa#').
-:- rdf_prefix(prov, 'http://www.w3.org/ns/prov#').
-:- rdf_prefix(nanopub, 'http://www.nanopub.org/nschema#').
+:- use_module(current_logic/rdf_tmr_prefixes).
 
 :- http_handler(root(interactions), show_interactions, []). %[spawn(compute) ]).
 
@@ -43,8 +34,8 @@ load_guideline_group(Dataset_id, Dataset_graph_id) :-
 
 show_interactions(Request) :-
   rdf_reset_db,
-  loadBaseOntologies,
-  loadOntologies,
+  load_base_ontologies,
+  load_ontologies,
   http_parameters(Request, [ guideline_id(Dataset_id, [ string ]) ]),
   load_guideline_group(Dataset_id, Dataset_graph_id),
   inferInternalInteractions,
@@ -57,8 +48,8 @@ show_interactions(Request) :-
 
   show_interactions_json(Request) :-
     rdf_reset_db,
-    loadBaseOntologies,
-    loadOntologies,
+    load_base_ontologies,
+    load_ontologies,
     http_parameters(Request, [ guideline_id(Dataset_id, [ string ]) ]),
     load_guideline_group(Dataset_id, Dataset_graph_id),
     inferInternalInteractions,
@@ -79,5 +70,5 @@ show_interactions(Request) :-
 
   
   % These functions below dont work becuase they only remove the named graph not the whole dataset
-  % unloadOntologies,     
+  % unload_ontologies,     
   % rdf_unload_graph(Dataset_graph_id).

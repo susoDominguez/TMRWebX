@@ -5,6 +5,8 @@
 :- use_module(library(semweb/rdf_db)).
 :- use_module(library(semweb/rdfs)).
 
+:- use_module(current_logic/rdf_tmr_prefixes).
+
 % Base Ontologies: Local Ontologies Loaded at Startup
 load_base_ontologies :-
     forall(

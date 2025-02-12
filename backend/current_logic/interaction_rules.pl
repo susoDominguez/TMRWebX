@@ -2,7 +2,7 @@
 :- use_module(core_rules).
 :- use_module(norm_rules).
 
-:- use_module(rdf_prefixes).
+:- use_module(rdf_tmr_prefixes).
 
 :- use_module(library(semweb/rdf11)).        % Enhanced RDF querying and typed literals
 :- use_module(library(semweb/rdf_db)).       % Core RDF database management
