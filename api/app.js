@@ -3,24 +3,26 @@ const express = require("express");
 const path = require("path");
 const cookieParser = require("cookie-parser");
 const morgan = require("morgan");
+const helmet = require("helmet");
 const logger = require("./config/winston");
-const { handleError } = require("./lib/errorHandler.js");
+const { handleError } = require("./lib/errorHandler");
 require("dotenv").config(); // Load environment variables
 
 // Import Routers
-const guidelineRouter = require("./routes/guideline");
-const careActionRouter = require("./routes/careAction");
-const beliefRouter = require("./routes/belief");
-const statementRouter = require("./routes/statement");
-const transitionRouter = require("./routes/transition");
-const guidelinesRouter = require("./routes/guidelines");
-const careActionsRouter = require("./routes/careActions");
-const beliefsRouter = require("./routes/beliefs");
-const statementsRouter = require("./routes/statements");
-const transitionsRouter = require("./routes/transitions");
+const routers = [
+  { path: "/guideline", router: require("./routes/guideline") },
+  { path: "/careAction", router: require("./routes/careAction") },
+  { path: "/belief", router: require("./routes/belief") },
+  { path: "/statement", router: require("./routes/statement") },
+  { path: "/transition", router: require("./routes/transition") },
+  { path: "/guidelines", router: require("./routes/guidelines") },
+  { path: "/careActions", router: require("./routes/careActions") },
+  { path: "/beliefs", router: require("./routes/beliefs") },
+  { path: "/statements", router: require("./routes/statements") },
+  { path: "/transitions", router: require("./routes/transitions") },
+];
 
 const app = express();
-const router = express.Router();
 
 /**
  * View Engine Setup
@@ -36,27 +38,29 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
+app.use(helmet()); // Secure HTTP headers
+// app.use(limiter); // Rate limiter (Uncomment if you plan to use)
+
+// Route Setup: Dynamically load routes
+routers.forEach(({ path, router }) => {
+  app.use(path, router);
+});
+
+// Default Route
+app.get("/", (req, res) => res.status(200).send("Welcome to TMR Web API"));
 
 /**
- * Route Setup
+ * Global error handling middleware for custom errors
  */
-router.get("/", (req, res) => res.status(200).send("Welcome to TMR Web API"));
-router.use("/guideline", guidelineRouter);
-router.use("/careAction", careActionRouter);
-router.use("/belief", beliefRouter);
-router.use("/statement", statementRouter);
-router.use("/transition", transitionRouter);
-router.use("/guidelines", guidelinesRouter);
-router.use("/careActions", careActionsRouter);
-router.use("/beliefs", beliefsRouter);
-router.use("/statements", statementsRouter);
-router.use("/transitions", transitionsRouter);
+app.use((err, req, res, next) => {
+  // If the error is an instance of ErrorHandler, use handleError
+  if (err instanceof ErrorHandler) {
+    return handleError(err, res);
+  }
+  next(err); // Pass to the next error handler
+});
 
-app.use("/tmrweb", router);
-
-/**
- * Global Error Handling
- */
+// Catch unhandled promise rejections
 process.on("unhandledRejection", (reason, promise) => {
   logger.error(`Unhandled Rejection at: ${promise}, reason: ${reason}`);
 });

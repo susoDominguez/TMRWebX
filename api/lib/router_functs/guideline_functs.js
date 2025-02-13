@@ -11,9 +11,88 @@ const data_prefix_length = "http://anonymous.org/data/".length;
 const vocab_prefix_length = "http://anonymous.org/vocab/".length;
 
 function isValidArgument(arg) {
-  return arg !== undefined && arg !== null && arg.trim() !== '';
+  return arg?.trim()?.length > 0;
 }
 
+function parseIds(ids) {
+  return auxFunct.isValidArgument(ids)
+    ? ids.split(",").map((item) => item.trim())
+    : [];
+}
+
+const ResourceTypes = Object.freeze({
+  // Drug Types
+  DrugT: "DrugT",
+  DrugType: "DrugType",
+  DrugCat: "DrugCat",
+  DrugCategory: "DrugCategory",
+  DrugCombT: "DrugCombT",
+  DrugCombinationType: "DrugCombinationType",
+  DrugAdminT: "DrugAdministrationType",
+
+  // Non-Drug Types
+  NonDrugT: "NonDrugT",
+  NonDrugType: "NonDrugType",
+
+  // Vaccine Types
+  VacT: "VacT",
+  VaccineType: "VaccineType",
+  VacCat: "VacCat",
+  VaccineCategory: "VaccineCategory",
+
+  // Action Types
+  vaccWith: "vaccinationWith",
+  adminOf: "administrationOf",
+  applyOf: "provisionOf",
+});
+
+/**
+ * Get the corresponding postfix and action type for a given resource type.
+ *
+ * @param {string} typeClass The type of resource (e.g., NonDrugType, VaccineCategory, etc.)
+ * @returns {{ postfix: string, relationship: string }} An object containing:
+ *   - `postfix`: The corresponding postfix for the resource type.
+ *   - `relationship`: The corresponding action type or relationship for the resource type.
+ */
+function getTypeDetails(typeClass) {
+  const typeMap = {
+    [ResourceTypes.NonDrugType]: {
+      postfixTp: ResourceTypes.NonDrugT,
+      actionTp: ResourceTypes.applyOf,
+    },
+    [ResourceTypes.VaccineCategory]: {
+      postfixTp: ResourceTypes.VacCat,
+      actionTp: ResourceTypes.vaccWith,
+    },
+    [ResourceTypes.VaccineType]: {
+      postfixTp: ResourceTypes.VacT,
+      actionTp: ResourceTypes.vaccWith,
+    },
+    [ResourceTypes.DrugCategory]: {
+      postfixTp: ResourceTypes.DrugCat,
+      actionTp: ResourceTypes.adminOf,
+    },
+    [ResourceTypes.DrugCombinationType]: {
+      postfixTp: ResourceTypes.DrugCombT,
+      actionTp: ResourceTypes.adminOf,
+    },
+  };
+
+  return (
+    typeMap[typeClass] || {
+      postfixTp: ResourceTypes.DrugT,
+      actionTp: ResourceTypes.adminOf,
+    }
+  );
+}
+
+/**
+ *
+ * @param {Array} list
+ * @returns
+ */
+const findInvalidField = (list = []) =>
+  list.find((field) => !auxFunct.isValidArgument(field)) ?? null;
 
 function transformSPARQLResults(sparqlResults, schema, context = {}) {
   /**
@@ -1129,4 +1208,8 @@ module.exports = {
   get_CB_uris_from_bindings,
   set_cig_id,
   set_uri,
+  parseIds,
+  ResourceTypes,
+  getTypeDetails,
+  findInvalidField,
 };

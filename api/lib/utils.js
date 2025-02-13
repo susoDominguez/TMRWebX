@@ -2,6 +2,7 @@ const n3 = require("n3");
 const axios = require("axios").default;
 const qs = require("qs");
 const parser = new n3.Parser();
+const { StatusCodes, ReasonPhrases } = require("http-status-codes");
 const { ErrorHandler } = require("./errorHandler.js");
 const config = require("../lib/config");
 const guidelines = require("./prefixes.js");
@@ -80,13 +81,14 @@ async function sparqlQuery(dataset_id, query) {
   });
 
   try {
-    const { status = 500, data = [] } = await axios_instance.post(
-      url,
-      qs.stringify({ query: prefixAndSparqlQuery }),
-      fuseki_headers
-    );
+    const { status = StatusCodes.BAD_GATEWAY, data = [] } =
+      await axios_instance.post(
+        url,
+        qs.stringify({ query: prefixAndSparqlQuery }),
+        fuseki_headers
+      );
 
-    //logger.debug(`data is ${JSON.stringify(data)}`);
+    logger.debug(`data is ${JSON.stringify(data)}`);
 
     let response = { status: status, bindings: [], head_vars: [] };
     if (data.hasOwnProperty("head") && data.head.hasOwnProperty("vars"))

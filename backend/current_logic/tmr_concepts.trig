@@ -449,7 +449,7 @@ vocab:administrationOf a owl:ObjectProperty ;
     rdfs:range vocab:DrugType .
 
 #same as administratioOf but for nonDrug types
-vocab:applicationOf a owl:ObjectProperty ;
+vocab:provisionOf a owl:ObjectProperty ;
     rdfs:subPropertyOf vocab:participationOf ;
     rdfs:domain vocab:NonDrugAdministrationType;
     rdfs:range vocab:NonDrugType .
