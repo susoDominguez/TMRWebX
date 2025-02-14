@@ -136,27 +136,27 @@ vocab:DrugCombinationType rdf:type owl:Class ;
 vocab:DrugCombinationType rdfs:subClassOf _:x .
 _:x a owl:Restriction ;
     owl:onProperty vocab:hasComponent ;
-    owl:allValuesFrom vocab:Type .
+    owl:allValuesFrom vocab:DrugType .
 
-# Restriction: Must have at least one component from vocab:Type
+# Restriction: Must have components from vocab:Type
 vocab:DrugCombinationType rdfs:subClassOf _:x1 .
 _:x1 a owl:Restriction ;
     owl:onProperty vocab:hasComponent ;
-    owl:someValuesFrom vocab:Type .
+    owl:someValuesFrom vocab:DrugType .
 
 # Restriction: Must have at least 2 components
 vocab:DrugCombinationType rdfs:subClassOf _:x2 .
 _:x2 a owl:Restriction ;
     owl:onProperty vocab:hasComponent ;
     owl:minCardinality "2"^^xsd:nonNegativeInteger ;
-    rdfs:onClass vocab:Type .
+    rdfs:onClass vocab:DrugType .
 
 # Restriction: Must have no more than 4 components
 vocab:DrugCombinationType rdfs:subClassOf _:x3 .
 _:x3 a owl:Restriction ;
     owl:onProperty vocab:hasComponent ;
     owl:maxCardinality "4"^^xsd:nonNegativeInteger ;
-    rdfs:onClass vocab:Type .
+    rdfs:onClass vocab:DrugType .
 
 #################################################################
 #   Belief-related Classes
@@ -454,8 +454,8 @@ vocab:provisionOf a owl:ObjectProperty ;
     rdfs:domain vocab:NonDrugAdministrationType;
     rdfs:range vocab:NonDrugType .
 
-vocab:inoculationOf a owl:ObjectProperty ;
-    rdfs:subPropertyOf vocab:administrationOf ; # TODO: participationOf in future iterations
+vocab:vaccinationWith a owl:ObjectProperty ;
+    rdfs:subPropertyOf vocab:participationOf ;
     rdfs:domain vocab:VaccinationType;
     rdfs:range vocab:VaccineType .
 

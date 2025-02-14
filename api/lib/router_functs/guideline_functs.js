@@ -50,9 +50,9 @@ const ResourceTypes = Object.freeze({
  * Get the corresponding postfix and action type for a given resource type.
  *
  * @param {string} typeClass The type of resource (e.g., NonDrugType, VaccineCategory, etc.)
- * @returns {{ postfix: string, relationship: string }} An object containing:
+ * @returns {{ postfix: string, actionTp: string }} An object containing:
  *   - `postfix`: The corresponding postfix for the resource type.
- *   - `relationship`: The corresponding action type or relationship for the resource type.
+ *   - `actionTp`: The corresponding action type or relationship for the resource type.
  */
 function getTypeDetails(typeClass) {
   const typeMap = {

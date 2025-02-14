@@ -1,11 +1,20 @@
 const express = require("express");
+const { body, validationResult } = require("express-validator");
 const { StatusCodes, ReasonPhrases } = require("http-status-codes");
 const router = express.Router();
 const config = require("../lib/config");
 const utils = require("../lib/utils");
-const { ErrorHandler, handleError } = require("../lib/errorHandler");
+const { ErrorHandler } = require("../lib/errorHandler");
 const auxFunct = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
+
+const routes = {
+  "/drug/individual": auxFunct.ResourceTypes.DrugType,
+  "/drug/category": auxFunct.ResourceTypes.DrugCategory,
+  "/nondrug/individual": auxFunct.ResourceTypes.NonDrugType,
+  "/vaccine/individual": auxFunct.ResourceTypes.VaccineType,
+  "/vaccine/category": auxFunct.ResourceTypes.VaccineCategory,
+};
 
 /**
  *
@@ -15,14 +24,14 @@ const logger = require("../config/winston");
  * @returns
  */
 function definedSctResource(dataId, sct_code, sct_label) {
-  let sctDef = "";
+  if (!dataId || !auxFunct.isValidArgument(sct_code)) return "";
 
-  if (dataId && auxFunct.isValidArgument(sct_code)) {
-    sctDef += `${dataId} vocab:hasSctId snomed:${sct_code} .`;
-    if (auxFunct.isValidArgument(sct_label)) {
-      sctDef += `${dataId} vocab:hasSctLbl "${sct_label}"@en .`;
-    }
+  let sctDef = `${dataId} vocab:hasSctId snomed:${sct_code} .`;
+
+  if (auxFunct.isValidArgument(sct_label)) {
+    sctDef += `${dataId} vocab:hasSctLbl "${sct_label}"@en .`;
   }
+
   return sctDef;
 }
 
@@ -42,50 +51,85 @@ async function postCareAction(sparqlQuery, operationType, type = "", id = "") {
 /**
  *
  * @param {string} typeClass resource type
- * @param {string} id resource identifier
+ * @param {string} dataId resource URI
  * @param {string} label resource label
  * @param {string} sct_id Optional SCT identifier
  * @param {string} sct_label Optional SCT english representation
+ * @param {string} components_ids list of resources that compose a drug combination type
  * @returns RDF representation of resource of type string
  */
-function defineResourceType(typeClass, typeId, id, label, sct_id, sct_label) {
-  const dataId = `data:${typeId}${id}`;
-
+function defineResourceType(
+  typeClass,
+  dataId,
+  label,
+  sct_id,
+  sct_label,
+  components_ids = []
+) {
   let def = `${dataId} a vocab:${typeClass} , owl:NamedIndividual ;
                           rdfs:label "${label}"@en .`;
 
+  //Add components types for Drug Combination type
+  if (typeClass === auxFunct.ResourceTypes.DrugCombinationType) {
+    def += components_ids
+      .map((type) => `${dataId} vocab:hasComponent ${type} .`)
+      .join("");
+  }
+
+  // add SCT details
   def += definedSctResource(dataId, sct_id, sct_label);
 
   return def;
 }
 
+/**
+ *
+ * @param {string} typeClass resource type
+ * @param {string} id resource path id
+ * @param {string} postfixTp resource type shortened
+ * @param {string} actionTp
+ * @param {string} label
+ * @param {string} sct_action_id
+ * @param {string} sct_action_label
+ * @param {string} subsumed_ids_str
+ * @param {string} grouping_criteria_ids_str
+ * @returns
+ */
 function defineCareActionType(
   typeClass,
   id,
+  dataId,
+  actionTp,
   label,
-  sct_id,
-  sct_label,
-  subsumptionList = [],
-  groupingCriteriaList = []
+  sct_action_id,
+  sct_action_label,
+  subsumed_ids_str,
+  grouping_criteria_ids_str
 ) {
-  const TypeId = typePostfix(typeClass);
-  const relationship = typeRelationship(typeClass);
-  const dataId = `data:${TypeId}${id}`;
+  const dataActId = `data:ActAdminister${id}`;
 
-  let def = `data:ActAdminister${id} a vocab:${typeClass}, owl:NamedIndividual ;
-                  rdfs:label "${label}"@en ;
-                  vocab:${relationship} ${dataId} .`;
+  const parseList = (input) =>
+    auxFunct.isValidArgument(input)
+      ? input.split(",").map((item) => item.trim())
+      : [];
 
-  for (let i = 0; i < groupingCriteriaList.length; i++) {
-    def += `data:ActAdminister${id} vocab:hasGroupingCriteria data:${groupingCriteriaList[i]} .`;
-  }
+  let def = `${dataActId}  a  vocab:${typeClass},  owl:NamedIndividual ;
+            rdfs:label "${label}"@en ;
+            vocab:${actionTp} ${dataId} .`;
 
-  for (let i = 0; i < subsumptionList.length; i++) {
-    def += `data:ActAdminister${id} vocab:subsumes data:ActAdminister${subsumptionList[i]} .`;
-  }
+  const subsumptionList = parseList(subsumed_ids_str);
+  const groupingCriteriaList = parseList(grouping_criteria_ids_str);
 
-  def += definedSctResource(dataId, sct_id, sct_label);
-  // TODO: skos:broader ?
+  subsumptionList.forEach((item) => {
+    def += `${dataActId} vocab:subsumes data:ActAdminister${item} .`;
+  });
+
+  groupingCriteriaList.forEach((item) => {
+    def += `${dataActId} vocab:hasGroupingCriteria data:${item} .`;
+  });
+
+  def += definedSctResource(dataId, sct_action_id, sct_action_label);
+  // TODO: skos:broader SCT?
 
   return def;
 }
@@ -98,9 +142,7 @@ function defineCareActionType(
  * @param {string} actionTp
  * @returns
  */
-function careActionDefinition(body, typeClass, postfixTp, actionTp) {
-  // body req
-
+function careActionTypeDefinition(body, typeClass, postfixTp, actionTp) {
   const {
     id,
     drug_label,
@@ -111,18 +153,22 @@ function careActionDefinition(body, typeClass, postfixTp, actionTp) {
     sct_action_code,
     subsumed_ids = [],
     grouping_criteria_ids = [],
-    components_ids = [],
+    components_ids, // not given default as must contain elems if part of a combination type
   } = body;
 
-  //validate core arguments for all types
-  const invalidField = findInvalidField([
+  const coreFields = [
     id,
     drug_label,
     action_label,
     typeClass,
     postfixTp,
     actionTp,
-  ]);
+  ];
+  if (typeClass == auxFunct.ResourceTypes.DrugCombinationType)
+    coreFields.push(components_ids);
+
+  //validate core arguments for all types
+  const invalidField = auxFunct.findInvalidField();
 
   if (invalidField) {
     throw new ErrorHandler(
@@ -131,40 +177,34 @@ function careActionDefinition(body, typeClass, postfixTp, actionTp) {
     );
   }
 
+  // resource URI
+  const dataId = `data:${postfixTp}${id}`;
+
   //define the TMR resource type
   let definition = defineResourceType(
     typeClass,
-    id,
+    dataId,
     drug_label,
     sct_drug_code,
     sct_drug_label,
-    components_ids
+    components_ids //this is about combining drug types, hence added to resource type
   );
 
-  let subsumptionList = auxFunct.isValidArgument(subsumed_ids)
-    ? subsumed_ids.split(",").map((item) => item.trim())
-    : [];
-  let groupingCriteriaList = auxFunct.isValidArgument(grouping_criteria_ids)
-    ? subsumed_ids.split(",").map((item) => item.trim())
-    : [];
+  //TODO: action combination type (towards a 1-2-1 mapping of CGs to CIGs)
 
   const adminDefinition = defineCareActionType(
     typeClass,
     id,
+    postfixTp,
+    actionTp,
     action_label,
     sct_action_code,
     sct_action_label,
-    subsumptionList,
-    groupingCriteriaList
+    subsumed_ids,
+    grouping_criteria_ids
   );
 
   return `${definition} . \n${adminDefinition}`;
-}
-
-// DELETE Filters
-function deleteFilter(typeClass, id) {
-  const Type = typePostfix(typeClass);
-  return `FILTER (?s = data:${Type}${id} || ?s = data:ActAdminister${id})`;
 }
 
 //////
@@ -173,274 +213,130 @@ function deleteFilter(typeClass, id) {
 //
 //////
 
-/**
- * Drug type: Add
- */
-router.post("/drug/individual/add", async function (req, res) {
+const addHandler = (resourceType) => async (req, res) => {
   try {
-    const { postfixTp, actionTp } = getTypeDetails(
-      auxFunct.ResourceTypes.DrugType
-    );
+    const { postfixTp, actionTp } = auxFunct.getTypeDetails(resourceType);
 
-    const sparqlQuery = careActionDefinition(
+    const sparqlQuery = careActionTypeDefinition(
       req.body,
-      auxFunct.ResourceTypes.DrugType,
+      resourceType,
       postfixTp,
       actionTp
     );
 
     const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(
-      `Error adding individual drug care action via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
 
-/**
- * Non-drug types: Add
- */
-router.post("/nondrug/individual/add", async function (req, res) {
-  try {
-    const { postfixTp, actionTp } = getTypeDetails(
-      auxFunct.ResourceTypes.NonDrugType
-    );
-    const sparqlQuery = careActionDefinition(
-      req.body,
-      auxFunct.ResourceTypes.NonDrugType,
-      postfixTp,
-      actionTp
-    );
-    const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
     res.status(status).send(data);
   } catch (err) {
-    logger.error(
-      `Error adding individual non-drug care action via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
+    const errorMessage = `Error adding care action (Type: ${resourceType}) via path ${
+      req.path
+    }: ${err.message || err}`;
 
-/**
- * Drug Category type: Add
- */
-router.post("/drug/category/add", async (req, res) => {
-  try {
-    const { postfixTp, actionTp } = getTypeDetails(
-      auxFunct.ResourceTypes.DrugCategory
-    );
-    const sparqlQuery = careActionDefinition(
-      req.body,
-      auxFunct.ResourceTypes.DrugCategory,
-      postfixTp,
-      actionTp
-    );
-    const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(`Error adding drug category via path ${req.path}: ${err}`);
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
+    logger.error(errorMessage);
 
-/**
- * Drug Combination: Add
- */
-router.post("/drug/combination/add", async (req, res) => {
-  try {
-    const { postfixTp, actionTp } = getTypeDetails(
-      auxFunct.ResourceTypes.DrugCombinationType
-    );
-    const sparqlQuery = careActionDefinition(
-      req.body,
-      auxFunct.ResourceTypes.DrugCombinationType,
-      postfixTp,
-      actionTp
-    );
-    const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(`Error adding drug combination via path ${req.path}: ${err}`);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
+      message: ReasonPhrases.INTERNAL_SERVER_ERROR,
+      error: err.message,
     });
   }
-});
-
-/**
- * Vaccine type: Add
- */
-router.post("/vaccine/individual/add", async (req, res) => {
-  try {
-    const { postfixTp, actionTp } = getTypeDetails(
-      auxFunct.ResourceTypes.VaccineType
-    );
-    const sparqlQuery = careActionDefinition(
-      req.body,
-      auxFunct.ResourceTypes.VaccineType,
-      postfixTp,
-      actionTp
-    );
-    const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(
-      `Error adding individual vaccine via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
-
-/**
- * Vaccine Category type: Add
- */
-router.post("/vaccine/category/add", async (req, res) => {
-  try {
-    const { postfixTp, actionTp } = getTypeDetails(
-      auxFunct.ResourceTypes.VaccineCategory
-    );
-    const sparqlQuery = careActionDefinition(
-      req.body,
-      auxFunct.ResourceTypes.VaccineCategory,
-      postfixTp,
-      actionTp
-    );
-    const { status, data } = await postCareAction(sparqlQuery, config.INSERT);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(
-      `Error adding vaccine category care action via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
+};
 
 ////////////
 /// DELETE
 ///////////
 
-router.post("/drug/individual/delete", async (req, res) => {
-  try {
-    const { id } = req.body;
-    const filter = deleteFilter(auxFunct.ResourceTypes.DrugType, id);
-    const { status, data } = await postCareAction(filter, config.DELETE);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(
-      `Error deleting individual drug care action via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
+// DELETE Filters
+function deleteFilter(typeClass, id) {
+  const { postfixTp, actionTp } = auxFunct.getTypeDetails(typeClass);
+  return `FILTER (?s = data:${postfixTp}${id} || ?s = data:ActAdminister${id})`;
+}
 
-router.post("/drug/category/delete", async (req, res) => {
-  try {
-    const { id } = req.body;
-    const filter = deleteFilter(auxFunct.ResourceTypes.DrugCategory, id);
-    const { status, data } = await postCareAction(filter, config.DELETE);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(
-      `Error deleting category drug care action via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+const deleteHandler = (resourceType) => async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(StatusCodes.BAD_REQUEST).json({
       status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
+      message: errors.array(),
     });
   }
-});
 
-router.post("/nondrug/individual/delete", async (req, res) => {
   try {
     const { id } = req.body;
-    const filter = deleteFilter(auxFunct.ResourceTypes.NonDrugType, id);
+    const filter = deleteFilter(resourceType, id);
     const { status, data } = await postCareAction(filter, config.DELETE);
     res.status(status).send(data);
   } catch (err) {
     logger.error(
-      `Error deleting individual nondrug care action via path ${req.path}: ${err}`
+      `Error deleting care action (Type: ${resourceType}, ID: ${req.body.id}) via path ${req.path}: ${err}`
     );
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
+      message: ReasonPhrases.INTERNAL_SERVER_ERROR,
     });
   }
-});
-
-router.post("/vaccine/individual/delete", async (req, res) => {
-  try {
-    const { id } = req.body;
-    const filter = deleteFilter(auxFunct.ResourceTypes.VaccineType, id);
-    const { status, data } = await postCareAction(filter, config.DELETE);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(
-      `Error deleting individual vaccine care action via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
-
-router.post("/vaccine/category/delete", async (req, res) => {
-  try {
-    const { id } = req.body;
-    const filter = deleteFilter(auxFunct.ResourceTypes.VaccineCategory, id);
-    const { status, data } = await postCareAction(filter, config.DELETE);
-    res.status(status).send(data);
-  } catch (err) {
-    logger.error(
-      `Error deleting drug category care action via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
-  }
-});
+};
 
 //////////////////
 // GET  care action type
 /////////////////
 
-router.post("/all/get", async (req, res) => {
-  try {
-    const { id, uri } = req.body;
-    const sparqlResults = await utils.getCareActionData("careActions", id, uri);
-    const data = auxFunct.get_care_action_data(sparqlResults, {});
-    res.status(200).send(data);
-  } catch (err) {
-    logger.error(
-      `Error retrieving all care actions via path ${req.path}: ${err}`
-    );
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "Error",
-      message: ReasonPhrases.BAD_REQUEST,
-    });
+router.post(
+  "/all/get",
+  [
+    body("id").optional().isString().withMessage("ID must be a string."),
+    body("uri").optional().isString().withMessage("URI must be a string."),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "Error",
+        message: errors.array(),
+      });
+    }
+
+    try {
+      const { id, uri } = req.body;
+      const sparqlResults = await utils.getCareActionData(
+        "careActions",
+        id,
+        uri
+      );
+      const data = auxFunct.get_care_action_data(sparqlResults, {});
+      res.status(StatusCodes.OK).send(data);
+    } catch (err) {
+      logger.error(
+        `Error retrieving all care actions via path ${req.path}: ${err.message}`,
+        { stack: err.stack }
+      );
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        status: "Error",
+        message: ReasonPhrases.INTERNAL_SERVER_ERROR,
+      });
+    }
   }
+);
+
+/////////////////
+// Routes Handler
+////////////////
+
+Object.entries(routes).forEach(([route, resourceType]) => {
+  router.post(route + "/add", addHandler(resourceType));
+});
+
+Object.entries(routes).forEach(([route, resourceType]) => {
+  router.post(
+    route + "/delete",
+    [
+      body("id")
+        .isString()
+        .notEmpty()
+        .withMessage("ID is required and must be a string."),
+    ],
+    deleteHandler(resourceType)
+  );
 });
 
 module.exports = router;

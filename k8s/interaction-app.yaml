@@ -17,7 +17,6 @@ spec:
           image: road2h-interaction_ms
           ports:
             - containerPort: 8888
-            - containerPort: 9229
           command: ["sh", "-c", "if [ \"$NODE_ENV\" = \"development\" ]; then npm run devstart; else npm start; fi"]
           env:
             - name: NODE_ENV
