@@ -1,0 +1,6 @@
+# Ignore node_modules and other unnecessary directories
+api/node_modules/
+api/.git/
+backend/venv/
+backend/__pycache__/
+backend/.git/

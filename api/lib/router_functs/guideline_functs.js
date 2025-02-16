@@ -11,7 +11,7 @@ const data_prefix_length = "http://anonymous.org/data/".length;
 const vocab_prefix_length = "http://anonymous.org/vocab/".length;
 
 function isValidArgument(arg) {
-  return arg?.trim()?.length > 0;
+  return typeof arg === "string" && arg.trim().length > 0;
 }
 
 function parseIds(ids) {
