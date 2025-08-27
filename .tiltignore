@@ -4,3 +4,26 @@ api/.git/
 backend/venv/
 backend/__pycache__/
 backend/.git/
+
+# Ignore Git-related files
+.git/
+.gitignore
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore Python cache files (if applicable)
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore IDE and editor temp files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore Docker-related files (if not needed)
+.dockerignore
+docker-compose.override.yml

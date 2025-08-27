@@ -28,7 +28,6 @@ const ResourceTypes = Object.freeze({
   DrugCategory: "DrugCategory",
   DrugCombT: "DrugCombT",
   DrugCombinationType: "DrugCombinationType",
-  DrugAdminT: "DrugAdministrationType",
 
   // Non-Drug Types
   NonDrugT: "NonDrugT",
@@ -41,6 +40,8 @@ const ResourceTypes = Object.freeze({
   VaccineCategory: "VaccineCategory",
 
   // Action Types
+  NonDrugAdminT: "NonDrugAdministrationType",
+  DrugAdminT: "DrugAdministrationType",
   vaccWith: "vaccinationWith",
   adminOf: "administrationOf",
   applyOf: "provisionOf",
@@ -50,31 +51,37 @@ const ResourceTypes = Object.freeze({
  * Get the corresponding postfix and action type for a given resource type.
  *
  * @param {string} typeClass The type of resource (e.g., NonDrugType, VaccineCategory, etc.)
- * @returns {{ postfix: string, actionTp: string }} An object containing:
+ * @returns {{ postfix: string, actionTp: string, adminTp: string }} An object containing:
  *   - `postfix`: The corresponding postfix for the resource type.
  *   - `actionTp`: The corresponding action type or relationship for the resource type.
+ *   - `adminTp`: The corresponding action administration type.
  */
 function getTypeDetails(typeClass) {
   const typeMap = {
     [ResourceTypes.NonDrugType]: {
       postfixTp: ResourceTypes.NonDrugT,
       actionTp: ResourceTypes.applyOf,
+      adminTp: ResourceTypes.NonDrugAdminT,
     },
     [ResourceTypes.VaccineCategory]: {
       postfixTp: ResourceTypes.VacCat,
       actionTp: ResourceTypes.vaccWith,
+      adminTp: ResourceTypes.DrugAdminT,
     },
     [ResourceTypes.VaccineType]: {
       postfixTp: ResourceTypes.VacT,
       actionTp: ResourceTypes.vaccWith,
+      adminTp: ResourceTypes.DrugAdminT,
     },
     [ResourceTypes.DrugCategory]: {
       postfixTp: ResourceTypes.DrugCat,
       actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
     },
     [ResourceTypes.DrugCombinationType]: {
       postfixTp: ResourceTypes.DrugCombT,
       actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
     },
   };
 

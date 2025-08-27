@@ -67,61 +67,44 @@ function nList(list, n) {
  * @param {(Error, [])} callback callback returns empty array if err found
  */
 async function sparqlQuery(dataset_id, query) {
-  //logger.info(`query: ${query}`);
+  const url = `${jena_baseUrl}/${dataset_id}/query`;
+  const prefixAndSparqlQuery = `${guidelines.PREFIXES}\n${query}`;
 
-  //add URL to axios config
-  let url = `${jena_baseUrl}/${dataset_id}/query`;
-
-  const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query;
-
-  //sparql query
-  const axios_instance = axios.create({
+  // Create an axios instance with a timeout and basic auth
+  const axiosInstance = axios.create({
     timeout: 1000,
     auth: basic_auth,
   });
 
   try {
-    const { status = StatusCodes.BAD_GATEWAY, data = [] } =
-      await axios_instance.post(
-        url,
-        qs.stringify({ query: prefixAndSparqlQuery }),
-        fuseki_headers
-      );
+    const { status, data } = await axiosInstance.post(
+      url,
+      qs.stringify({ query: prefixAndSparqlQuery }),
+      fuseki_headers
+    );
 
     logger.debug(`data is ${JSON.stringify(data)}`);
 
-    let response = { status: status, bindings: [], head_vars: [] };
-    if (data.hasOwnProperty("head") && data.head.hasOwnProperty("vars"))
-      response.head_vars = data.head.vars;
-    if (
-      data.hasOwnProperty("results") &&
-      data.results.hasOwnProperty("bindings")
-    )
-      response.bindings = data.results.bindings;
-
-    return response;
+    return {
+      status,
+      head_vars: data?.head?.vars ?? [],
+      bindings: data?.results?.bindings ?? [],
+    };
   } catch (error) {
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
+      // The server responded with a non-2xx status code
       logger.debug(error.response.data);
       logger.debug(error.response.status);
       logger.debug(error.response.headers);
     } else if (error.request) {
       // The request was made but no response was received
-      // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-      // http.ClientRequest in node.js
       logger.debug(error.request);
     } else {
-      // Something happened in setting up the request that triggered an Error
-      logger.debug("Error", error.message ? error.message : error);
+      // An error occurred while setting up the request
+      logger.debug("Error", error.message || error);
     }
     logger.debug(error.config);
-    return {
-      status: 500,
-      bindings: [],
-      head_vars: [],
-    };
+    return { status: 500, head_vars: [], bindings: [] };
   }
 }
 

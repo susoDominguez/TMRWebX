@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reasoner-app
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: reasoner-app
+  template:
+    metadata:
+      labels:
+        app: reasoner-app
+    spec:
+      initContainers:
+        - name: wait-for-store
+          image: busybox
+          command: ["sh", "-c", "until wget -q --spider http://store-app:3030; do echo waiting for store-app; sleep 5; done"]
+      containers:
+        - name: reasoner-app
+          image: road2h-reasoner_ms:latest
+          env:
+            - name: FUSEKI_HOST_PORT
+              value: "http://store-app:3030/"
+          ports:
+            - containerPort: 1234
+          volumeMounts:
+            - mountPath: /app/data
+              name: reasoner-data
+          resources:
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: reasoner-data
+          emptyDir: {}

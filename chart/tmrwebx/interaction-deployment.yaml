@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: interaction-app
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: interaction-app
+  template:
+    metadata:
+      labels:
+        app: interaction-app
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: interaction-container
+          image: road2h-interaction_ms:latest
+          env:
+            - name: NODE_ENV
+              value: development
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8888
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8888
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          ports:
+            - name: http
+              containerPort: 8888
+          volumeMounts:
+            - mountPath: /usr/src/app
+              name: app-volume
+            - mountPath: /usr/src/app/node_modules
+              name: node-modules
+          resources:
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: app-volume
+          persistentVolumeClaim:
+            claimName: drug-volume-claim
+        - name: node-modules
+          emptyDir: {}

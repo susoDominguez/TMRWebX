@@ -7,7 +7,8 @@ services:
     networks:
       - cig_handler
     volumes:
-      - "drug_volume:/fuseki"
+      - drug_volume:/fuseki
+    restart: unless-stopped
 
   store_app:
     image: stain/jena-fuseki:5.1.0
@@ -26,7 +27,14 @@ services:
       - FUSEKI_DATASET_4=statements
       - JVM_ARGS=-Xmx2g
     depends_on:
-      - busybox
+      busybox:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/$/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   interaction_app:
     build:
@@ -34,19 +42,21 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_ENV: development
-        SKIP_COPY: true # Skip copying source code in the image
-    image: road2h-interaction_ms
+        SKIP_COPY: true
+    image: road2h-interaction_ms:latest
     container_name: interaction_service
     restart: unless-stopped
     ports:
-      - "8888:8888" # Application port
-      - "9229:9229" # Debugger port
+      - "8888:8888"
+      - "9229:9229"
     command: ["npx", "nodemon", "--inspect=0.0.0.0:9229", "./bin/www"]
     networks:
       - cig_handler
     volumes:
-      - ./api/:/usr/src/app/ # Bind mount the local source code
-      - /usr/src/app/node_modules/ # Ensure node_modules inside the container is preserved
+      - ./api/:/usr/src/app/
+      - ./api/package.json:/usr/src/app/package.json
+      - ./api/package-lock.json:/usr/src/app/package-lock.json
+      - /usr/src/app/node_modules/
     environment:
       - NODE_ENV=development
       - JENA_HOST=store_service
@@ -56,17 +66,18 @@ services:
       - PORT=8888
       - FUSEKI_PASSWORD=road2h
     depends_on:
-      - reasoner_app
+      reasoner_app:
+        condition: service_healthy
 
   reasoner_app:
     build:
       context: ./backend/
       dockerfile: Dockerfile
-    image: road2h-reasoner_ms
+    image: road2h-reasoner_ms:latest
     container_name: reasoner_service
     restart: unless-stopped
-    stdin_open: true # Keep container interactive
-    tty: true # Allocate a pseudo-TTY
+    stdin_open: true
+    tty: true
     ports:
       - "1234:1234"
     networks:
@@ -74,13 +85,19 @@ services:
     environment:
       - FUSEKI_HOST_PORT=http://store_service:3030/
     depends_on:
-      - store_app
+      store_app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://store_service:3030/$/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
-  drug_volume: {}
+  drug_volume:
+    driver: local
 
 networks:
   cig_handler:
     driver: bridge
-#docker buildx build --platform linux/amd64,linux/arm64 -t road2h-interaction_ms ./api/
-#docker buildx build --platform linux/amd64,linux/arm64 -t road2h-reasoner_ms ./backend/
