@@ -1,29 +1,48 @@
 # Ignore node_modules and other unnecessary directories
+
 api/node_modules/
 api/.git/
 backend/venv/
-backend/__pycache__/
+backend/**pycache**/
 backend/.git/
 
 # Ignore Git-related files
+
 .git/
 .gitignore
 
 # Ignore logs
+
 logs/
-*.log
+\*.log
+api/app.log
 
 # Ignore Python cache files (if applicable)
-__pycache__/
-*.pyc
-*.pyo
+
+**pycache**/
+_.pyc
+_.pyo
 
 # Ignore IDE and editor temp files
+
 .vscode/
 .idea/
-*.swp
-*.swo
+_.swp
+_.swo
+.DS_Store
+
+# Ignore test and coverage files
+
+api/coverage/
+api/.nyc_output/
+api/\*.tmp
 
 # Ignore Docker-related files (if not needed)
+
 .dockerignore
 docker-compose.override.yml
+
+# Ignore environment files
+
+api/.env.local
+api/.env.\*.local

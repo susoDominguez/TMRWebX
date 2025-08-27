@@ -1,4 +1,5 @@
 {
   "name": "tmrwebx",
-  "usingLocalDB": false
+  "usingLocalDB": false,
+  "dev_mode": true
 }

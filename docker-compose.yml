@@ -42,14 +42,13 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_ENV: development
-        SKIP_COPY: true
+        SKIP_COPY: false
     image: road2h-interaction_ms:latest
     container_name: interaction_service
     restart: unless-stopped
     ports:
       - "8888:8888"
       - "9229:9229"
-    command: ["npx", "nodemon", "--inspect=0.0.0.0:9229", "./bin/www"]
     networks:
       - cig_handler
     volumes:
@@ -66,8 +65,16 @@ services:
       - PORT=8888
       - FUSEKI_PASSWORD=road2h
     depends_on:
+      store_app:
+        condition: service_healthy
       reasoner_app:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   reasoner_app:
     build:
@@ -88,11 +95,23 @@ services:
       store_app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://store_service:3030/$/ping"]
-      interval: 10s
-      timeout: 5s
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:1234/health",
+          "||",
+          "netstat",
+          "-tln",
+          "|",
+          "grep",
+          ":1234",
+        ]
+      interval: 30s
+      timeout: 10s
       retries: 5
-      start_period: 10s
+      start_period: 30s
 
 volumes:
   drug_volume:
