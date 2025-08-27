@@ -350,12 +350,12 @@ function createCareActionTypeDefinition(
 
   // Add subsumption relationships
   subsumptionList.forEach((itemId) => {
-    definition += `\n${careActionTypeId} vocab:subsumes data:ActAdminister${itemId} .\n`;
+    definition += `\n${careActionTypeId} vocab:subsumes data/ActAdminister${itemId} .\n`;
   });
 
   // Add grouping criteria relationships
   groupingCriteriaList.forEach((itemId) => {
-    definition += `\n${careActionTypeId} vocab:hasGroupingCriteria data:${itemId} .\n`;
+    definition += `\n${careActionTypeId} vocab:hasGroupingCriteria data/${itemId} .\n`;
   });
 
   return definition;
@@ -422,8 +422,8 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
     }
 
     // Build resource URIs
-    const dataId = `data:${postfixTp}${id}`;
-    const careActionTypeId = `data:ActAdminister${id}`;
+    const dataId = `data/${postfixTp}${id}`;
+    const careActionTypeId = `data/ActAdminister${id}`;
 
     // Create the TMR resource type definition
     let resourceDefinition = createResourceTypeDefinition(
@@ -503,7 +503,7 @@ async function executeCareActionOperation(
       const { postfixTp } = auxFunct.getTypeDetails(resourceType);
       const deletePattern = `
         ?s ?p ?o .
-        FILTER (?s = data:${postfixTp}${id} || ?s = data:ActAdminister${id})
+        FILTER (?s = data/${postfixTp}${id} || ?s = data/ActAdminister${id})
       `;
       sparqlStatement = `DELETE { ${deletePattern} } WHERE { ${deletePattern} }`;
     } else {

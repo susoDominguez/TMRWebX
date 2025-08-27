@@ -505,7 +505,7 @@ module.exports = {
    * @param {string | undefined} uri
    */
   getCareActionData: async function (dataset_id, id, uri) {
-    let atom = id ? `data:ActAdminister${id}` : `<${uri}>`;
+    let atom = id ? `data/ActAdminister${id}` : `<${uri}>`;
 
     const query = `
       PREFIX vocab: <http://anonymous.org/vocab/>
@@ -550,10 +550,10 @@ module.exports = {
     if (!sta_id && !sta_uri)
       throw new ErrorHandler(500, `statement URI is missing.`);
 
-    const st_assert = sta_uri ? `<${sta_uri}>` : `data:ST${sta_id}`;
+    const st_assert = sta_uri ? `<${sta_uri}>` : `data/ST${sta_id}`;
     const st_prov = sta_uri
       ? `<${sta_uri}_provenance>`
-      : `data:ST${sta_id}_provenance`;
+      : `data/ST${sta_id}_provenance`;
 
     let query = `
 	    SELECT DISTINCT 
