@@ -379,6 +379,25 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
       components_ids,
     } = requestBody;
 
+    // Convert string arrays to proper arrays if needed
+    const processedComponentsIds = components_ids
+      ? typeof components_ids === "string"
+        ? components_ids.split(",").map((id) => id.trim())
+        : components_ids
+      : [];
+
+    const processedSubsumedIds = subsumed_ids
+      ? typeof subsumed_ids === "string"
+        ? subsumed_ids.split(",").map((id) => id.trim())
+        : subsumed_ids
+      : [];
+
+    const processedGroupingCriteriaIds = grouping_criteria_ids
+      ? typeof grouping_criteria_ids === "string"
+        ? grouping_criteria_ids.split(",").map((id) => id.trim())
+        : grouping_criteria_ids
+      : [];
+
     const { resourceType } = routeConfig;
     const typeDetails = auxFunct.getTypeDetails(resourceType);
 
@@ -394,7 +413,7 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
     // Validate required components for combination types
     if (
       routeConfig.requiresComponents &&
-      (!components_ids || components_ids.length < 2)
+      (!processedComponentsIds || processedComponentsIds.length < 2)
     ) {
       throw new ErrorHandler(
         StatusCodes.BAD_REQUEST,
@@ -411,7 +430,7 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
       resourceType,
       dataId,
       drug_label,
-      components_ids
+      processedComponentsIds
     );
 
     // Add SNOMED CT details for resource
@@ -428,8 +447,8 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
       adminTp,
       actionTp,
       action_label,
-      subsumed_ids,
-      grouping_criteria_ids
+      processedSubsumedIds,
+      processedGroupingCriteriaIds
     );
 
     // Add SNOMED CT details for action
@@ -447,7 +466,15 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
       definitionLength: completeDefinition.length,
     });
 
-    return completeDefinition;
+    return {
+      definition: completeDefinition,
+      createdIds: {
+        resourceId: dataId,
+        actionId: careActionTypeId,
+        resourceUri: `http://anonymous.org/${dataId}`,
+        actionUri: `http://anonymous.org/${careActionTypeId}`,
+      },
+    };
   } catch (error) {
     logger.error("Failed to create care action definition", {
       error: error.message,
@@ -545,10 +572,8 @@ const createAddHandler = (route, routeConfig) => async (req, res) => {
     });
 
     // Generate SPARQL definition
-    const sparqlQuery = createCompleteCareActionDefinition(
-      req.body,
-      routeConfig
-    );
+    const { definition: sparqlQuery, createdIds } =
+      createCompleteCareActionDefinition(req.body, routeConfig);
 
     // Execute the operation
     const { status, data } = await executeCareActionOperation(
@@ -568,7 +593,10 @@ const createAddHandler = (route, routeConfig) => async (req, res) => {
     res.status(status).json({
       status: "success",
       message: `Care action ${req.body.id} created successfully`,
-      data: data || "Operation completed",
+      data: {
+        operation: data || "Operation completed",
+        createdResources: createdIds,
+      },
     });
   } catch (error) {
     logger.error("Failed to create care action", {

@@ -25,17 +25,17 @@ require("dotenv").config(); // Load environment variables
 
 // Import Routers
 const routers = [
-  { path: "/guideline", router: require("./routes/guideline") },
-  { path: "/careAction", router: require("./routes/careAction") },
-  { path: "/belief", router: require("./routes/belief") },
-  { path: "/statement", router: require("./routes/statement") },
-  { path: "/transition", router: require("./routes/transition") },
-  { path: "/guidelines", router: require("./routes/guidelines") },
-  { path: "/careActions", router: require("./routes/careActions") },
-  { path: "/beliefs", router: require("./routes/beliefs") },
-  { path: "/statements", router: require("./routes/statements") },
-  { path: "/transitions", router: require("./routes/transitions") },
-  { path: "/admin", router: require("./routes/admin") }, // Admin routes
+  { path: "/tmrweb/guideline", router: require("./routes/guideline") },
+  { path: "/tmrweb/careAction", router: require("./routes/careAction") },
+  { path: "/tmrweb/belief", router: require("./routes/belief") },
+  { path: "/tmrweb/statement", router: require("./routes/statement") },
+  { path: "/tmrweb/transition", router: require("./routes/transition") },
+  { path: "/tmrweb/guidelines", router: require("./routes/guidelines") },
+  { path: "/tmrweb/careActions", router: require("./routes/careActions") },
+  { path: "/tmrweb/beliefs", router: require("./routes/beliefs") },
+  { path: "/tmrweb/statements", router: require("./routes/statements") },
+  { path: "/tmrweb/transitions", router: require("./routes/transitions") },
+  { path: "/tmrweb/admin", router: require("./routes/admin") }, // Admin routes
 ];
 
 const app = express();

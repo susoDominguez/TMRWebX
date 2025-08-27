@@ -18,6 +18,8 @@ class DatabaseService {
       FUSEKI_USER: config.FUSEKI_USER || process.env.FUSEKI_USER || "admin",
       FUSEKI_PASSWORD:
         config.FUSEKI_PASSWORD || process.env.FUSEKI_PASSWORD || "admin",
+      FUSEKI_DATASET:
+        config.FUSEKI_DATASET || process.env.FUSEKI_DATASET || "careActions",
       REQUEST_TIMEOUT:
         config.REQUEST_TIMEOUT || process.env.REQUEST_TIMEOUT || 30000,
       ...config,

@@ -296,8 +296,27 @@ router.post("/", [writeLimiter, guidelineValidationRules], async (req, res) => {
       },
     };
 
+    // Create RDF for guideline storage
+    const guidelineUri = `http://anonymous.org/data/CIG${guidelineId}`;
+    const sparqlQuery = `
+      PREFIX vocab: <http://anonymous.org/vocab/>
+      PREFIX data: <http://anonymous.org/data/>
+      
+      INSERT DATA {
+        <${guidelineUri}> a vocab:ClinicalGuideline ;
+          vocab:hasLabel "${guidelineId}" ;
+          vocab:hasContent "${guideline.replace(/"/g, '\\"')}" ;
+          vocab:hasVersion "${guidelineData.metadata.version}" ;
+          vocab:createdAt "${guidelineData.metadata.created_at}" ;
+          vocab:createdBy "${guidelineData.metadata.created_by}" .
+      }
+    `;
+
     // Store guideline in triple store
-    const { status, result } = await utils.store_guideline(guidelineData);
+    const { status, result } = await utils.sparqlUpdate(
+      "guidelines",
+      sparqlQuery
+    );
 
     if (status >= 400) {
       throw new ErrorHandler(
@@ -324,6 +343,7 @@ router.post("/", [writeLimiter, guidelineValidationRules], async (req, res) => {
       message: "Guideline created successfully",
       data: {
         id: guidelineId,
+        guideline_uri: guidelineUri,
         metadata: guidelineData.metadata,
         recommendations_count: parsedGuideline.recommendations?.length || 0,
       },
