@@ -488,14 +488,52 @@ const recommendation_schema = {
 };
 
 const care_action_schema = {
-  actId: { targetKey: "id", transform: (value) => value },
-  adminLabel: { targetKey: "display", transform: (value) => value },
-  subsumes: { targetKey: "subsumes", transform: (value) => value.split(", ") },
+  actId: { targetKey: "id", transform: (value, result) => {  
+    // set the full URI as id
+    result.id = value;
+    //Ensure the value object exists
+    result.value ??= {};
+    result.value.coding ??= [];
+    // set the code and system in the first coding entry
+    result.value.coding[0] ??= {};
+    result.value.coding[0].code = value.slice(value.lastIndexOf("/") + 1); 
+    result.value.coding[0].system = data_prefix;
+    } 
+  },
+  act_label: { targetKey: "value.text", transform: (value, result) => {
+    result.value ??= {};
+    result.value.coding ??= [];
+    result.value.text = value ;
+    result.value.coding[0] ??= {};
+    result.value.coding[0].display = value;
+  } },
+  actSctid: {
+    targetKey: "value.coding[1].code",
+    transform: (value, result) => {
+      result.value ??= {};
+      result.value.coding ??= [];
+      // index 1 is for SCT code
+      result.value.coding[1] ??= {};
+      result.value.coding[1].code = value;
+      result.value.coding[1].system = sct_prefix;
+    }
+  },
+  actSctid_label: {
+    targetKey: "value.coding[1].display",
+    transform: (value, result) => {
+      result.value ??= {};
+      result.value.coding ??= [];
+      // index 1 is for SCT label
+      result.value.coding[1] ??= {};
+      result.value.coding[1].display = value;
+    }
+  },
+  subsumes: { targetKey: "subsumes", transform: (value) => parseIds(value) },
   hasGroupingCriteria: {
     targetKey: "has_grouping_criteria",
-    transform: (value) => value.split(", "),
+    transform: (value) => parseIds(value),
   },
-  sameAs: { targetKey: "same_as", transform: (value) => value.split(", ") },
+  sameAs: { targetKey: "same_as", transform: (value) => parseIds(value) },
   adminT: {
     targetKey: "type",
     transform: (value) => value.slice(value.lastIndexOf("/") + 1),
@@ -515,16 +553,19 @@ const care_action_schema = {
   },
   drugType: {
     targetKey: "administers.type",
-    transform: (value) => value.slice(value.lastIndexOf("/") + 1),
+    transform: (value, result) => {
+      result.administers ??= {};
+      result.administers.type = value.slice(value.lastIndexOf("/") + 1);
+    },
   },
   drugLabel: {
     targetKey: "administers.value.coding[0].display",
     transform: (value, result) => {
       result.administers ??= {};
       result.administers.value ??= { coding: [] };
+      result.administers.value.text = value;
       result.administers.value.coding[0] ??= {};
       result.administers.value.coding[0].display = value;
-      result.administers.value.coding[0].text ??= value;
     },
   },
   sctid: {
@@ -537,7 +578,7 @@ const care_action_schema = {
       result.administers.value.coding[1].system = sct_prefix;
     },
   },
-  sctLbl: {
+  sctid_label: {
     targetKey: "administers.value.coding[1].display",
     transform: (value, result) => {
       result.administers ??= {};
@@ -549,8 +590,11 @@ const care_action_schema = {
   },
   components: {
     targetKey: "administers.has_components",
-    transform: (value) => value.split(", "),
-  },
+    transform: (value, result) => {
+      result.administers ??= {};
+      result.administers.has_components = parseIds(value);
+    }
+  }
 };
 
 const transition_schema = {

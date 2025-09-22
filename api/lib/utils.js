@@ -475,9 +475,9 @@ module.exports = {
       OPTIONAL { ?TrId  vocab:affects  ?propUri .
          ?propUri a  vocab:TropeType ;
            rdfs:label ?propLabel  } .
-      OPTIONAL { ?sitFromId vocab:sctid  ?sitFromIdSCT } .
-      OPTIONAL { ?sitToId vocab:sctid  ?sitToIdSCT } .
-      OPTIONAL { ?propUri vocab:sctid  ?propUriSCT } .
+      OPTIONAL { ?sitFromId vocab:hasSctId  ?sitFromIdSCT } .
+      OPTIONAL { ?sitToId vocab:hasSctId  ?sitToIdSCT } .
+      OPTIONAL { ?propUri vocab:hasSctId  ?propUriSCT } .
       }
 		`;
 
@@ -510,25 +510,27 @@ module.exports = {
     if (uri) {
       const atom = `<${uri}>`;
       const query = `
-        SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
+      SELECT DISTINCT  ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
         (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
         (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
         (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
         (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
-  		WHERE {
+      WHERE {
         ?actId a owl:NamedIndividual , ?adminT ;
-  				       ?Of ?drugTid ;
-  			         rdfs:label ?adminLabel .
-       OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
-       OPTIONAL { ?actId vocab:hasComponent ?component . }  
-  			   ?drugTid a owl:NamedIndividual , ?drugType  ;
-  			         rdfs:label ?drugLabel .
-  			OPTIONAL { ?drugTid vocab:sctid  ?sctid . }
-        OPTIONAL { ?drugTid vocab:sctLbl ?sctid_label . }
+               ?Of ?drugTid ;
+               rdfs:label ?act_label .
+        OPTIONAL { ?actId vocab:hasSctId  ?actSctid . }
+        OPTIONAL { ?actId vocab:hasSctLbl ?actSctid_label . }
+        OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
+        OPTIONAL { ?actId vocab:hasComponent ?component . }  
+        ?drugTid  a  owl:NamedIndividual , ?drugType  ;
+                  rdfs:label ?drugLabel .
+        OPTIONAL { ?drugTid vocab:hasSctId  ?sctid . }
+        OPTIONAL { ?drugTid vocab:hasSctLbl ?sctid_label . }
         OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
         OPTIONAL { ?drugTid owl:sameAs ?same . } 
-  			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
-  		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?adminT ?sctid_label`;
+        FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
+      } GROUP BY ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label`;
 
       return sparqlJSONQuery(dataset_id, query);
     }
@@ -542,25 +544,27 @@ module.exports = {
     for (const prefix of careActionPrefixes) {
       const atom = `data:${prefix}${id}`;
       const query = `
-        SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
+        SELECT DISTINCT  ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
         (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
         (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
         (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
         (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
-  		WHERE {
-        ?actId a owl:NamedIndividual , ?adminT ;
-  				       ?Of ?drugTid ;
-  			         rdfs:label ?adminLabel .
-       OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
-       OPTIONAL { ?actId vocab:hasComponent ?component . }  
-  			   ?drugTid a owl:NamedIndividual , ?drugType  ;
-  			         rdfs:label ?drugLabel .
-  			OPTIONAL { ?drugTid vocab:sctid  ?sctid . }
-        OPTIONAL { ?drugTid vocab:sctLbl ?sctid_label . }
-        OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
-        OPTIONAL { ?drugTid owl:sameAs ?same . } 
-  			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
-  		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?adminT ?sctid_label`;
+        WHERE {
+          ?actId a owl:NamedIndividual , ?adminT ;
+                 ?Of ?drugTid ;
+                 rdfs:label ?act_label .
+          OPTIONAL { ?actId vocab:hasSctId  ?actSctid . }
+          OPTIONAL { ?actId vocab:hasSctLbl ?actSctid_label . }
+          OPTIONAL { ?actId vocab:subsumes ?subsumption . } 
+          OPTIONAL { ?actId vocab:hasComponent ?component . }  
+          ?drugTid a owl:NamedIndividual , ?drugType  ;
+                  rdfs:label ?drugLabel .
+          OPTIONAL { ?drugTid vocab:hasSctId  ?sctid . }
+          OPTIONAL { ?drugTid vocab:hasSctLbl ?sctid_label . }
+          OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
+          OPTIONAL { ?drugTid owl:sameAs ?same . } 
+          FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
+        } GROUP BY ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label`;
 
       try {
         const result = await sparqlJSONQuery(dataset_id, query);
@@ -667,7 +671,7 @@ module.exports = {
     ?cbUri ?freq ?strength ?TrUri
     ?propUri ?propLabel ?propUriSCT
     ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT
-    ?actAdmin ?adminLabel ?actType ?actLabel ?actId
+    ?actAdmin ?act_label ?actType ?actLabel ?actId
     WHERE {
       GRAPH ${belief_id} {
         ?cbUri a vocab:CausationBelief ; 
@@ -679,7 +683,7 @@ module.exports = {
       {
         ?actAdmin a owl:NamedIndividual , ?adminT ;
        	?of ?actId ;
-        rdfs:label ?adminLabel .
+        rdfs:label ?act_label .
         ?actId a owl:NamedIndividual , ?actType ;
         rdfs:label ?actLabel .
         FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
@@ -695,13 +699,13 @@ module.exports = {
            vocab:derivative ?deriv .
         OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
              rdfs:label ?propLabel } .	
-        OPTIONAL { ?propUri vocab:sctid ?propUriSCT } .	        
+        OPTIONAL { ?propUri vocab:hasSctId ?propUriSCT } .	        
         ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitFromLabel .
-        OPTIONAL { ?sitFromId vocab:sctid ?sitFromIdSCT } .
+        OPTIONAL { ?sitFromId vocab:hasSctId ?sitFromIdSCT } .
         ?sitToId a vocab:SituationType , owl:NamedIndividual ;
           rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitToId vocab:sctid ?sitToIdSCT } .
+        OPTIONAL { ?sitToId vocab:hasSctId ?sitToIdSCT } .
       }
     }
     `;
@@ -756,7 +760,7 @@ module.exports = {
       "/query>";
 
     let query = ` SELECT DISTINCT ?cbUri ?cbProvUri ?contrib ?freq ?evidence ?actAdminCb ?text ?strength ?derived ?partOf
-    ?actAdmin ?adminT ?actId ?adminLabel ?actType ?actLabel  ?sctDrg 
+    ?actAdmin ?adminT ?actId ?act_label ?actType ?actLabel  ?sctDrg 
     ?TrUri  ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromSctId ?sitToSctId ?sitFromStateOf ?sitToStateOf
     ?PropUri ?propSctId ?propLabel ?propSctId 
     ?generatedTime ?attributedTo
@@ -789,11 +793,11 @@ module.exports = {
       SERVICE ${actUrl} {
         ?actAdmin a owl:NamedIndividual , ?adminT ;
        	?Of ?actId ;
-       rdfs:label ?adminLabel .
+       rdfs:label ?act_label .
         ?actId a owl:NamedIndividual ;
        a ?actType ;
         rdfs:label ?actLabel .
-        OPTIONAL { ?actId vocab:sctid  ?sctDrg . }
+        OPTIONAL { ?actId vocab:hasSctId  ?sctDrg . }
         OPTIONAL { ?actId vocab:hasComponent  ?hasComponent . 
           ?hasComponent  a owl:NamedIndividual ;
                         a ?compAdminT ;
@@ -829,9 +833,9 @@ module.exports = {
                         rdfs:label ?sitFromLabel .
         ?sitToId a vocab:SituationType ;
                      rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitFromId vocab:sctid ?sitFromSctId .   
-          ?PropUri  vocab:sctid ?propSctId	.	
-          ?sitToId vocab:sctid ?sitToSctId . }
+        OPTIONAL { ?sitFromId vocab:hasSctId ?sitFromSctId .   
+          ?PropUri  vocab:hasSctId ?propSctId	.	
+          ?sitToId vocab:hasSctId ?sitToSctId . }
         OPTIONAL { ?sitFromId vocab:stateOf ?sitFromStateOf . 
             ?sitToId vocab:stateOf ?sitToStateOf . }
       }
