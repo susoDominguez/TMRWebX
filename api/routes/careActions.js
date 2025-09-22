@@ -1,6 +1,6 @@
 /**
  * Handles retrieval and querying of TMR-based care action types
- * Enhanced with better validation, error handling, caching, and monitoring
+ * Enhanced with better validation, error handling, and monitoring
  */
 
 const express = require("express");
@@ -37,8 +37,6 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     description: "Get all individual drug types and vaccines",
     category: "drugs",
     subcategory: "individual",
-    cacheable: true,
-    cacheTime: 300, // 5 minutes
   },
   "/drugs/get": {
     types: [
@@ -52,48 +50,36 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
       "Get all drug-related care actions including combinations, categories, and types",
     category: "drugs",
     subcategory: "all",
-    cacheable: true,
-    cacheTime: 300,
   },
   "/nondrugs/get": {
     types: [CARE_ACTION_TYPES.NonDrugType],
     description: "Get all non-drug care actions",
     category: "nondrugs",
     subcategory: "all",
-    cacheable: true,
-    cacheTime: 300,
   },
   "/drugs/vaccines/get": {
     types: [CARE_ACTION_TYPES.VaccineType],
     description: "Get all vaccine-related care actions",
     category: "drugs",
     subcategory: "vaccines",
-    cacheable: true,
-    cacheTime: 300,
   },
   "/drugs/category/get": {
     types: [CARE_ACTION_TYPES.DrugCategory],
     description: "Get all drug categories",
     category: "drugs",
     subcategory: "category",
-    cacheable: true,
-    cacheTime: 600, // 10 minutes - categories change less frequently
   },
   "/drugs/vaccines/category/get": {
     types: [CARE_ACTION_TYPES.VaccineCategory],
     description: "Get all vaccine categories",
     category: "drugs",
     subcategory: "vaccine-category",
-    cacheable: true,
-    cacheTime: 600,
   },
   "/drugs/combination/get": {
     types: [CARE_ACTION_TYPES.DrugCombinationType],
     description: "Get all drug combinations",
     category: "drugs",
     subcategory: "combination",
-    cacheable: true,
-    cacheTime: 300,
   },
   "/get": {
     types: [
@@ -106,8 +92,31 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
       "Get all care actions, including drugs, vaccines, and non-drug administrations",
     category: "all",
     subcategory: "administrations",
-    cacheable: true,
-    cacheTime: 300,
+  },
+  // Additional endpoints requested by user
+  "/vaccines/category/get": {
+    types: [CARE_ACTION_TYPES.VaccineCategory],
+    description: "Get vaccine category types",
+    category: "vaccines",
+    subcategory: "category",
+  },
+  "/vaccines/get": {
+    types: [CARE_ACTION_TYPES.VaccineType],
+    description: "Get vaccine types",
+    category: "vaccines",
+    subcategory: "all",
+  },
+  "/medications/get": {
+    types: [CARE_ACTION_TYPES.DrugCategory, CARE_ACTION_TYPES.DrugType],
+    description: "Get drug types including categories and individual drugs",
+    category: "medications",
+    subcategory: "all",
+  },
+  "/medications/individual/get": {
+    types: [CARE_ACTION_TYPES.DrugType],
+    description: "Get individual drug types excluding categories",
+    category: "medications",
+    subcategory: "individual",
   },
 });
 
@@ -134,99 +143,6 @@ const bulkQueryLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// Simple in-memory cache (in production, use Redis or similar)
-const cache = new Map();
-const CACHE_PREFIX = "careActions:";
-
-/**
- * Cache management utilities
- */
-const cacheUtils = {
-  /**
-   * Generate cache key for a route and parameters
-   */
-  generateKey(route, params = {}) {
-    const sortedParams = Object.keys(params)
-      .sort()
-      .map((key) => `${key}:${params[key]}`)
-      .join(",");
-    return `${CACHE_PREFIX}${route}${sortedParams ? `:${sortedParams}` : ""}`;
-  },
-
-  /**
-   * Get cached result
-   */
-  get(key) {
-    const cached = cache.get(key);
-    if (!cached) return null;
-
-    // Check if cache entry has expired
-    if (Date.now() > cached.expiry) {
-      cache.delete(key);
-      return null;
-    }
-
-    logger.debug("Cache hit", { key, size: cache.size });
-    return cached.data;
-  },
-
-  /**
-   * Set cache entry with TTL
-   */
-  set(key, data, ttlSeconds = 300) {
-    const expiry = Date.now() + ttlSeconds * 1000;
-    cache.set(key, { data, expiry });
-
-    // Simple cache size management (keep last 1000 entries)
-    if (cache.size > 1000) {
-      const firstKey = cache.keys().next().value;
-      cache.delete(firstKey);
-    }
-
-    logger.debug("Cache set", { key, ttlSeconds, size: cache.size });
-  },
-
-  /**
-   * Clear cache for specific pattern
-   */
-  clear(pattern = "") {
-    const keysToDelete = [];
-    for (const key of cache.keys()) {
-      if (key.includes(pattern)) {
-        keysToDelete.push(key);
-      }
-    }
-    keysToDelete.forEach((key) => cache.delete(key));
-    logger.info("Cache cleared", {
-      pattern,
-      deletedCount: keysToDelete.length,
-    });
-  },
-
-  /**
-   * Get cache statistics
-   */
-  getStats() {
-    let totalSize = 0;
-    let expiredCount = 0;
-    const now = Date.now();
-
-    for (const [key, value] of cache.entries()) {
-      totalSize++;
-      if (now > value.expiry) {
-        expiredCount++;
-      }
-    }
-
-    return {
-      totalEntries: totalSize,
-      expiredEntries: expiredCount,
-      activeEntries: totalSize - expiredCount,
-      memoryEstimate: totalSize * 1024, // rough estimate in bytes
-    };
-  },
-};
 
 /**
  * Validation middleware for query parameters
@@ -307,32 +223,6 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       queryParams,
       ip: req.ip,
     });
-
-    // Check cache if route is cacheable
-    let cacheKey;
-    if (routeConfig.cacheable) {
-      cacheKey = cacheUtils.generateKey(
-        req.route?.path || "unknown",
-        queryParams
-      );
-      const cachedResult = cacheUtils.get(cacheKey);
-
-      if (cachedResult) {
-        logger.info("Returning cached result", {
-          requestId,
-          route: req.route?.path,
-          cacheKey,
-          responseTime: Date.now() - startTime,
-        });
-
-        return res.status(StatusCodes.OK).json({
-          ...cachedResult,
-          cached: true,
-          requestId,
-          responseTime: Date.now() - startTime,
-        });
-      }
-    }
 
     // Validate care action types
     if (!Array.isArray(careActionTypes) || careActionTypes.length === 0) {
@@ -447,7 +337,9 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
         limit: parseInt(limit),
         offset: parseInt(offset),
         has_more: parseInt(offset) + parseInt(limit) < totalCount,
-        query_types: careActionTypes,
+        query_types: careActionTypes.map((type) =>
+          type.replace("vocab:", "http://anonymous.org/vocab/")
+        ),
         successful_queries: successfulResults.length,
         failed_queries: failedResults.length,
       },
@@ -461,17 +353,11 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
         description: routeConfig.description,
         category: routeConfig.category,
         subcategory: routeConfig.subcategory,
-        cacheable: routeConfig.cacheable,
       };
 
       if (failedResults.length > 0) {
         responseData.metadata.failed_types = failedResults;
       }
-    }
-
-    // Cache successful results
-    if (routeConfig.cacheable && failedResults.length === 0) {
-      cacheUtils.set(cacheKey, responseData, routeConfig.cacheTime);
     }
 
     logger.info("Care actions query completed successfully", {
@@ -481,7 +367,6 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       returnedResults: paginatedResults.length,
       failedQueries: failedResults.length,
       responseTime: Date.now() - startTime,
-      cached: false,
     });
 
     res.status(StatusCodes.OK).json(responseData);
@@ -520,15 +405,12 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
  * Health check endpoint
  */
 router.get("/health", (req, res) => {
-  const cacheStats = cacheUtils.getStats();
-
   res.status(StatusCodes.OK).json({
     status: "healthy",
     service: "care-actions-query",
     timestamp: new Date().toISOString(),
     version: "2.0.0",
     routes: Object.keys(ROUTE_CONFIGURATIONS).length,
-    cache: cacheStats,
     care_action_types: Object.keys(CARE_ACTION_TYPES).length,
   });
 });
@@ -545,8 +427,6 @@ router.get("/info", (req, res) => {
       category: config.category,
       subcategory: config.subcategory,
       types: config.types,
-      cacheable: config.cacheable,
-      cache_time_seconds: config.cacheTime,
     })
   );
 
@@ -632,8 +512,6 @@ router.post(
         description: "Advanced search across care action types",
         category: "search",
         subcategory: "advanced",
-        cacheable: true,
-        cacheTime: 180, // 3 minutes - shorter cache for searches
       };
 
       // Add search query to the request for filtering
@@ -657,97 +535,6 @@ router.post(
 );
 
 /**
- * Cache management endpoints
- */
-router.post(
-  "/cache/clear",
-  [
-    body("pattern")
-      .optional()
-      .isString()
-      .trim()
-      .isLength({ max: 50 })
-      .withMessage("Pattern must be a string with maximum 50 characters"),
-  ],
-  (req, res) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-        });
-      }
-
-      const { pattern = "" } = req.body;
-      const statsBefore = cacheUtils.getStats();
-
-      cacheUtils.clear(pattern);
-
-      const statsAfter = cacheUtils.getStats();
-      const clearedCount = statsBefore.totalEntries - statsAfter.totalEntries;
-
-      logger.info("Cache cleared via API", {
-        pattern,
-        clearedCount,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.OK).json({
-        status: "success",
-        message: `Cache cleared successfully`,
-        data: {
-          pattern: pattern || "all",
-          entries_cleared: clearedCount,
-          entries_remaining: statsAfter.totalEntries,
-        },
-      });
-    } catch (error) {
-      logger.error("Cache clear failed", {
-        error: error.message,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-        status: "error",
-        message: "Failed to clear cache",
-      });
-    }
-  }
-);
-
-/**
- * Get cache statistics
- */
-router.get("/cache/stats", (req, res) => {
-  try {
-    const stats = cacheUtils.getStats();
-
-    res.status(StatusCodes.OK).json({
-      status: "success",
-      data: {
-        cache_statistics: stats,
-        cache_efficiency:
-          stats.totalEntries > 0
-            ? Math.round((stats.activeEntries / stats.totalEntries) * 100)
-            : 0,
-      },
-    });
-  } catch (error) {
-    logger.error("Failed to get cache stats", {
-      error: error.message,
-      ip: req.ip,
-    });
-
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "error",
-      message: "Failed to retrieve cache statistics",
-    });
-  }
-});
-
-/**
  * Register all routes dynamically with enhanced middleware
  */
 Object.entries(ROUTE_CONFIGURATIONS).forEach(([route, routeConfig]) => {
@@ -766,12 +553,10 @@ Object.entries(ROUTE_CONFIGURATIONS).forEach(([route, routeConfig]) => {
     route,
     description: routeConfig.description,
     typeCount: routeConfig.types.length,
-    cacheable: routeConfig.cacheable,
   });
 });
 
 // Export router and utilities for testing
 module.exports = router;
-module.exports.cacheUtils = cacheUtils;
 module.exports.CARE_ACTION_TYPES = CARE_ACTION_TYPES;
 module.exports.ROUTE_CONFIGURATIONS = ROUTE_CONFIGURATIONS;

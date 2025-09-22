@@ -350,12 +350,12 @@ function createCareActionTypeDefinition(
 
   // Add subsumption relationships
   subsumptionList.forEach((itemId) => {
-    definition += `\n${careActionTypeId} vocab:subsumes data/ActAdminister${itemId} .\n`;
+    definition += `\n${careActionTypeId} vocab:subsumes data:ActAdminister${itemId} .\n`;
   });
 
   // Add grouping criteria relationships
   groupingCriteriaList.forEach((itemId) => {
-    definition += `\n${careActionTypeId} vocab:hasGroupingCriteria data/${itemId} .\n`;
+    definition += `\n${careActionTypeId} vocab:hasGroupingCriteria data:${itemId} .\n`;
   });
 
   return definition;
@@ -422,8 +422,8 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
     }
 
     // Build resource URIs
-    const dataId = `data/${postfixTp}${id}`;
-    const careActionTypeId = `data/ActAdminister${id}`;
+    const dataId = `data:${postfixTp}${id}`;
+    const careActionTypeId = `data:ActAdminister${id}`;
 
     // Create the TMR resource type definition
     let resourceDefinition = createResourceTypeDefinition(
@@ -469,10 +469,10 @@ function createCompleteCareActionDefinition(requestBody, routeConfig) {
     return {
       definition: completeDefinition,
       createdIds: {
-        resourceId: dataId,
-        actionId: careActionTypeId,
-        resourceUri: `http://anonymous.org/${dataId}`,
-        actionUri: `http://anonymous.org/${careActionTypeId}`,
+        resourceId: id, // Just the user-provided ID
+        actionId: id, // Same user ID for action
+        resourceUri: `http://anonymous.org/${dataId.replace(":", "/")}`, // Convert colon to slash
+        actionUri: `http://anonymous.org/${careActionTypeId.replace(":", "/")}`, // Convert colon to slash
       },
     };
   } catch (error) {
@@ -501,11 +501,12 @@ async function executeCareActionOperation(
       sparqlStatement = `INSERT DATA { ${sparqlQuery} }`;
     } else if (operationType === config.DELETE) {
       const { postfixTp } = auxFunct.getTypeDetails(resourceType);
-      const deletePattern = `
-        ?s ?p ?o .
-        FILTER (?s = data/${postfixTp}${id} || ?s = data/ActAdminister${id})
+      const deletePattern = `?s ?p ?o`;
+      const whereClause = `
+        ${deletePattern} .
+        FILTER (?s = data:${postfixTp}${id} || ?s = data:ActAdminister${id})
       `;
-      sparqlStatement = `DELETE { ${deletePattern} } WHERE { ${deletePattern} }`;
+      sparqlStatement = `DELETE { ${deletePattern} } WHERE { ${whereClause} }`;
     } else {
       throw new ErrorHandler(
         StatusCodes.BAD_REQUEST,
@@ -737,9 +738,17 @@ router.post(
         uri
       );
 
+      logger.debug("SPARQL Results received", {
+        hasResults: !!sparqlResults,
+        hasResultsProperty: !!sparqlResults?.results,
+        bindingsLength: sparqlResults?.results?.bindings?.length || 0,
+      });
+
       if (
         !sparqlResults ||
-        (sparqlResults.bindings && sparqlResults.bindings.length === 0)
+        !sparqlResults.results ||
+        !sparqlResults.results.bindings ||
+        sparqlResults.results.bindings.length === 0
       ) {
         return res.status(StatusCodes.NOT_FOUND).json({
           status: "error",

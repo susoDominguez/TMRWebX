@@ -127,13 +127,14 @@ async function sparqlJSONQuery(dataset_id, query) {
         `${config.FUSEKI_USER}:${config.FUSEKI_PASSWORD}`
       ).toString("base64")}`,
       Accept: "application/sparql-results+json",
+      "Content-Type": "application/x-www-form-urlencoded",
     },
   };
 
   try {
     const response = await axios.post(
       url,
-      { query: prefixAndSparqlQuery },
+      qs.stringify({ query: prefixAndSparqlQuery }),
       options
     );
 
@@ -505,36 +506,89 @@ module.exports = {
    * @param {string | undefined} uri
    */
   getCareActionData: async function (dataset_id, id, uri) {
-    let atom = id ? `data/ActAdminister${id}` : `<${uri}>`;
+    // If URI is provided, use it directly
+    if (uri) {
+      const atom = `<${uri}>`;
+      const query = `
+        SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
+        (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
+        (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
+        (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
+        (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
+  		WHERE {
+        ?actId a owl:NamedIndividual , ?adminT ;
+  				       ?Of ?drugTid ;
+  			         rdfs:label ?adminLabel .
+       OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
+       OPTIONAL { ?actId vocab:hasComponent ?component . }  
+  			   ?drugTid a owl:NamedIndividual , ?drugType  ;
+  			         rdfs:label ?drugLabel .
+  			OPTIONAL { ?drugTid vocab:sctid  ?sctid . }
+        OPTIONAL { ?drugTid vocab:sctLbl ?sctid_label . }
+        OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
+        OPTIONAL { ?drugTid owl:sameAs ?same . } 
+  			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
+  		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?adminT ?sctid_label`;
 
-    const query = `
-      PREFIX vocab: <http://anonymous.org/vocab/>
-      PREFIX owl: <http://www.w3.org/2002/07/owl#>
-      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    
-      SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
-      (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
-      (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
-      (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
-      (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
-		WHERE {
-      ?actId a owl:NamedIndividual , ?adminT ;
-				       ?Of ?drugTid ;
-			         rdfs:label ?adminLabel .
-     OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
-     OPTIONAL { ?actId vocab:hasComponent ?component . }  
-			   ?drugTid a owl:NamedIndividual , ?drugType  ;
-			         rdfs:label ?drugLabel .
-			OPTIONAL { ?drugTid vocab:sctid  ?sctid . }
-      OPTIONAL { ?sctid rdfs:label ?sctid_label . }
-      OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
-      OPTIONAL { ?drugTid owl:sameAs ?same . } 
-			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
-		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?adminT
-		`;
-    //logger.debug(query);
+      return sparqlJSONQuery(dataset_id, query);
+    }
 
-    return sparqlJSONQuery(dataset_id, query);
+    // If ID is provided, we need to try different care action prefixes
+    const careActionPrefixes = [
+      "ActAdminister", // For all care actions (drugs, non-drugs, vaccines)
+    ];
+
+    // Try each prefix until we find a match
+    for (const prefix of careActionPrefixes) {
+      const atom = `data:${prefix}${id}`;
+      const query = `
+        SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
+        (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
+        (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
+        (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
+        (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
+  		WHERE {
+        ?actId a owl:NamedIndividual , ?adminT ;
+  				       ?Of ?drugTid ;
+  			         rdfs:label ?adminLabel .
+       OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
+       OPTIONAL { ?actId vocab:hasComponent ?component . }  
+  			   ?drugTid a owl:NamedIndividual , ?drugType  ;
+  			         rdfs:label ?drugLabel .
+  			OPTIONAL { ?drugTid vocab:sctid  ?sctid . }
+        OPTIONAL { ?drugTid vocab:sctLbl ?sctid_label . }
+        OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
+        OPTIONAL { ?drugTid owl:sameAs ?same . } 
+  			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
+  		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?adminT ?sctid_label`;
+
+      try {
+        const result = await sparqlJSONQuery(dataset_id, query);
+
+        // If we got results, return them
+        if (
+          result &&
+          result.results &&
+          result.results.bindings &&
+          result.results.bindings.length > 0
+        ) {
+          return result;
+        }
+      } catch (error) {
+        // Log but continue trying other prefixes
+        logger.debug(
+          `Failed to find care action with prefix ${prefix}${id}:`,
+          error.message
+        );
+      }
+    }
+
+    // If no results found with any prefix, return empty result structure
+    return {
+      results: {
+        bindings: [],
+      },
+    };
   },
 
   /**
@@ -550,10 +604,10 @@ module.exports = {
     if (!sta_id && !sta_uri)
       throw new ErrorHandler(500, `statement URI is missing.`);
 
-    const st_assert = sta_uri ? `<${sta_uri}>` : `data/ST${sta_id}`;
+    const st_assert = sta_uri ? `<${sta_uri}>` : `data:ST${sta_id}`;
     const st_prov = sta_uri
       ? `<${sta_uri}_provenance>`
-      : `data/ST${sta_id}_provenance`;
+      : `data:ST${sta_id}_provenance`;
 
     let query = `
 	    SELECT DISTINCT 

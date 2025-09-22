@@ -78,6 +78,11 @@ function getTypeDetails(typeClass) {
       actionTp: ResourceTypes.adminOf,
       adminTp: ResourceTypes.DrugAdminT,
     },
+    [ResourceTypes.DrugType]: {
+      postfixTp: ResourceTypes.DrugT,
+      actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
+    },
     [ResourceTypes.DrugCombinationType]: {
       postfixTp: ResourceTypes.DrugCombT,
       actionTp: ResourceTypes.adminOf,
@@ -89,6 +94,7 @@ function getTypeDetails(typeClass) {
     typeMap[typeClass] || {
       postfixTp: ResourceTypes.DrugT,
       actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
     }
   );
 }
@@ -903,11 +909,11 @@ async function get_CB_uris_from_bindings(bindings = []) {
 
 function action_rec(req, res, insertOrDelete) {
   //data id for this rec
-  const id = `data/Rec${req.body.cig_id}-${req.body.id}`;
+  const id = `data:Rec${req.body.cig_id}-${req.body.id}`;
   let sources = "";
   const date = new Date().toJSON();
   //this nanopublication is included in the main  guideline (to be added to default graph)
-  const id2CIG = `${id} vocab:isPartOf data/CIG-${req.body.cig_id} .`;
+  const id2CIG = `${id} vocab:isPartOf data:CIG-${req.body.cig_id} .`;
 
   if (req.body.derivedFrom) {
     sources = `  prov:wasDerivedFrom  `;
@@ -947,10 +953,10 @@ function action_rec(req, res, insertOrDelete) {
               rdfs:label  '''` +
     req.body.label +
     `'''@en ;
-              vocab:aboutExecutionOf  data/ActAdminister` +
+              vocab:aboutExecutionOf  data:ActAdminister` +
     req.body.careAction_id +
     ` ;
-              vocab:partOf            data/CIG-` +
+              vocab:partOf            data:CIG-` +
     req.body.cig_id +
     ` ;
               vocab:strength          vocab:` +
@@ -1020,17 +1026,17 @@ function action_rec(req, res, insertOrDelete) {
 }
 
 function insert_CB_in_rec(req, res, insertOrDelete) {
-  const recId = `data/Rec` + req.body.cig_id + `-` + req.body.rec_id;
+  const recId = `data:Rec` + req.body.cig_id + `-` + req.body.rec_id;
 
   const body =
     recId +
     ` {
       ` +
     recId +
-    ` vocab:basedOn data/CB` +
+    ` vocab:basedOn data:CB` +
     req.body.belief_id +
     ` .
-      data/CB` +
+      data:CB` +
     req.body.belief_id +
     ` vocab:contribution vocab:` +
     req.body.contribution +
@@ -1043,14 +1049,14 @@ function insert_CB_in_rec(req, res, insertOrDelete) {
 }
 
 function insert_precond_in_rec(req, res, insertOrDelete) {
-  const recId = `data/Rec` + req.body.cig_id + `-` + req.body.rec_id;
+  const recId = `data:Rec` + req.body.cig_id + `-` + req.body.rec_id;
 
   const body =
     recId +
     ` {
       ` +
     recId +
-    ` vocab:hasFilterSituation data/Sit` +
+    ` vocab:hasFilterSituation data:Sit` +
     req.body.precond_id +
     ` .
     }`;

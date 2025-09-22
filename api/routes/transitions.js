@@ -479,7 +479,9 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
         responseData.metadata.query_params = queryParams;
         responseData.metadata.sparql_status = status;
         responseData.metadata.data_source = "transitions";
-        responseData.metadata.object_types = objectTypes;
+        responseData.metadata.object_types = objectTypes.map((type) =>
+          type.replace("vocab:", "http://anonymous.org/vocab/")
+        );
 
         // Add statistics
         if (totalCount > 0) {
@@ -935,7 +937,11 @@ router.get("/info", (req, res) => {
         "requires",
       ],
       data_source: "transitions triple store",
-      object_types: ["vocab:Transition", "vocab:Situation", "vocab:Property"],
+      object_types: [
+        "http://anonymous.org/vocab/Transition",
+        "http://anonymous.org/vocab/Situation",
+        "http://anonymous.org/vocab/Property",
+      ],
       features: [
         "Advanced filtering",
         "Relationship search",

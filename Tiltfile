@@ -1,4 +1,4 @@
-## Enhanced Tiltfile for TMRWebX
+## Tiltfile for TMRWebX
 ##
 ## Maintainer: Jesus Dominguez <k1214757@kcl.ac.uk>
 # NOTE: Ensure you are running Tilt version 0.32.0 or later.
@@ -196,10 +196,10 @@ local_resource(
     labels=['monitoring']
 )
 
-print("🚀 TMRWebX development environment configured!")
-print("📝 Available services:")
+print(" TMRWebX development environment configured!")
+print(" Available services:")
 print("   - API: http://localhost:8888") 
 print("   - Fuseki: http://localhost:3030")
 print("   - Prolog Reasoner: http://localhost:1234")
 print("   - Debug Port: localhost:9229")
-print("🔧 Use the UI buttons for quick actions!")
+print(" Use the UI buttons for quick actions!")

@@ -266,7 +266,8 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
         responseData.metadata.query_params = queryParams;
         responseData.metadata.sparql_status = status;
         responseData.metadata.data_source = "beliefs";
-        responseData.metadata.object_type = "vocab:CausationBelief";
+        responseData.metadata.object_type =
+          "http://anonymous.org/vocab/CausationBelief";
       }
 
       // Cache the result
@@ -411,7 +412,7 @@ router.get("/info", (req, res) => {
         },
       ],
       data_source: "beliefs triple store",
-      object_type: "vocab:CausationBelief",
+      object_type: "http://anonymous.org/vocab/CausationBelief",
       caching: {
         enabled: true,
         ttl_seconds: CACHE_TTL,
