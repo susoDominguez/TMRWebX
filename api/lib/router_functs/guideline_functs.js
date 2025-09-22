@@ -15,7 +15,7 @@ function isValidArgument(arg) {
 }
 
 function parseIds(ids) {
-  return auxFunct.isValidArgument(ids)
+  return isValidArgument(ids)
     ? ids.split(",").map((item) => item.trim())
     : [];
 }
@@ -105,7 +105,7 @@ function getTypeDetails(typeClass) {
  * @returns
  */
 const findInvalidField = (list = []) =>
-  list.find((field) => !auxFunct.isValidArgument(field)) ?? null;
+  list.find((field) => !isValidArgument(field)) ?? null;
 
 function transformSPARQLResults(sparqlResults, schema, context = {}) {
   /**
@@ -487,6 +487,7 @@ const recommendation_schema = {
   },
 };
 
+// Schema to transform SPARQL results into FHIR CareActionType-like objects
 const care_action_schema = {
   actId: { targetKey: "id", transform: (value, result) => {  
     // set the full URI as id
@@ -514,7 +515,9 @@ const care_action_schema = {
       result.value.coding ??= [];
       // index 1 is for SCT code
       result.value.coding[1] ??= {};
-      result.value.coding[1].code = value;
+      result.value.coding[1].code = value.slice(
+        value.lastIndexOf("#") + 1
+      );
       result.value.coding[1].system = sct_prefix;
     }
   },
@@ -574,7 +577,9 @@ const care_action_schema = {
       result.administers ??= {};
       result.administers.value ??= { coding: [] };
       result.administers.value.coding[1] ??= {};
-      result.administers.value.coding[1].code = value;
+      result.administers.value.coding[1].code = value.slice(
+        value.lastIndexOf("#") + 1
+      );
       result.administers.value.coding[1].system = sct_prefix;
     },
   },
