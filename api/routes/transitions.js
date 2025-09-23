@@ -128,6 +128,35 @@ const cacheUtils = {
 };
 
 /**
+ * Remove duplicate items by a chosen key and report duplicates
+ * Returns { items: dedupedArray, duplicates: [{ key, count }], removedCount }
+ */
+function dedupeAndReport(arr, keyFn = (it) => it.id || it.uri || JSON.stringify(it)) {
+  const seen = new Map();
+  for (const it of arr) {
+    const key = keyFn(it) || "__undefined__";
+    seen.set(key, (seen.get(key) || 0) + 1);
+  }
+
+  const duplicates = [];
+  for (const [key, count] of seen.entries()) {
+    if (count > 1) duplicates.push({ key, count });
+  }
+
+  const items = [];
+  const keep = new Set();
+  for (const it of arr) {
+    const key = keyFn(it) || "__undefined__";
+    if (!keep.has(key)) {
+      keep.add(key);
+      items.push(it);
+    }
+  }
+
+  return { items, duplicates, removedCount: arr.length - items.length };
+}
+
+/**
  * Validation rules for transition queries
  */
 const queryValidationRules = [
@@ -399,9 +428,33 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
     }
 
     let result = [];
+    let duplicateInfo = { duplicates: [], removedCount: 0 };
     if (bindings && bindings.length > 0) {
-      // Process the bindings into a readable format
-      result = await auxFuncts.get_rdf_atom_as_array(bindings);
+      // Process the bindings into a readable format with error handling
+      try {
+        const parsed = await auxFuncts.get_rdf_atom_as_array(bindings);
+        // Deduplicate parsed results and record duplicates
+        const deduped = dedupeAndReport(parsed, (it) => it.id || it.uri);
+        result = deduped.items;
+        duplicateInfo = { duplicates: deduped.duplicates, removedCount: deduped.removedCount };
+        if (duplicateInfo.removedCount > 0) {
+          logger.warn("Duplicates found in transitions result", {
+            requestId,
+            removed: duplicateInfo.removedCount,
+            duplicates: duplicateInfo.duplicates,
+          });
+        }
+      } catch (err) {
+        logger.error("Failed to parse SPARQL bindings for transitions", {
+          requestId,
+          error: err.message,
+          stack: err.stack,
+        });
+        throw new ErrorHandler(
+          StatusCodes.INTERNAL_SERVER_ERROR,
+          "Failed to process transition results"
+        );
+      }
 
       // Apply text search filtering if needed (fallback for complex searches)
       if (search && search.trim() !== "") {
@@ -471,6 +524,8 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
               queryParams[key] !== null &&
               queryParams[key] !== ""
           ).length,
+          duplicates: duplicateInfo.duplicates || [],
+          duplicates_removed: duplicateInfo.removedCount || 0,
         },
       };
 
@@ -562,6 +617,8 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
               queryParams[key] !== null &&
               queryParams[key] !== ""
           ).length,
+          duplicates: duplicateInfo.duplicates || [],
+          duplicates_removed: duplicateInfo.removedCount || 0,
         },
       };
 

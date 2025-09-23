@@ -39,6 +39,21 @@ const ResourceTypes = Object.freeze({
   VacCat: "VacCat",
   VaccineCategory: "VaccineCategory",
 
+  // Transition Types
+  SituationType: "SituationType",
+  TransitionType: "TransitionType",
+  PropertyType: "TropeType",
+  CompoundSituationType: "CompoundSituationType",
+
+  SitT: "Sit",
+  PropT: "Prop",
+  CompT: "CompSit",
+  TrT: "Tr",
+
+  negative: "neg",
+  and: "and",
+  or: "or",
+
   // Action Types
   NonDrugAdminT: "NonDrugAdministrationType",
   DrugAdminT: "DrugAdministrationType",
@@ -87,6 +102,26 @@ function getTypeDetails(typeClass) {
       postfixTp: ResourceTypes.DrugCombT,
       actionTp: ResourceTypes.adminOf,
       adminTp: ResourceTypes.DrugAdminT,
+    },
+    [ResourceTypes.SituationType]: {
+      postfixTp: ResourceTypes.SitT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.SituationType,
+    },
+    [ResourceTypes.TransitionType]: {
+      postfixTp: ResourceTypes.TrT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.TransitionType,
+    },
+    [ResourceTypes.PropertyType]: {
+      postfixTp: ResourceTypes.PropT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.PropertyType,
+    },
+    [ResourceTypes.CompoundSituationType]: {
+      postfixTp: ResourceTypes.CompT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.SituationType,
     },
   };
 
@@ -160,7 +195,7 @@ function transformSPARQLResults(sparqlResults, schema, context = {}) {
 }
 
 const cb_tr_schema = {
-  cbId: { targetKey: "id", transform: (value) => value },
+  cbId: { targetKey: "id", transform: (value, result) => { result.id = value; } },
   contribution: {
     targetKey: "contribution",
     transform: (value) => {
@@ -184,10 +219,10 @@ const cb_tr_schema = {
       return match ? match[1] : null; // Extract postfix or set to null if not found
     },
   },
-  actId: { targetKey: "careActionTypeRef", transform: (value) => value },
-  trId: { targetKey: "transition.id", transform: (value) => value },
-  derivedFromCB: { targetKey: "derivedFrom", transform: (value) => value },
-  hasSourcesCB: { targetKey: "hasSource", transform: (value) => value },
+  actId: { targetKey: "careActionTypeRef", transform: (value, result) => { result.careActionTypeRef = value; } },
+  trId: { targetKey: "transition.id", transform: (value, result) => { result.transition ??= {}; result.transition.id = value; } },
+  derivedFromCB: { targetKey: "derivedFrom", transform: (value, result) => { result.derivedFrom = value; } },
+  hasSourcesCB: { targetKey: "hasSource", transform: (value, result) => { result.hasSource = parseIds(value); } },
   effect: { targetKey: "effect", transform: (value) => value.toLowerCase() },
   propUri: {
     targetKey: "transition.property",
@@ -339,7 +374,7 @@ const cb_tr_schema = {
 };
 
 const cb_schema = {
-  cbId: { targetKey: "id", transform: (value) => value },
+  cbId: { targetKey: "id", transform: (value, result) => { result.id = value; } },
   contribution: {
     targetKey: "contribution",
     transform: (value) => {
@@ -363,28 +398,28 @@ const cb_schema = {
       return match ? match[1] : null; // Extract postfix or set to null if not found
     },
   },
-  actId: { targetKey: "careActionTypeRef", transform: (value) => value },
-  trId: { targetKey: "transitionTypeRef", transform: (value) => value },
-  derivedFromCB: { targetKey: "derivedFrom", transform: (value) => value },
-  hasSourcesCB: { targetKey: "hasSource", transform: (value) => value },
+  actId: { targetKey: "careActionTypeRef", transform: (value, result) => { result.careActionTypeRef = value; } },
+  trId: { targetKey: "transitionTypeRef", transform: (value, result) => { result.transitionTypeRef = value; } },
+  derivedFromCB: { targetKey: "derivedFrom", transform: (value, result) => { result.derivedFrom = value; } },
+  hasSourcesCB: { targetKey: "hasSource", transform: (value, result) => { result.hasSource = parseIds(value); } },
 };
 
 const recommendation_schema = {
   partOf: {
     targetKey: "partOf",
-    transform: (value) => value.split("/").pop(),
+    transform: (value, result) => { result.partOf = value; },
   },
   isPartOf: {
     targetKey: "source_cig",
-    transform: (value) => value.split("/").pop(),
+    transform: (value, result) => { result.source_cig = value; },
   },
   extractedFrom: {
     targetKey: "extractedFrom",
-    transform: (value) => value.split("/").pop(),
+    transform: (value, result) => { result.extractedFrom = value; },
   },
   label: {
     targetKey: "text",
-    transform: (value) => value,
+    transform: (value, result) => { result.text = value; },
   },
   strength: {
     targetKey: "suggestion",
@@ -402,11 +437,11 @@ const recommendation_schema = {
   },
   derivedFrom: {
     targetKey: "derivedFrom",
-    transform: (value) => value.split(","),
+    transform: (value, result) => { result.derivedFrom = parseIds(value); },
   },
   hasSources: {
     targetKey: "hasSource",
-    transform: (value) => value.split(","),
+    transform: (value, result) => { result.hasSource = parseIds(value); },
   },
   attributedTo: {
     targetKey: "wasAttributedTo",
@@ -603,7 +638,7 @@ const care_action_schema = {
 };
 
 const transition_schema = {
-  TrId: { targetKey: "id", transform: (value) => value },
+  TrId: { targetKey: "id", transform: (value, result) => { result.id = value; } },
   effect: { targetKey: "effect", transform: (value) => value.toLowerCase() },
   propUri: {
     targetKey: "property",
@@ -757,58 +792,58 @@ const transition_schema = {
 const gpRec_schema = {
   wasDerivedFrom: {
     targetKey: "hasSource",
-    transform: (value) => value,
+    transform: (value, result) => { result.hasSource = value; },
   },
   partOf: {
     targetKey: "partOf",
-    transform: (value) => value,
+    transform: (value, result) => { result.partOf = value; },
   },
   gpRecId: {
     targetKey: "id",
-    transform: (value) => value,
+    transform: (value, result) => { result.id = value; },
   },
   extractedFrom: {
     targetKey: "extractedFrom",
-    transform: (value) => value,
+    transform: (value, result) => { result.extractedFrom = value; },
   },
   label: {
     targetKey: "title",
-    transform: (value) => value,
+    transform: (value, result) => { result.title = value; },
   },
   stUris: {
     targetKey: "clinicalStatements",
-    transform: (value) => value.split(","),
+    transform: (value, result) => { result.clinicalStatements = parseIds(value); },
   },
 };
 
 const stData_schema = {
   st_id: {
     targetKey: "id",
-    transform: (value) => value,
+    transform: (value, result) => { result.id = value; },
   },
   statementTitle: {
     targetKey: "hasStatementTitle",
-    transform: (value) => value,
+    transform: (value, result) => { result.hasStatementTitle = value; },
   },
   statementText: {
     targetKey: "hasStatementText",
-    transform: (value) => value,
+    transform: (value, result) => { result.hasStatementText = value; },
   },
   organizationName: {
     targetKey: "organization",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.organization = parseIds(value); },
   },
   jurisdiction: {
     targetKey: "jurisdiction",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.jurisdiction = parseIds(value); },
   },
   derivedFromSt: {
     targetKey: "derivedFrom",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.derivedFrom = parseIds(value); },
   },
   hasSources: {
     targetKey: "hasTarget",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.hasTarget = parseIds(value); },
   },
 };
 

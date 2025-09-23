@@ -1,825 +1,729 @@
-/**
- * Transition Routes
- * Handles CRUD operations for TMR-based transitions, situations, and properties
- * Enhanced with validation, caching, and monitoring
- */
-
 const express = require("express");
-const { body, param, validationResult } = require("express-validator");
-const { StatusCodes } = require("http-status-codes");
-const rateLimit = require("express-rate-limit");
+const { body, validationResult } = require("express-validator");
+const { StatusCodes, ReasonPhrases } = require("http-status-codes");
 const router = express.Router();
+const rateLimit = require("express-rate-limit");
 
 // Core dependencies
+const config = require("../lib/config");
 const utils = require("../lib/utils");
 const { ErrorHandler } = require("../lib/errorHandler");
-const auxFuncts = require("../lib/router_functs/guideline_functs");
+const auxFunct = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
 
-// Rate limiting for different operations
-const readLimiter = rateLimit({
+// Constants and Configuration
+const SNOMED_PREFIX = "http://snomed.info/sct/";
+const DATA_PREFIX = "http://anonymous.org/data/";
+const VOCAB_PREFIX = "http://anonymous.org/vocab/";
+const { isValidId, parseIdsInput, escapeQuotes } = require("../lib/router_functs/route_helpers");
+
+// Rate limiting for create/delete operations
+const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 150, // limit each IP to 150 read requests per windowMs
+  max: 50, // limit each IP to 50 create requests per windowMs
   message: {
     status: "error",
-    message: "Too many read requests, please try again later.",
+    message: "Too many care action creation requests, please try again later.",
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-const writeLimiter = rateLimit({
+const deleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // limit each IP to 50 write requests per windowMs
+  max: 20, // limit each IP to 20 delete requests per windowMs
   message: {
     status: "error",
-    message: "Too many write requests, please try again later.",
+    message: "Too many care action deletion requests, please try again later.",
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Enhanced caching system
-const cache = new Map();
-const CACHE_TTL = 300; // 5 minutes for transitions
-const CACHE_PREFIX = "transition:";
+// Route mappings with metadata
+const ROUTE_MAPPINGS = Object.freeze({
+  "/property": {
+    resourceType: auxFunct.ResourceTypes.PropertyType,
+    description: "Individual property type",
+    requiresComponents: false,
+    maxLabelLength: 200,
+  },
+  "/situation": {
+    resourceType: auxFunct.ResourceTypes.SituationType,
+    description: "Individual situation type",
+    requiresComponents: false,
+    maxLabelLength: 200,
+  },
+  "/situation/compound": {
+    resourceType: auxFunct.ResourceTypes.CompoundSituationType,
+    description: "Compound situation type",
+    requiresComponents: true,
+    maxLabelLength: 200,
+  },
+  "": {
+    resourceType: auxFunct.ResourceTypes.TransitionType,
+    description: "Individual transition type",
+    requiresComponents: false,
+    maxLabelLength: 200,
+  }
+});
 
 /**
- * Cache utilities
+ * Enhanced validation rules for care action creation
  */
-const cacheUtils = {
-  generateKey(route, params = {}) {
-    const sortedParams = Object.keys(params)
-      .sort()
-      .map((key) => `${key}:${params[key]}`)
-      .join(",");
-    return `${CACHE_PREFIX}${route}${sortedParams ? `:${sortedParams}` : ""}`;
-  },
+const getValidationRules = (routeConfig) => {
+  const isTransition = routeConfig.resourceType === auxFunct.ResourceTypes.TransitionType;
 
-  get(key) {
-    const cached = cache.get(key);
-    if (!cached) return null;
+  const rules =[
+  body("id")
+    .isString()
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .matches(/^[a-zA-Z0-9_-]+$/)
+    .withMessage(
+      "ID must be 1-50 alphanumeric characters, underscores, or hyphens"
+    ),
+  
+  body("pre_situation_id")
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .matches(/^[a-zA-Z0-9_-]+$/)
+    .withMessage(
+      "ID must be 1-50 alphanumeric characters, underscores, or hyphens"
+  ),
 
-    if (Date.now() > cached.expiry) {
-      cache.delete(key);
-      return null;
-    }
+  body("post_situation_id")
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .matches(/^[a-zA-Z0-9_-]+$/)
+    .withMessage(
+      "ID must be 2-50 alphanumeric characters, underscores, or hyphens"
+  ),
 
-    logger.debug("Cache hit for transition", { key });
-    return cached.data;
-  },
+  body("affected_property_id")
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 2, max: 50 })
+    .matches(/^[a-zA-Z0-9_-]+$/)
+    .withMessage(
+      "ID must be 2-50 alphanumeric characters, underscores, or hyphens"
+  ),
 
-  set(key, data, ttlSeconds = CACHE_TTL) {
-    const expiry = Date.now() + ttlSeconds * 1000;
-    cache.set(key, { data, expiry });
+  body("derivative")
+    .optional()
+    .isString()
+    .trim()
+    .customSanitizer((v) => (typeof v === "string" ? v.toLowerCase() : v))
+    .isIn(["increase", "decrease", "maintain"])
+    .withMessage("Derivative must be one of: 'increase', 'decrease', 'maintain'"),
 
-    // Cache size management
-    if (cache.size > 150) {
-      const firstKey = cache.keys().next().value;
-      cache.delete(firstKey);
-    }
+  body("connective")
+    .optional()
+    .isString()
+    .trim()
+    .customSanitizer((v) => (typeof v === "string" ? v.toLowerCase() : v))
+    .isIn(["and", "or", "neg"])
+    .withMessage("Connective must be one of: 'and', 'or', 'neg'"),
 
-    logger.debug("Cache set for transition", { key, ttlSeconds });
-  },
+  // SNOMED CT codes validation (optional but if provided must be valid)
+  body("sctid")
+    .optional()
+    .isString()
+    .trim()
+    .matches(/^\d+$/)
+    .withMessage("SNOMED CT drug code must be numeric"),
 
-  invalidatePattern(pattern) {
-    const keysToDelete = [];
-    for (const key of cache.keys()) {
-      if (key.includes(pattern)) {
-        keysToDelete.push(key);
+  body("sctid_label")
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 300 })
+    .withMessage("SNOMED CT drug label must be maximum 300 characters"),
+
+  body("stateOfproperty")
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 20 })
+    .withMessage("State of property must be maximum 20 characters"),
+
+  // Array fields validation
+  body("situation_id_list")
+    .optional()
+    .custom((value) => {
+      if (typeof value === "string") {
+        const ids = value.split(",").map((id) => id.trim());
+        return ids.every((id) => /^[a-zA-Z0-9_-]+$/.test(id));
       }
-    }
-    keysToDelete.forEach((key) => cache.delete(key));
-    logger.info("Transition cache invalidated", {
-      pattern,
-      deletedCount: keysToDelete.length,
-    });
-  },
+      return (
+        Array.isArray(value) &&
+        value.every(
+          (id) => typeof id === "string" && /^[a-zA-Z0-9_-]+$/.test(id)
+        )
+      );
+    })
+    .withMessage("Situation IDs must be valid identifiers"),
 
-  clear() {
-    cache.clear();
-    logger.info("Transition cache cleared completely");
-  },
+  ];
 
-  getStats() {
-    let totalSize = 0;
-    let expiredCount = 0;
-    const now = Date.now();
+    // Label: required for everything except TransitionType (label is derived for transitions)
+  if (isTransition) {
+    rules.push(
+      body("label")
+        .optional()
+        .isString()
+        .trim()
+        .isLength({ max: routeConfig.maxLabelLength })
+        .withMessage(`Label must be maximum ${routeConfig.maxLabelLength} characters`)
+    );
+  } else {
+    rules.push(
+      body("label")
+        .isString()
+        .trim()
+        .isLength({ min: 1, max: routeConfig.maxLabelLength })
+        .withMessage(`Label must be 1-${routeConfig.maxLabelLength} characters`)
+    );
+  }
 
-    for (const [key, value] of cache.entries()) {
-      totalSize++;
-      if (now > value.expiry) {
-        expiredCount++;
-      }
-    }
-
-    return {
-      totalEntries: totalSize,
-      expiredEntries: expiredCount,
-      activeEntries: totalSize - expiredCount,
-    };
-  },
+  return rules;
 };
 
 /**
- * Validation rules for transitions
+ * Enhanced SNOMED CT resource definition with validation
  */
-const transitionValidationRules = [
-  body("label")
-    .notEmpty()
-    .withMessage("Transition label is required")
-    .isString()
-    .withMessage("Label must be a string")
-    .isLength({ min: 2, max: 200 })
-    .withMessage("Label must be between 2 and 200 characters"),
+function createSnomedResourceDefinition(dataId, sctCode, sctLabel) {
+  if (!dataId) {
+    throw new ErrorHandler(
+      StatusCodes.BAD_REQUEST,
+      "Data ID is required for SNOMED resource"
+    );
+  }
 
-  body("type")
-    .notEmpty()
-    .withMessage("Transition type is required")
-    .isIn(["transition", "situation", "property"])
-    .withMessage("Type must be one of: transition, situation, property"),
+  if (!sctCode || !auxFunct.isValidArgument(sctCode)) {
+    return ""; // SNOMED is optional
+  }
 
-  body("description")
-    .optional()
-    .isString()
-    .withMessage("Description must be a string")
-    .isLength({ max: 1000 })
-    .withMessage("Description must be max 1000 characters"),
+  // Validate SNOMED code format
+  if (!/^\d+$/.test(sctCode)) {
+    throw new ErrorHandler(
+      StatusCodes.BAD_REQUEST,
+      `Invalid SNOMED CT code format: ${sctCode}`
+    );
+  }
+  let sctDefinition = `\n${dataId} vocab:hasSctId snomed:${sctCode} ;\n`;
 
-  body("properties")
-    .optional()
-    .isObject()
-    .withMessage("Properties must be an object"),
+  if (auxFunct.isValidArgument(sctLabel)) {
+    sctDefinition += ` vocab:hasSctLbl "${escapeQuotes(sctLabel)}"@en .\n`;
+  } else {
+    sctDefinition = sctDefinition.slice(0, -2) + " .\n"; // Remove semicolon, add period
+  }
 
-  body("properties.priority")
-    .optional()
-    .isInt({ min: 1, max: 10 })
-    .withMessage("Priority must be an integer between 1 and 10"),
-
-  body("properties.temporal")
-    .optional()
-    .isObject()
-    .withMessage("Temporal properties must be an object"),
-
-  body("properties.temporal.duration")
-    .optional()
-    .isString()
-    .matches(/^P(\d+Y)?(\d+M)?(\d+D)?(T(\d+H)?(\d+M)?(\d+S)?)?$/)
-    .withMessage("Duration must be in ISO 8601 duration format"),
-
-  body("properties.conditions")
-    .optional()
-    .isArray()
-    .withMessage("Conditions must be an array"),
-
-  body("properties.conditions.*")
-    .isObject()
-    .withMessage("Each condition must be an object"),
-
-  body("metadata")
-    .optional()
-    .isObject()
-    .withMessage("Metadata must be an object"),
-
-  body("metadata.source")
-    .optional()
-    .isString()
-    .trim()
-    .isLength({ max: 200 })
-    .withMessage("Source must be a string with max 200 characters"),
-
-  body("metadata.evidence_level")
-    .optional()
-    .isIn(["high", "moderate", "low", "very_low"])
-    .withMessage(
-      "Evidence level must be one of: high, moderate, low, very_low"
-    ),
-
-  body("relationships")
-    .optional()
-    .isArray()
-    .withMessage("Relationships must be an array"),
-
-  body("relationships.*")
-    .isObject()
-    .withMessage("Each relationship must be an object"),
-
-  body("relationships.*.target")
-    .isString()
-    .trim()
-    .isLength({ min: 1 })
-    .withMessage("Relationship target is required"),
-
-  body("relationships.*.type")
-    .isIn(["precedes", "follows", "enables", "conflicts", "requires"])
-    .withMessage(
-      "Relationship type must be one of: precedes, follows, enables, conflicts, requires"
-    ),
-];
-
-const transitionIdValidation = [
-  param("id")
-    .notEmpty()
-    .withMessage("Transition ID is required")
-    .isString()
-    .trim()
-    .isLength({ min: 1, max: 100 })
-    .matches(/^[a-zA-Z0-9_\-\.]+$/)
-    .withMessage(
-      "ID must be alphanumeric with underscores, hyphens, and periods only"
-    ),
-];
+  return sctDefinition;
+}
 
 /**
- * Enhanced endpoint to create a new transition/situation/property
+ * Specializes Transition type
  */
-router.post(
-  "/",
-  [writeLimiter, transitionValidationRules],
-  async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
+// Use dataId (e.g. "data:MyTransition") as subject
+function speciliazeTransitionType(
+  dataId,
+  affects,
+  derivative,
+  preSituation,
+  postSituationId
+){
+  if (!dataId || !affects || !derivative || !preSituation || !postSituationId) {
+    throw new ErrorHandler(
+      StatusCodes.BAD_REQUEST,
+      "All parameters are required for Transition specialization"
+    );
+  }
 
-    try {
-      // Check validation results
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        logger.warn("Transition creation validation failed", {
-          requestId,
-          errors: errors.array(),
-          ip: req.ip,
-        });
+  return `
+    ${dataId} vocab:affects data:${affects} ;
+        vocab:derivative "${escapeQuotes(derivative)}" ;
+        vocab:hasExpectedSituation data:${preSituation} ;
+        vocab:hasTransformableSituation data:${postSituationId} .
+  `;
+}
 
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-          requestId,
-        });
-      }
+/**
+ * Enhanced resource type definition with validation
+ */
+function createResourceTypeDefinition(
+  type,
+  typeClass,
+  dataId,
+  label,
+  stateOfproperty,
+  connective,
+  componentsIds = []
+) {
+  // Basic required params
+  if (!type || !dataId || !typeClass) {
+    throw new ErrorHandler(
+      StatusCodes.BAD_REQUEST,
+      "Type class and data ID are required"
+    );
+  }
 
-      const {
-        label,
-        type,
-        description,
-        properties = {},
-        metadata = {},
-        relationships = [],
-      } = req.body;
+  // Build list of predicate triples (without the subject). We'll join them later.
+  const triples = [];
 
-      // Generate unique transition ID
-      const transitionId = `${type}_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 5)}`;
-
-      logger.info("Creating transition/situation/property", {
-        requestId,
-        transitionId,
-        type,
-        label,
-        relationshipsCount: relationships.length,
-        ip: req.ip,
-      });
-
-      // Build transition data structure
-      const transitionData = {
-        id: transitionId,
-        label,
-        type,
-        description,
-        properties: {
-          ...properties,
-          priority: properties.priority || 5,
-        },
-        relationships,
-        metadata: {
-          ...metadata,
-          created_at: new Date().toISOString(),
-          created_by: req.ip,
-          version: "1.0.0",
-        },
-      };
-
-      // Validate relationships if provided
-      if (relationships.length > 0) {
-        for (const relationship of relationships) {
-          if (!relationship.target || !relationship.type) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-              status: "error",
-              message: "Each relationship must have a target and type",
-              requestId,
-            });
-          }
-        }
-      }
-
-      // Build RDF nanopublication for the transition
-      const nanopubData = await auxFuncts.buildTransitionNanopub(
-        transitionData
+  // Only add a label for non-TransitionType resources. TransitionType must omit rdfs:label.
+  if (type !== auxFunct.ResourceTypes.TransitionType) {
+    if (!label) {
+      throw new ErrorHandler(
+        StatusCodes.BAD_REQUEST,
+        "Label is required for this resource type"
       );
+    }
+    const escapedLabel = escapeQuotes(label || "");
+    triples.push(`rdfs:label "${escapedLabel}"@en`);
+  }
 
-      // Store transition in triple store
-      const { status, result } = await utils.store_transition(nanopubData);
+  // Coerce componentsIds to an array (accept comma-separated string or array)
+  const normalizedComponents = parseIdsInput(componentsIds);
 
-      if (status >= 400) {
+  // Add components for Compound Situation type (and|or|neg)
+  if (type === auxFunct.ResourceTypes.CompoundSituationType) {
+    if (!normalizedComponents || normalizedComponents.length < 2) {
+      throw new ErrorHandler(
+        StatusCodes.BAD_REQUEST,
+        "Compound Situation type requires at least 2 components"
+      );
+    }
+
+    // Validate situation IDs and build the list
+    const validatedComponents = normalizedComponents.map((componentId) => {
+      const trimmedId = String(componentId).trim();
+      if (!isValidId(trimmedId)) {
         throw new ErrorHandler(
-          status,
-          "Failed to store transition in triple store"
+          StatusCodes.BAD_REQUEST,
+          `Invalid situation ID: ${trimmedId}`
         );
       }
+      return `data:${trimmedId}`;
+    });
 
-      // Invalidate related cache entries
-      cacheUtils.invalidatePattern("list");
-      cacheUtils.invalidatePattern("search");
-      cacheUtils.invalidatePattern(type);
+    triples.push(`rdf:${connective} ${validatedComponents.join(" , ")}`);
+  }
 
-      const responseTime = Date.now() - startTime;
-
-      logger.info("Transition created successfully", {
-        requestId,
-        transitionId,
-        type,
-        responseTime,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.CREATED).json({
-        status: "success",
-        message: `${type} created successfully`,
-        data: {
-          id: transitionId,
-          type,
-          label,
-          metadata: transitionData.metadata,
-          nanopub_uri: result.nanopub_uri,
-        },
-        requestId,
-        responseTime,
-      });
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-
-      logger.error("Failed to create transition", {
-        requestId,
-        error: error.message,
-        stack: error.stack,
-        responseTime,
-        ip: req.ip,
-      });
-
-      if (error instanceof ErrorHandler) {
-        return res.status(error.statusCode).json({
-          status: "error",
-          message: error.message,
-          requestId,
-          responseTime,
-        });
-      }
-
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-        status: "error",
-        message: "An unexpected error occurred while creating transition",
-        requestId,
-        responseTime,
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
-      });
+  if (type === auxFunct.ResourceTypes.SituationType) {
+    if (stateOfproperty && auxFunct.isValidArgument(stateOfproperty)) {
+      triples.push(`vocab:stateOf "${escapeQuotes(stateOfproperty)}"@en`);
     }
   }
-);
+
+  // Assemble definition
+  let definition = `\n${dataId} a vocab:${typeClass} , owl:NamedIndividual`;
+  if (triples.length > 0) {
+    definition += ` ;\n` + triples.join(" ;\n");
+  }
+  definition += " .\n";
+  return definition;
+}
+
 
 /**
- * Enhanced endpoint to get a specific transition/situation/property
+ * Main function to create complete transition type definition
  */
-router.get("/:id", [readLimiter, transitionIdValidation], async (req, res) => {
-  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const startTime = Date.now();
+function createCompleteTransitionDefinition(requestBody, routeConfig) {
+  try {
+    const {
+      id,
+      label,
+      sctid,
+      sctid_label,
+      stateOfproperty,
+      connective,
+      pre_situation_id,
+      post_situation_id,
+      affected_property_id,
+      derivative,
+      situation_id_list,
+    } = requestBody;
 
+    const { resourceType } = routeConfig;
+
+    // Convert string arrays to proper arrays if needed
+    const processedSituationsIds = situation_id_list
+      ? typeof situation_id_list === "string"
+        ? situation_id_list.split(",").map((id) => id.trim())
+        : situation_id_list
+      : [];
+
+    // Here, actionTp is undefined
+    const { postfixTp, actionTp, adminTp } = auxFunct.getTypeDetails(resourceType);
+
+    // Validate required components for combination types
+    if (
+      routeConfig.requiresComponents &&
+      (!processedSituationsIds || processedSituationsIds.length < 1)
+    ) {
+      throw new ErrorHandler(
+        StatusCodes.BAD_REQUEST,
+        "Situation Compound Precondition types require at least 1 Situation ID"
+      );
+    }
+
+    // Build resource URIs
+    const dataId = `data:${postfixTp}${id}`;
+    // dataType same as resourceType except for CompoundSituationType
+    // which uses SituationType as adminTp
+    const dataType = adminTp;
+
+    // Create the TMR resource type definition
+    let resourceDefinition = createResourceTypeDefinition(
+      resourceType,
+      dataType,
+      dataId,
+      label,
+      stateOfproperty,
+      connective,
+      processedSituationsIds
+    );
+
+    let transitionSpecialization = '';
+    if (resourceType === auxFunct.ResourceTypes.TransitionType) {
+      // pass the full dataId (data:...) so the specialization uses the correct subject
+      transitionSpecialization = speciliazeTransitionType(
+        dataId,
+        affected_property_id,
+        derivative,
+        pre_situation_id,
+        post_situation_id
+      );
+    }
+
+    // Add SNOMED CT details for resource
+    resourceDefinition += createSnomedResourceDefinition(
+      dataId,
+      sctid,
+      sctid_label
+    );
+
+    const completeDefinition = `${resourceDefinition}\n${transitionSpecialization}`;
+
+    logger.debug("Generated RDF definition", {
+      id,
+      resourceType,
+      definitionLength: completeDefinition.length,
+    });
+
+    return {
+      definition: completeDefinition,
+      createdIds: {
+        resourceId: id, // Just the user-provided ID
+        resourceUri: `http://anonymous.org/${dataId.replace(":", "/")}`, // Convert colon to slash
+      },
+    };
+  } catch (error) {
+    logger.error("Failed to create care action definition", {
+      error: error.message,
+      requestBody: requestBody,
+      routeConfig: routeConfig,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Enhanced SPARQL execution with better error handling
+ */
+async function executeCareActionOperation(
+  sparqlQuery,
+  operationType,
+  resourceType,
+  id
+) {
+  try {
+    let sparqlStatement;
+
+    if (operationType === config.INSERT) {
+      sparqlStatement = `INSERT DATA { ${sparqlQuery} }`;
+    } else if (operationType === config.DELETE) {
+      const { postfixTp } = auxFunct.getTypeDetails(resourceType);
+      const deletePattern = `?s ?p ?o`;
+      const whereClause = `
+        ${deletePattern} .
+        FILTER (?s = data:${postfixTp}${id})
+      `;
+      sparqlStatement = `DELETE { ${deletePattern} } WHERE { ${whereClause} }`;
+    } else {
+      throw new ErrorHandler(
+        StatusCodes.BAD_REQUEST,
+        `Invalid operation type: ${operationType}`
+      );
+    }
+
+    logger.debug("Executing SPARQL operation", {
+      operation: operationType,
+      resourceType,
+      id,
+      queryLength: sparqlStatement.length,
+    });
+
+  const result = await utils.sparqlUpdate("transitions", sparqlStatement);
+
+    if (result.status >= 400) {
+      throw new ErrorHandler(
+        result.status,
+        `SPARQL operation failed: ${result.data}`
+      );
+    }
+
+    return result;
+  } catch (error) {
+    logger.error("SPARQL operation failed", {
+      operation: operationType,
+      resourceType,
+      id,
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Enhanced add handler with comprehensive validation and error handling
+ */
+const createAddHandler = (route, routeConfig) => async (req, res) => {
   try {
     // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Transition get validation failed", {
-        requestId,
+      logger.warn("Validation failed for care action creation", {
+        route,
         errors: errors.array(),
-        ip: req.ip,
+        body: req.body,
       });
 
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
         message: "Validation failed",
         errors: errors.array(),
-        requestId,
       });
     }
 
-    const { id } = req.params;
-    const { include_relationships = true } = req.query;
+    const { resourceType } = routeConfig;
 
-    logger.info("Retrieving transition", {
-      requestId,
-      transitionId: id,
-      include_relationships,
+    logger.info("Creating care action", {
+      route,
+      resourceType,
+      id: req.body.id,
       ip: req.ip,
     });
 
-    // Check cache
-    const cacheKey = cacheUtils.generateKey(`/get/${id}`, {
-      include_relationships,
+    // Generate SPARQL definition
+    const { definition: sparqlQuery, createdIds } =
+      createCompleteTransitionDefinition(req.body, routeConfig);
+
+    // Execute the operation
+    const { status, data } = await executeCareActionOperation(
+      sparqlQuery,
+      config.INSERT,
+      resourceType,
+      req.body.id
+    );
+
+    logger.info("Care action created successfully", {
+      route,
+      resourceType,
+      id: req.body.id,
+      status,
     });
-    const cachedResult = cacheUtils.get(cacheKey);
 
-    if (cachedResult) {
-      const responseTime = Date.now() - startTime;
-      logger.info("Returning cached transition", {
-        requestId,
-        transitionId: id,
-        responseTime,
-        cached: true,
-      });
-
-      return res.status(StatusCodes.OK).json({
-        ...cachedResult,
-        cached: true,
-        requestId,
-        responseTime,
-      });
-    }
-
-    // Retrieve transition from triple store
-    const { status, transition } = await utils.get_transition_by_id(id);
-
-    if (status === 404) {
-      logger.warn("Transition not found", {
-        requestId,
-        transitionId: id,
-        ip: req.ip,
-      });
-
-      return res.status(StatusCodes.NOT_FOUND).json({
-        status: "error",
-        message: "Transition not found",
-        requestId,
-      });
-    }
-
-    if (status >= 400) {
-      throw new ErrorHandler(
-        status,
-        "Failed to retrieve transition from triple store"
-      );
-    }
-
-    // Process transition data
-    let processedTransition = transition;
-
-    if (include_relationships === "true" || include_relationships === true) {
-      // Get related transitions/situations/properties
-      const relatedItems = await auxFuncts.getRelatedTransitions(id);
-      processedTransition = {
-        ...transition,
-        related_items: relatedItems,
-      };
-    }
-
-    const responseData = {
+    res.status(status).json({
       status: "success",
-      data: processedTransition,
-    };
-
-    // Cache the result
-    cacheUtils.set(cacheKey, responseData, CACHE_TTL);
-
-    const responseTime = Date.now() - startTime;
-
-    logger.info("Transition retrieved successfully", {
-      requestId,
-      transitionId: id,
-      type: transition.type,
-      responseTime,
-      cached: false,
-      ip: req.ip,
-    });
-
-    res.status(StatusCodes.OK).json({
-      ...responseData,
-      cached: false,
-      requestId,
-      responseTime,
+      message: `Care action ${req.body.id} created successfully`,
+      data: {
+        operation: data || "Operation completed",
+        createdResources: createdIds,
+      },
     });
   } catch (error) {
-    const responseTime = Date.now() - startTime;
-
-    logger.error("Failed to retrieve transition", {
-      requestId,
-      transitionId: req.params.id,
+    logger.error("Failed to create care action", {
+      route,
+      resourceType: routeConfig.resourceType,
+      id: req.body?.id,
       error: error.message,
       stack: error.stack,
-      responseTime,
-      ip: req.ip,
     });
 
     if (error instanceof ErrorHandler) {
       return res.status(error.statusCode).json({
         status: "error",
         message: error.message,
-        requestId,
-        responseTime,
       });
     }
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
-      message: "An unexpected error occurred while retrieving transition",
-      requestId,
-      responseTime,
+      message: "Failed to create care action",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
-});
+};
 
 /**
- * Enhanced endpoint to update a transition/situation/property
+ * Enhanced delete handler with validation
  */
-router.put(
-  "/:id",
-  [writeLimiter, transitionIdValidation, transitionValidationRules],
-  async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
-
-    try {
-      // Check validation results
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        logger.warn("Transition update validation failed", {
-          requestId,
-          errors: errors.array(),
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-          requestId,
-        });
-      }
-
-      const { id } = req.params;
-      const {
-        label,
-        type,
-        description,
-        properties = {},
-        metadata = {},
-        relationships = [],
-      } = req.body;
-
-      logger.info("Updating transition", {
-        requestId,
-        transitionId: id,
-        type,
-        label,
-        ip: req.ip,
-      });
-
-      // Check if transition exists
-      const { status: existsStatus } = await utils.get_transition_by_id(id);
-
-      if (existsStatus === 404) {
-        logger.warn("Cannot update non-existent transition", {
-          requestId,
-          transitionId: id,
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.NOT_FOUND).json({
-          status: "error",
-          message: "Transition not found",
-          requestId,
-        });
-      }
-
-      // Build updated transition data
-      const updatedTransitionData = {
-        id,
-        label,
-        type,
-        description,
-        properties,
-        relationships,
-        metadata: {
-          ...metadata,
-          updated_at: new Date().toISOString(),
-          updated_by: req.ip,
-        },
-      };
-
-      // Build updated RDF nanopublication
-      const nanopubData = await auxFuncts.buildTransitionNanopub(
-        updatedTransitionData
-      );
-
-      // Update transition in triple store
-      const { status, result } = await utils.update_transition(id, nanopubData);
-
-      if (status >= 400) {
-        throw new ErrorHandler(
-          status,
-          "Failed to update transition in triple store"
-        );
-      }
-
-      // Invalidate cache entries
-      cacheUtils.invalidatePattern(id);
-      cacheUtils.invalidatePattern("list");
-      cacheUtils.invalidatePattern("search");
-      cacheUtils.invalidatePattern(type);
-
-      const responseTime = Date.now() - startTime;
-
-      logger.info("Transition updated successfully", {
-        requestId,
-        transitionId: id,
-        type,
-        responseTime,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.OK).json({
-        status: "success",
-        message: `${type} updated successfully`,
-        data: {
-          id,
-          type,
-          label,
-          metadata: updatedTransitionData.metadata,
-          nanopub_uri: result.nanopub_uri,
-        },
-        requestId,
-        responseTime,
-      });
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-
-      logger.error("Failed to update transition", {
-        requestId,
-        transitionId: req.params.id,
-        error: error.message,
-        stack: error.stack,
-        responseTime,
-        ip: req.ip,
-      });
-
-      if (error instanceof ErrorHandler) {
-        return res.status(error.statusCode).json({
-          status: "error",
-          message: error.message,
-          requestId,
-          responseTime,
-        });
-      }
-
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+const createDeleteHandler = (route, routeConfig) => async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
-        message: "An unexpected error occurred while updating transition",
-        requestId,
-        responseTime,
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
+        message: "Validation failed",
+        errors: errors.array(),
       });
     }
+
+    const { resourceType } = routeConfig;
+    const { id } = req.body;
+
+    logger.info("Deleting care action", {
+      route,
+      resourceType,
+      id,
+      ip: req.ip,
+    });
+
+    const { status, data } = await executeCareActionOperation(
+      null,
+      config.DELETE,
+      resourceType,
+      id
+    );
+
+    logger.info("Care action deleted successfully", {
+      route,
+      resourceType,
+      id,
+      status,
+    });
+
+    res.status(status).json({
+      status: "success",
+      message: `Care action ${id} deleted successfully`,
+      data: data || "Operation completed",
+    });
+  } catch (error) {
+    logger.error("Failed to delete care action", {
+      route,
+      resourceType: routeConfig.resourceType,
+      id: req.body?.id,
+      error: error.message,
+    });
+
+    if (error instanceof ErrorHandler) {
+      return res.status(error.statusCode).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to delete care action",
+    });
   }
-);
+};
 
 /**
- * Enhanced endpoint to delete a transition/situation/property
+ * Enhanced get care action handler
  */
-router.delete(
-  "/:id",
-  [writeLimiter, transitionIdValidation],
-  async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
+router.post(
+  "/all/get",
+  [
+    body("id")
+      .optional()
+      .isString()
+      .trim()
+      .matches(/^[a-zA-Z0-9_-]+$/)
+      .withMessage(
+        "ID must contain only alphanumeric characters, underscores, or hyphens"
+      ),
 
+    body("uri")
+      .optional()
+      .isString()
+      .trim()
+      .isURL({ protocols: ["http", "https"] })
+      .withMessage("URI must be a valid URL"),
+  ],
+  async (req, res) => {
     try {
-      // Check validation results
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        logger.warn("Transition deletion validation failed", {
-          requestId,
-          errors: errors.array(),
-          ip: req.ip,
-        });
-
         return res.status(StatusCodes.BAD_REQUEST).json({
           status: "error",
           message: "Validation failed",
           errors: errors.array(),
-          requestId,
         });
       }
 
-      const { id } = req.params;
+      const { id, uri } = req.body;
 
-      logger.info("Deleting transition", {
-        requestId,
-        transitionId: id,
-        ip: req.ip,
+      if (!id && !uri) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          status: "error",
+          message: "Either ID or URI must be provided",
+        });
+      }
+
+      logger.info("Retrieving care action", { id, uri, ip: req.ip });
+
+      const sparqlResults = await utils.getCareActionData(
+        "careActions",
+        id,
+        uri
+      );
+
+      logger.debug("SPARQL Results received", {
+        hasResults: !!sparqlResults,
+        hasResultsProperty: !!sparqlResults?.results,
+        bindingsLength: sparqlResults?.results?.bindings?.length || 0,
       });
 
-      // Check if transition exists and get its type
-      const { status: existsStatus, transition } =
-        await utils.get_transition_by_id(id);
-
-      if (existsStatus === 404) {
-        logger.warn("Cannot delete non-existent transition", {
-          requestId,
-          transitionId: id,
-          ip: req.ip,
-        });
-
+      if (
+        !sparqlResults ||
+        !sparqlResults.results ||
+        !sparqlResults.results.bindings ||
+        sparqlResults.results.bindings.length === 0
+      ) {
         return res.status(StatusCodes.NOT_FOUND).json({
           status: "error",
-          message: "Transition not found",
-          requestId,
+          message: "Care action not found",
         });
       }
 
-      const transitionType = transition.type;
+      const data = auxFunct.get_care_action_data(sparqlResults, {});
 
-      // Delete transition from triple store
-      const { status } = await utils.delete_transition(id);
-
-      if (status >= 400) {
-        throw new ErrorHandler(
-          status,
-          "Failed to delete transition from triple store"
-        );
-      }
-
-      // Invalidate cache entries
-      cacheUtils.invalidatePattern(id);
-      cacheUtils.invalidatePattern("list");
-      cacheUtils.invalidatePattern("search");
-      cacheUtils.invalidatePattern(transitionType);
-
-      const responseTime = Date.now() - startTime;
-
-      logger.info("Transition deleted successfully", {
-        requestId,
-        transitionId: id,
-        type: transitionType,
-        responseTime,
-        ip: req.ip,
-      });
+      logger.info("Care action retrieved successfully", { id, uri });
 
       res.status(StatusCodes.OK).json({
         status: "success",
-        message: `${transitionType} deleted successfully`,
-        data: {
-          id,
-          type: transitionType,
-          deleted_at: new Date().toISOString(),
-        },
-        requestId,
-        responseTime,
+        data,
       });
     } catch (error) {
-      const responseTime = Date.now() - startTime;
-
-      logger.error("Failed to delete transition", {
-        requestId,
-        transitionId: req.params.id,
+      logger.error("Failed to retrieve care action", {
+        id: req.body?.id,
+        uri: req.body?.uri,
         error: error.message,
         stack: error.stack,
-        responseTime,
-        ip: req.ip,
       });
-
-      if (error instanceof ErrorHandler) {
-        return res.status(error.statusCode).json({
-          status: "error",
-          message: error.message,
-          requestId,
-          responseTime,
-        });
-      }
 
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         status: "error",
-        message: "An unexpected error occurred while deleting transition",
-        requestId,
-        responseTime,
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
+        message: "Failed to retrieve care action",
       });
     }
   }
@@ -829,101 +733,64 @@ router.delete(
  * Health check endpoint
  */
 router.get("/health", (req, res) => {
-  const cacheStats = cacheUtils.getStats();
-
   res.status(StatusCodes.OK).json({
     status: "healthy",
-    service: "transitions-situations-properties",
+    service: "transitions",
     timestamp: new Date().toISOString(),
-    version: "2.0.0",
-    cache: cacheStats,
+    routes: Object.keys(ROUTE_MAPPINGS).length,
   });
 });
 
 /**
- * Service information endpoint
+ * Get available transition types
  */
-router.get("/info", (req, res) => {
+router.get("/types", (req, res) => {
+  const types = Object.entries(ROUTE_MAPPINGS).map(([route, config]) => ({
+    route,
+    resourceType: config.resourceType,
+    description: config.description,
+    requiresComponents: config.requiresComponents,
+  }));
+
   res.status(StatusCodes.OK).json({
     status: "success",
     data: {
-      service: "transitions-situations-properties",
-      description:
-        "CRUD service for TMR-based transitions, situations, and properties",
-      endpoints: [
-        {
-          path: "/",
-          method: "POST",
-          description: "Create a new transition, situation, or property",
-        },
-        {
-          path: "/:id",
-          method: "GET",
-          description: "Retrieve a specific transition/situation/property",
-        },
-        {
-          path: "/:id",
-          method: "PUT",
-          description: "Update a transition/situation/property",
-        },
-        {
-          path: "/:id",
-          method: "DELETE",
-          description: "Delete a transition/situation/property",
-        },
-        {
-          path: "/health",
-          method: "GET",
-          description: "Health check endpoint",
-        },
-        {
-          path: "/info",
-          method: "GET",
-          description: "Service information",
-        },
-      ],
-      supported_types: ["transition", "situation", "property"],
-      supported_relationships: [
-        "precedes",
-        "follows",
-        "enables",
-        "conflicts",
-        "requires",
-      ],
-      data_storage: "RDF nanopublications in triple store",
-      caching: {
-        enabled: true,
-        ttl_seconds: CACHE_TTL,
-      },
+      available_types: types,
+      total_count: types.length,
     },
   });
 });
 
 /**
- * Cache management endpoints
+ * Register all routes dynamically with enhanced validation
  */
-router.post("/cache/clear", (req, res) => {
-  try {
-    cacheUtils.clear();
+Object.entries(ROUTE_MAPPINGS).forEach(([route, routeConfig]) => {
+  const validationRules = getValidationRules(routeConfig);
 
-    logger.info("Transition cache cleared via API", { ip: req.ip });
+  // Add endpoints
+  router.post(
+    `${route}/add`,
+    createLimiter,
+    validationRules,
+    createAddHandler(route, routeConfig)
+  );
 
-    res.status(StatusCodes.OK).json({
-      status: "success",
-      message: "Cache cleared successfully",
-    });
-  } catch (error) {
-    logger.error("Failed to clear transition cache", {
-      error: error.message,
-      ip: req.ip,
-    });
-
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: "error",
-      message: "Failed to clear cache",
-    });
-  }
+  // Delete endpoints
+  router.post(
+    `${route}/delete`,
+    deleteLimiter,
+    [
+      body("id")
+        .isString()
+        .trim()
+        .notEmpty()
+        .matches(/^[a-zA-Z0-9_-]+$/)
+        .withMessage(
+          "ID is required and must contain only alphanumeric characters, underscores, or hyphens"
+        ),
+    ],
+    createDeleteHandler(route, routeConfig)
+  );
 });
 
 module.exports = router;
-module.exports.cacheUtils = cacheUtils;

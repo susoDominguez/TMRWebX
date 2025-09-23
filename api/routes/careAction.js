@@ -15,6 +15,7 @@ const logger = require("../config/winston");
 const SNOMED_PREFIX = "http://snomed.info/sct/";
 const DATA_PREFIX = "http://anonymous.org/data/";
 const VOCAB_PREFIX = "http://anonymous.org/vocab/";
+const { isValidId, parseIdsInput, escapeQuotes } = require("../lib/router_functs/route_helpers");
 
 // Rate limiting for create/delete operations
 const createLimiter = rateLimit({
@@ -220,13 +221,10 @@ function createSnomedResourceDefinition(dataId, sctCode, sctLabel) {
       `Invalid SNOMED CT code format: ${sctCode}`
     );
   }
-
   let sctDefinition = `\n${dataId} vocab:hasSctId snomed:${sctCode} ;\n`;
 
   if (auxFunct.isValidArgument(sctLabel)) {
-    // Escape quotes in label
-    const escapedLabel = sctLabel.replace(/"/g, '\\"');
-    sctDefinition += ` vocab:hasSctLbl "${escapedLabel}"@en .\n`;
+    sctDefinition += ` vocab:hasSctLbl "${escapeQuotes(sctLabel)}"@en .\n`;
   } else {
     sctDefinition = sctDefinition.slice(0, -2) + " .\n"; // Remove semicolon, add period
   }
@@ -249,10 +247,8 @@ function createResourceTypeDefinition(
       "Type class, data ID, and label are required"
     );
   }
-
   // Escape quotes in label
-  const escapedLabel = label.replace(/"/g, '\\"');
-
+  const escapedLabel = escapeQuotes(label);
   let definition =
     `\n${dataId} a vocab:${typeClass} , owl:NamedIndividual ;\n` +
     `rdfs:label "${escapedLabel}"@en `;
@@ -265,13 +261,12 @@ function createResourceTypeDefinition(
         "Drug combination type requires at least 2 components"
       );
     }
-
     definition += `;\n vocab:hasComponent `;
 
     // Validate component IDs and build the definition
     const validatedComponents = componentsIds.map((componentId) => {
-      const trimmedId = componentId.trim();
-      if (!/^[a-zA-Z0-9_-]+$/.test(trimmedId)) {
+      const trimmedId = String(componentId).trim();
+      if (!isValidId(trimmedId)) {
         throw new ErrorHandler(
           StatusCodes.BAD_REQUEST,
           `Invalid component ID: ${trimmedId}`
@@ -323,18 +318,9 @@ function createCareActionTypeDefinition(
 
   // Parse and validate lists
   const parseAndValidateIds = (idsInput) => {
-    if (!idsInput) return [];
-
-    const ids =
-      typeof idsInput === "string"
-        ? idsInput.split(",").map((id) => id.trim())
-        : Array.isArray(idsInput)
-        ? idsInput
-        : [];
-
-    // Validate each ID
+    const ids = parseIdsInput(idsInput);
     ids.forEach((id) => {
-      if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+      if (!isValidId(id)) {
         throw new ErrorHandler(
           StatusCodes.BAD_REQUEST,
           `Invalid ID format: ${id}`
@@ -786,7 +772,7 @@ router.post(
 router.get("/health", (req, res) => {
   res.status(StatusCodes.OK).json({
     status: "healthy",
-    service: "care-actions",
+    service: "careActions",
     timestamp: new Date().toISOString(),
     routes: Object.keys(ROUTE_MAPPINGS).length,
   });

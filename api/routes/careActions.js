@@ -327,7 +327,10 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       parseInt(offset) + parseInt(limit)
     );
 
-    // Build response
+    // Build response with unique query_types
+    const query_types = Array.from(new Set(
+      careActionTypes.map((type) => type.replace("vocab:", "http://anonymous.org/vocab/"))
+    ));
     const responseData = {
       status: "success",
       data: paginatedResults,
@@ -337,9 +340,7 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
         limit: parseInt(limit),
         offset: parseInt(offset),
         has_more: parseInt(offset) + parseInt(limit) < totalCount,
-        query_types: careActionTypes.map((type) =>
-          type.replace("vocab:", "http://anonymous.org/vocab/")
-        ),
+        query_types,
         successful_queries: successfulResults.length,
         failed_queries: failedResults.length,
       },
