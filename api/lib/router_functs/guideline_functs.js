@@ -1294,6 +1294,7 @@ module.exports = {
   insert_CB_in_rec,
   action_rec,
   get_care_action_data,
+  get_transition_data,
   get_causation_belief_data_short,
   get_causation_belief_w_transition_data,
   get_recommendation_data_short,

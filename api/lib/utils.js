@@ -645,9 +645,13 @@ module.exports = {
     tr_ds_id,
     care_act_ds_id
   ) {
+    // For SERVICE clauses in federated SPARQL queries, Fuseki needs to use localhost
+    // because it's executing the query and needs to access its own datasets
+    const serviceHost = "localhost";
+    
     const TrUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -656,7 +660,7 @@ module.exports = {
 
     const actUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -732,9 +736,12 @@ module.exports = {
     const recPubInfoURI = `<${rec_uri}_publicationinfo>`;
     const recHeadURI = `<${rec_uri}_head>`;
 
+    // For SERVICE clauses in federated SPARQL queries, use localhost
+    const serviceHost = "localhost";
+    
     const actUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -743,7 +750,7 @@ module.exports = {
 
     const cbUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -752,7 +759,7 @@ module.exports = {
 
     const trUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -861,9 +868,12 @@ module.exports = {
     const recProvURI = `<` + recAssertUri + `_provenance>`;
     const recPubInfoURI = `<` + recAssertUri + `_publicationinfo>`;
 
+    // For SERVICE clauses in federated SPARQL queries, use localhost
+    const serviceHost = "localhost";
+    
     const stmntUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +

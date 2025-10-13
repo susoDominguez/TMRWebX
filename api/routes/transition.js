@@ -69,7 +69,20 @@ const ROUTE_MAPPINGS = Object.freeze({
 });
 
 /**
- * Enhanced validation rules for care action creation
+ * Helper function to get friendly resource type name
+ */
+function getResourceTypeName(resourceType) {
+  const typeNames = {
+    [auxFunct.ResourceTypes.PropertyType]: "property",
+    [auxFunct.ResourceTypes.SituationType]: "situation",
+    [auxFunct.ResourceTypes.CompoundSituationType]: "compound situation",
+    [auxFunct.ResourceTypes.TransitionType]: "transition",
+  };
+  return typeNames[resourceType] || "resource";
+}
+
+/**
+ * Enhanced validation rules for resource creation
  */
 const getValidationRules = (routeConfig) => {
   const isTransition = routeConfig.resourceType === auxFunct.ResourceTypes.TransitionType;
@@ -229,6 +242,7 @@ function createSnomedResourceDefinition(dataId, sctCode, sctLabel) {
 
 /**
  * Specializes Transition type
+ * Ensures proper prefixes are added to property and situation IDs
  */
 // Use dataId (e.g. "data:MyTransition") as subject
 function speciliazeTransitionType(
@@ -245,11 +259,26 @@ function speciliazeTransitionType(
     );
   }
 
+  // Add proper prefixes if not already present
+  // Properties should have "Prop" prefix
+  const affectedProperty = affects.startsWith('Prop') || affects.startsWith('CompSit') 
+    ? affects 
+    : `Prop${affects}`;
+  
+  // Situations should have "Sit" or "CompSit" prefix
+  const preSituationWithPrefix = preSituation.startsWith('Sit') || preSituation.startsWith('CompSit')
+    ? preSituation 
+    : `Sit${preSituation}`;
+  
+  const postSituationWithPrefix = postSituationId.startsWith('Sit') || postSituationId.startsWith('CompSit')
+    ? postSituationId 
+    : `Sit${postSituationId}`;
+
   return `
-    ${dataId} vocab:affects data:${affects} ;
+    ${dataId} vocab:affects data:${affectedProperty} ;
         vocab:derivative "${escapeQuotes(derivative)}" ;
-        vocab:hasExpectedSituation data:${preSituation} ;
-        vocab:hasTransformableSituation data:${postSituationId} .
+        vocab:hasExpectedSituation data:${preSituationWithPrefix} ;
+        vocab:hasTransformableSituation data:${postSituationWithPrefix} .
   `;
 }
 
@@ -425,7 +454,8 @@ function createCompleteTransitionDefinition(requestBody, routeConfig) {
       },
     };
   } catch (error) {
-    logger.error("Failed to create care action definition", {
+    const resourceTypeName = getResourceTypeName(routeConfig.resourceType);
+    logger.error(`Failed to create ${resourceTypeName} definition`, {
       error: error.message,
       requestBody: requestBody,
       routeConfig: routeConfig,
@@ -499,7 +529,8 @@ const createAddHandler = (route, routeConfig) => async (req, res) => {
     // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Validation failed for care action creation", {
+      const resourceTypeName = getResourceTypeName(routeConfig.resourceType);
+      logger.warn(`Validation failed for ${resourceTypeName} creation`, {
         route,
         errors: errors.array(),
         body: req.body,
@@ -513,8 +544,9 @@ const createAddHandler = (route, routeConfig) => async (req, res) => {
     }
 
     const { resourceType } = routeConfig;
+    const resourceTypeName = getResourceTypeName(resourceType);
 
-    logger.info("Creating care action", {
+    logger.info(`Creating ${resourceTypeName}`, {
       route,
       resourceType,
       id: req.body.id,
@@ -533,7 +565,7 @@ const createAddHandler = (route, routeConfig) => async (req, res) => {
       req.body.id
     );
 
-    logger.info("Care action created successfully", {
+    logger.info(`${resourceTypeName.charAt(0).toUpperCase() + resourceTypeName.slice(1)} created successfully`, {
       route,
       resourceType,
       id: req.body.id,
@@ -542,14 +574,15 @@ const createAddHandler = (route, routeConfig) => async (req, res) => {
 
     res.status(status).json({
       status: "success",
-      message: `Care action ${req.body.id} created successfully`,
+      message: `${resourceTypeName.charAt(0).toUpperCase() + resourceTypeName.slice(1)} ${req.body.id} created successfully`,
       data: {
         operation: data || "Operation completed",
         createdResources: createdIds,
       },
     });
   } catch (error) {
-    logger.error("Failed to create care action", {
+    const resourceTypeName = getResourceTypeName(routeConfig.resourceType);
+    logger.error(`Failed to create ${resourceTypeName}`, {
       route,
       resourceType: routeConfig.resourceType,
       id: req.body?.id,
@@ -566,7 +599,7 @@ const createAddHandler = (route, routeConfig) => async (req, res) => {
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
-      message: "Failed to create care action",
+      message: `Failed to create ${resourceTypeName}`,
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
@@ -588,8 +621,9 @@ const createDeleteHandler = (route, routeConfig) => async (req, res) => {
 
     const { resourceType } = routeConfig;
     const { id } = req.body;
+    const resourceTypeName = getResourceTypeName(resourceType);
 
-    logger.info("Deleting care action", {
+    logger.info(`Deleting ${resourceTypeName}`, {
       route,
       resourceType,
       id,
@@ -603,7 +637,7 @@ const createDeleteHandler = (route, routeConfig) => async (req, res) => {
       id
     );
 
-    logger.info("Care action deleted successfully", {
+    logger.info(`${resourceTypeName.charAt(0).toUpperCase() + resourceTypeName.slice(1)} deleted successfully`, {
       route,
       resourceType,
       id,
@@ -612,11 +646,12 @@ const createDeleteHandler = (route, routeConfig) => async (req, res) => {
 
     res.status(status).json({
       status: "success",
-      message: `Care action ${id} deleted successfully`,
+      message: `${resourceTypeName.charAt(0).toUpperCase() + resourceTypeName.slice(1)} ${id} deleted successfully`,
       data: data || "Operation completed",
     });
   } catch (error) {
-    logger.error("Failed to delete care action", {
+    const resourceTypeName = getResourceTypeName(routeConfig.resourceType);
+    logger.error(`Failed to delete ${resourceTypeName}`, {
       route,
       resourceType: routeConfig.resourceType,
       id: req.body?.id,
@@ -632,13 +667,142 @@ const createDeleteHandler = (route, routeConfig) => async (req, res) => {
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
-      message: "Failed to delete care action",
+      message: `Failed to delete ${resourceTypeName}`,
     });
   }
 };
 
 /**
- * Enhanced get care action handler
+ * Simple GET endpoint to retrieve raw RDF data for any resource
+ */
+router.get("/:id", async (req, res) => {
+  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const startTime = Date.now();
+
+  try {
+    const { id } = req.params;
+
+    if (!isValidId(id)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Invalid ID format",
+        requestId,
+      });
+    }
+
+    const fullUri = `${DATA_PREFIX}${id}`;
+
+    logger.info("Retrieving resource by ID", {
+      requestId,
+      id,
+      uri: fullUri,
+      ip: req.ip,
+    });
+
+    // Use DatabaseService to query directly
+    const db = req.app.locals.db;
+    const query = `
+      SELECT ?p ?o WHERE {
+        <${fullUri}> ?p ?o
+      }
+    `;
+
+    let sparqlResults;
+    try {
+      sparqlResults = await db.sparqlQuery("transitions", query);
+    } catch (error) {
+      logger.error("SPARQL query failed", {
+        requestId,
+        error: error.message,
+      });
+      throw error;
+    }
+
+    if (!sparqlResults?.bindings || sparqlResults.bindings.length === 0) {
+      logger.warn("No data found for resource", {
+        requestId,
+        id,
+        uri: fullUri,
+      });
+      
+      return res.status(StatusCodes.NOT_FOUND).json({
+        status: "error",
+        message: "Resource not found",
+        requestId,
+      });
+    }
+
+    // Transform bindings to a more readable format
+    const properties = {};
+    const types = [];
+    
+    sparqlResults.bindings.forEach((binding) => {
+      const predicate = binding.p.value;
+      const predicateName = predicate.split("/").pop().split("#").pop();
+      const object = binding.o;
+
+      // Handle rdf:type specially
+      if (predicate === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type") {
+        types.push(object.value);
+      } else {
+        // Store other properties
+        if (!properties[predicateName]) {
+          properties[predicateName] = [];
+        }
+        
+        properties[predicateName].push({
+          value: object.value,
+          type: object.type,
+          lang: object["xml:lang"] || object.lang,
+          datatype: object.datatype,
+        });
+      }
+    });
+
+    const responseTime = Date.now() - startTime;
+
+    logger.info("Resource retrieved successfully", {
+      requestId,
+      id,
+      propertiesCount: Object.keys(properties).length,
+      typesCount: types.length,
+      responseTime,
+    });
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: {
+        id,
+        uri: fullUri,
+        types,
+        properties,
+      },
+      requestId,
+      responseTime,
+    });
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+
+    logger.error("Failed to retrieve resource", {
+      requestId,
+      id: req.params?.id,
+      error: error.message,
+      stack: error.stack,
+      responseTime,
+    });
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to retrieve resource",
+      requestId,
+      responseTime,
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
+
+/**
+ * Enhanced get transition/situation/property handler (using structured schema)
  */
 router.post(
   "/all/get",
@@ -679,12 +843,19 @@ router.post(
         });
       }
 
-      logger.info("Retrieving care action", { id, uri, ip: req.ip });
+      // Construct full URI if only ID provided
+      const fullUri = uri || `${DATA_PREFIX}${id}`;
 
-      const sparqlResults = await utils.getCareActionData(
-        "careActions",
-        id,
-        uri
+      logger.info("Retrieving transition/situation/property", { 
+        id, 
+        uri: fullUri, 
+        ip: req.ip 
+      });
+
+      // Query using the transitions dataset
+      const sparqlResults = await utils.getTransitionData(
+        "transitions",
+        `<${fullUri}>`
       );
 
       logger.debug("SPARQL Results received", {
@@ -701,20 +872,23 @@ router.post(
       ) {
         return res.status(StatusCodes.NOT_FOUND).json({
           status: "error",
-          message: "Care action not found",
+          message: "Transition/situation/property not found",
         });
       }
 
-      const data = auxFunct.get_care_action_data(sparqlResults, {});
+      const data = auxFunct.get_transition_data(sparqlResults, {});
 
-      logger.info("Care action retrieved successfully", { id, uri });
+      logger.info("Transition/situation/property retrieved successfully", { 
+        id, 
+        uri: fullUri 
+      });
 
       res.status(StatusCodes.OK).json({
         status: "success",
         data,
       });
     } catch (error) {
-      logger.error("Failed to retrieve care action", {
+      logger.error("Failed to retrieve transition/situation/property", {
         id: req.body?.id,
         uri: req.body?.uri,
         error: error.message,
@@ -723,7 +897,7 @@ router.post(
 
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         status: "error",
-        message: "Failed to retrieve care action",
+        message: "Failed to retrieve transition/situation/property",
       });
     }
   }

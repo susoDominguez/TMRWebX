@@ -251,10 +251,22 @@ const relationshipValidationRules = [
     ),
 ];
 
+// Transition type constants (aligned with careActions pattern)
+const TRANSITION_TYPES = Object.freeze({
+  Transition: "vocab:TransitionType",
+  Situation: "vocab:SituationType",
+  Property: "vocab:TropeType",
+  CompoundSituation: "vocab:CompoundSituationType",
+});
+
 /**
- * Enhanced endpoint to retrieve all transitions/situations/properties with advanced filtering
+ * Helper function to handle retrieval of resources by types
+ * @param {Array<string>} types - Array of vocab type URIs to query
+ * @param {string} resourceTypeName - Name for logging (e.g., "transitions", "situations")
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
  */
-router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
+async function handleGetResources(types, resourceTypeName, req, res) {
   const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   const startTime = Date.now();
 
@@ -262,7 +274,7 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
     // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Transitions query validation failed", {
+      logger.warn(`${resourceTypeName} query validation failed`, {
         requestId,
         errors: errors.array(),
         query: req.query,
@@ -277,74 +289,32 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
       });
     }
 
-    // Extract and validate query parameters
+    // Extract query parameters
     const {
       limit = 50,
       offset = 0,
-      type,
-      priority_min,
-      priority_max,
-      format = "json",
-      include_metadata = false,
-      include_relationships = false,
-      evidence_level,
-      date_from,
-      date_to,
-      has_conditions,
       search,
     } = req.query;
 
-    // Validate priority range
-    if (
-      priority_min &&
-      priority_max &&
-      parseInt(priority_min) > parseInt(priority_max)
-    ) {
-      return res.status(StatusCodes.BAD_REQUEST).json({
-        status: "error",
-        message: "Priority minimum cannot be greater than priority maximum",
-        requestId,
-      });
-    }
+    const queryParams = { limit, offset, search };
 
-    // Validate date range
-    if (date_from && date_to && new Date(date_from) > new Date(date_to)) {
-      return res.status(StatusCodes.BAD_REQUEST).json({
-        status: "error",
-        message: "Date from cannot be after date to",
-        requestId,
-      });
-    }
+    // Deduplicate types (in case aliases point to same vocab URI)
+    const uniqueTypes = [...new Set(types)];
 
-    const queryParams = {
-      limit,
-      offset,
-      type,
-      priority_min,
-      priority_max,
-      format,
-      include_metadata,
-      include_relationships,
-      evidence_level,
-      date_from,
-      date_to,
-      has_conditions,
-      search,
-    };
-
-    logger.info("Retrieving transitions/situations/properties", {
+    logger.info(`Retrieving ${resourceTypeName}`, {
       requestId,
       queryParams,
+      typesToQuery: uniqueTypes,
       ip: req.ip,
     });
 
     // Check cache
-    const cacheKey = cacheUtils.generateKey("/get", queryParams);
+    const cacheKey = cacheUtils.generateKey(`/${resourceTypeName}`, queryParams);
     const cachedResult = cacheUtils.get(cacheKey);
 
     if (cachedResult) {
       const responseTime = Date.now() - startTime;
-      logger.info("Returning cached transitions result", {
+      logger.info(`Returning cached ${resourceTypeName} result`, {
         requestId,
         responseTime,
         cached: true,
@@ -358,156 +328,100 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
       });
     }
 
-    // Build SPARQL query filters
-    const filters = [];
-
-    if (type) {
-      filters.push(`?transition vocab:transitionType "${type}"`);
-    }
-
-    if (priority_min) {
-      filters.push(
-        `?transition vocab:priority ?priority . FILTER(?priority >= ${priority_min})`
-      );
-    }
-
-    if (priority_max) {
-      filters.push(
-        `?transition vocab:priority ?priority . FILTER(?priority <= ${priority_max})`
-      );
-    }
-
-    if (evidence_level) {
-      filters.push(`?transition vocab:evidenceLevel "${evidence_level}"`);
-    }
-
-    if (date_from) {
-      filters.push(
-        `?transition vocab:createdAt ?date . FILTER(?date >= "${date_from}"^^xsd:dateTime)`
-      );
-    }
-
-    if (date_to) {
-      filters.push(
-        `?transition vocab:createdAt ?date . FILTER(?date <= "${date_to}"^^xsd:dateTime)`
-      );
-    }
-
-    if (has_conditions === "true") {
-      filters.push(`?transition vocab:hasCondition ?condition`);
-    } else if (has_conditions === "false") {
-      filters.push(`NOT EXISTS { ?transition vocab:hasCondition ?condition }`);
-    }
-
-    if (search) {
-      filters.push(
-        `(?transition vocab:label ?label . FILTER(CONTAINS(LCASE(?label), "${search.toLowerCase()}")))`
-      );
-    }
-
-    // Fetch transitions from the data store
-    const objectTypes = type
-      ? [`vocab:${type.charAt(0).toUpperCase() + type.slice(1)}`]
-      : ["vocab:Transition", "vocab:Situation", "vocab:Property"];
-
-    const {
-      status = 500,
-      bindings,
-      head_vars,
-    } = await utils.get_named_subject_in_named_graphs_from_multiple_objects_with_filters(
-      "transitions",
-      objectTypes,
-      filters
+    // Execute SPARQL queries in parallel
+    const sparqlResults = await Promise.allSettled(
+      uniqueTypes.map(async (vocabType) => {
+        try {
+          const result = await utils.sparqlGetSubjectDefaultGraph(
+            "transitions",
+            vocabType
+          );
+          return { type: vocabType, result, success: true };
+        } catch (error) {
+          logger.error("SPARQL query failed for type", {
+            requestId,
+            type: vocabType,
+            error: error.message,
+          });
+          return { type: vocabType, error: error.message, success: false };
+        }
+      })
     );
 
-    if (status >= 400) {
+    // Process results and handle partial failures
+    const successfulResults = [];
+    const failedResults = [];
+
+    sparqlResults.forEach((result, index) => {
+      if (result.status === "fulfilled" && result.value.success) {
+        successfulResults.push(result.value.result);
+      } else {
+        const vocabType = uniqueTypes[index];
+        const error =
+          result.status === "rejected"
+            ? result.reason?.message || "Unknown error"
+            : result.value.error;
+
+        failedResults.push({ type: vocabType, error });
+        logger.error(`Query failed for ${resourceTypeName} type`, {
+          requestId,
+          type: vocabType,
+          error,
+        });
+      }
+    });
+
+    // Parse successful results
+    let parsedResults;
+    try {
+      parsedResults = await auxFuncts.get_sparqlquery_arr(successfulResults);
+    } catch (parseError) {
+      logger.error("Failed to parse SPARQL results", {
+        requestId,
+        error: parseError.message,
+        resultCount: successfulResults.length,
+      });
       throw new ErrorHandler(
-        status,
-        "Failed to retrieve transitions from triple store"
+        StatusCodes.INTERNAL_SERVER_ERROR,
+        "Failed to parse query results"
       );
     }
 
-    let result = [];
-    let duplicateInfo = { duplicates: [], removedCount: 0 };
-    if (bindings && bindings.length > 0) {
-      // Process the bindings into a readable format with error handling
-      try {
-        const parsed = await auxFuncts.get_rdf_atom_as_array(bindings);
-        // Deduplicate parsed results and record duplicates
-        const deduped = dedupeAndReport(parsed, (it) => it.id || it.uri);
-        result = deduped.items;
-        duplicateInfo = { duplicates: deduped.duplicates, removedCount: deduped.removedCount };
-        if (duplicateInfo.removedCount > 0) {
-          logger.warn("Duplicates found in transitions result", {
-            requestId,
-            removed: duplicateInfo.removedCount,
-            duplicates: duplicateInfo.duplicates,
-          });
-        }
-      } catch (err) {
-        logger.error("Failed to parse SPARQL bindings for transitions", {
-          requestId,
-          error: err.message,
-          stack: err.stack,
-        });
-        throw new ErrorHandler(
-          StatusCodes.INTERNAL_SERVER_ERROR,
-          "Failed to process transition results"
-        );
+    // Deduplicate results by URI
+    const seenUris = new Set();
+    parsedResults = parsedResults.filter((uri) => {
+      if (seenUris.has(uri)) {
+        return false;
       }
+      seenUris.add(uri);
+      return true;
+    });
 
-      // Apply text search filtering if needed (fallback for complex searches)
-      if (search && search.trim() !== "") {
-        const searchLower = search.toLowerCase().trim();
-        result = result.filter((item) => {
-          const searchableText = [
-            item.label || "",
-            item.description || "",
-            item.type || "",
-          ]
-            .join(" ")
-            .toLowerCase();
+    logger.debug(`Deduplicated ${resourceTypeName} results`, {
+      requestId,
+      originalCount: parsedResults.length + (seenUris.size - parsedResults.length),
+      deduplicatedCount: parsedResults.length,
+      removedDuplicates: seenUris.size - parsedResults.length,
+    });
 
-          return searchableText.includes(searchLower);
-        });
-      }
+    let result = parsedResults;
 
-      // Sort by priority and creation date
-      result.sort((a, b) => {
-        const priorityDiff = (b.priority || 5) - (a.priority || 5);
-        if (priorityDiff !== 0) return priorityDiff;
-
-        const dateA = new Date(a.created_at || 0);
-        const dateB = new Date(b.created_at || 0);
-        return dateB - dateA;
+    // Apply simple search filter if needed
+    if (search && search.trim() !== "") {
+      result = result.filter((uri) => {
+        const label = uri.split("/").pop() || "";
+        return label.toLowerCase().includes(search.toLowerCase());
       });
+    }
 
-      // Include relationships if requested
-      if (include_relationships === "true" || include_relationships === true) {
-        for (let item of result) {
-          try {
-            const relationships = await auxFuncts.getTransitionRelationships(
-              item.id
-            );
-            item.relationships = relationships;
-          } catch (error) {
-            logger.warn("Failed to load relationships", {
-              requestId,
-              transitionId: item.id,
-              error: error.message,
-            });
-            item.relationships = [];
-          }
-        }
-      }
+    // Apply pagination
+    const totalCount = result.length;
+    const paginatedResult = result.slice(
+      parseInt(offset),
+      parseInt(offset) + parseInt(limit)
+    );
 
-      // Apply pagination
-      const totalCount = result.length;
-      const paginatedResult = result.slice(
-        parseInt(offset),
-        parseInt(offset) + parseInt(limit)
-      );
-
+    if (paginatedResult.length > 0) {
       // Build response
       const responseData = {
         status: "success",
@@ -524,71 +438,20 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
               queryParams[key] !== null &&
               queryParams[key] !== ""
           ).length,
-          duplicates: duplicateInfo.duplicates || [],
-          duplicates_removed: duplicateInfo.removedCount || 0,
+          query_types: uniqueTypes,
+          failed_queries: failedResults.length > 0 ? failedResults : undefined,
         },
       };
-
-      // Include additional metadata if requested
-      if (include_metadata === "true" || include_metadata === true) {
-        responseData.metadata.query_params = queryParams;
-        responseData.metadata.sparql_status = status;
-        responseData.metadata.data_source = "transitions";
-        responseData.metadata.object_types = objectTypes.map((type) =>
-          type.replace("vocab:", "http://anonymous.org/vocab/")
-        );
-
-        // Add statistics
-        if (totalCount > 0) {
-          const typeStats = {};
-          const priorityStats = { min: 10, max: 1, avg: 0 };
-          const evidenceStats = {};
-          let prioritySum = 0;
-          let priorityCount = 0;
-
-          result.forEach((item) => {
-            // Type statistics
-            const itemType = item.type || "unknown";
-            typeStats[itemType] = (typeStats[itemType] || 0) + 1;
-
-            // Priority statistics
-            if (item.priority !== undefined && item.priority !== null) {
-              const priority = parseInt(item.priority);
-              priorityStats.min = Math.min(priorityStats.min, priority);
-              priorityStats.max = Math.max(priorityStats.max, priority);
-              prioritySum += priority;
-              priorityCount++;
-            }
-
-            // Evidence level statistics
-            const evidenceLevel = item.evidence_level || "unknown";
-            evidenceStats[evidenceLevel] =
-              (evidenceStats[evidenceLevel] || 0) + 1;
-          });
-
-          if (priorityCount > 0) {
-            priorityStats.avg =
-              Math.round((prioritySum / priorityCount) * 100) / 100;
-          }
-
-          responseData.metadata.statistics = {
-            type_distribution: typeStats,
-            priority_stats: priorityStats,
-            evidence_distribution: evidenceStats,
-          };
-        }
-      }
 
       // Cache the result
       cacheUtils.set(cacheKey, responseData, CACHE_TTL);
 
       const responseTime = Date.now() - startTime;
 
-      logger.info("Transitions retrieved successfully", {
+      logger.info(`${resourceTypeName} retrieved successfully`, {
         requestId,
         totalCount,
         returnedCount: paginatedResult.length,
-        filtersApplied: responseData.metadata.filters_applied,
         responseTime,
         cached: false,
         ip: req.ip,
@@ -601,7 +464,7 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
         responseTime,
       });
     } else {
-      // No transitions found
+      // No results found
       const responseData = {
         status: "success",
         data: [],
@@ -617,8 +480,7 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
               queryParams[key] !== null &&
               queryParams[key] !== ""
           ).length,
-          duplicates: duplicateInfo.duplicates || [],
-          duplicates_removed: duplicateInfo.removedCount || 0,
+          query_types: uniqueTypes,
         },
       };
 
@@ -627,7 +489,7 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
 
       const responseTime = Date.now() - startTime;
 
-      logger.info("No transitions found", {
+      logger.info(`No ${resourceTypeName} found`, {
         requestId,
         responseTime,
         ip: req.ip,
@@ -643,7 +505,7 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
   } catch (error) {
     const responseTime = Date.now() - startTime;
 
-    logger.error("Failed to retrieve transitions", {
+    logger.error(`Failed to retrieve ${resourceTypeName}`, {
       requestId,
       error: error.message,
       stack: error.stack,
@@ -662,12 +524,61 @@ router.get("/", [queryLimiter, queryValidationRules], async (req, res) => {
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
-      message: "An unexpected error occurred while retrieving transitions",
+      message: `An unexpected error occurred while retrieving ${resourceTypeName}`,
       requestId,
       responseTime,
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
+}
+
+/**
+ * Endpoint to retrieve all transitions
+ */
+router.get("/get", [queryLimiter, queryValidationRules], async (req, res) => {
+  await handleGetResources(
+    [TRANSITION_TYPES.Transition],
+    "transitions",
+    req,
+    res
+  );
+});
+
+/**
+ * Endpoint to retrieve all situations
+ */
+router.get("/situations/get", [queryLimiter, queryValidationRules], async (req, res) => {
+  await handleGetResources(
+    [TRANSITION_TYPES.Situation, TRANSITION_TYPES.CompoundSituation],
+    "situations",
+    req,
+    res
+  );
+});
+
+/**
+ * Endpoint to retrieve all properties
+ */
+router.get("/properties/get", [queryLimiter, queryValidationRules], async (req, res) => {
+  await handleGetResources(
+    [TRANSITION_TYPES.Property],
+    "properties",
+    req,
+    res
+  );
+});
+
+/**
+ * LEGACY: Enhanced endpoint to retrieve all transitions/situations/properties together
+ * Deprecated - use specific endpoints (/get, /situations/get, /properties/get) instead
+ */
+router.get("/all", [queryLimiter, queryValidationRules], async (req, res) => {
+  await handleGetResources(
+    Object.values(TRANSITION_TYPES),
+    "transitions/situations/properties",
+    req,
+    res
+  );
 });
 
 /**

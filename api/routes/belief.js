@@ -2,10 +2,11 @@
  * Belief Routes
  * Handles CRUD operations for TMR-based causation beliefs
  * Enhanced with better validation, error handling, and monitoring
+ * Refactored to follow careAction and transition patterns
  */
 
 const express = require("express");
-const { body, validationResult } = require("express-validator");
+const { body, query, validationResult } = require("express-validator");
 const { StatusCodes, ReasonPhrases } = require("http-status-codes");
 const rateLimit = require("express-rate-limit");
 const router = express.Router();
@@ -16,12 +17,14 @@ const utils = require("../lib/utils");
 const { ErrorHandler } = require("../lib/errorHandler");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
+const { isValidId, escapeQuotes } = require("../lib/router_functs/route_helpers");
 
-// Constants
-const PREFIX = "http://anonymous.org/data/";
+// Constants and Configuration
+const DATA_PREFIX = "http://anonymous.org/data/";
+const VOCAB_PREFIX = "http://anonymous.org/vocab/";
 const NANOPUB_PREFIX = "http://www.nanopub.org/nschema#";
 
-// Rate limiting
+// Rate limiting for create/delete operations
 const createLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 30, // limit each IP to 30 create requests per windowMs
@@ -44,10 +47,30 @@ const deleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const queryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 query requests per windowMs
+  message: {
+    status: "error",
+    message: "Too many belief query requests, please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Route mappings with metadata
+const ROUTE_MAPPINGS = Object.freeze({
+  "": {
+    description: "Causation belief between care action and transition",
+    requiresCareAction: true,
+    requiresTransition: true,
+  },
+});
+
 /**
- * Validation rules for belief creation
+ * Enhanced validation rules for belief creation
  */
-const beliefValidationRules = [
+const getValidationRules = () => [
   body("id")
     .isString()
     .trim()
@@ -76,12 +99,18 @@ const beliefValidationRules = [
     ),
 
   body("strength")
-    .isFloat({ min: 0, max: 1 })
-    .withMessage("Strength must be a float between 0 and 1"),
+    .isString()
+    .trim()
+    .customSanitizer((v) => (typeof v === "string" ? v.toLowerCase() : v))
+    .isIn(["high", "medium", "low"])
+    .withMessage("Strength must be one of: 'high', 'medium', 'low'"),
 
   body("frequency")
-    .isFloat({ min: 0, max: 1 })
-    .withMessage("Frequency must be a float between 0 and 1"),
+    .isString()
+    .trim()
+    .customSanitizer((v) => (typeof v === "string" ? v.toLowerCase() : v))
+    .isIn(["always", "never"])
+    .withMessage("Frequency must be either 'always' or 'never'"),
 
   body("author")
     .isString()
@@ -130,9 +159,117 @@ const beliefRetrievalRules = [
 ];
 
 /**
- * Enhanced function to construct SPARQL insert query for causation belief
+ * Validation rules for querying all beliefs
  */
-function constructInsertQuery(req) {
+const queryValidationRules = [
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 1000 })
+    .withMessage("Limit must be an integer between 1 and 1000"),
+
+  query("offset")
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage("Offset must be a non-negative integer"),
+
+  query("include_metadata")
+    .optional()
+    .isBoolean()
+    .withMessage("Include metadata must be a boolean"),
+];
+
+// Simple in-memory cache
+const cache = new Map();
+
+/**
+ * Cache utilities
+ */
+const cacheUtils = {
+  generateKey(prefix, params = {}) {
+    const sortedParams = Object.keys(params)
+      .sort()
+      .map((key) => `${key}:${params[key]}`)
+      .join(":");
+    return sortedParams ? `${prefix}:${sortedParams}` : prefix;
+  },
+
+  get(key) {
+    const cached = cache.get(key);
+    if (!cached) return null;
+
+    if (Date.now() > cached.expiry) {
+      cache.delete(key);
+      return null;
+    }
+
+    logger.debug("Cache hit for beliefs", { key });
+    return cached.data;
+  },
+
+  set(key, data, ttlSeconds = 300) {
+    const expiry = Date.now() + ttlSeconds * 1000;
+    cache.set(key, { data, expiry });
+
+    // Simple cache size management
+    if (cache.size > 100) {
+      const firstKey = cache.keys().next().value;
+      cache.delete(firstKey);
+    }
+
+    logger.debug("Cache set for beliefs", { key, ttlSeconds });
+  },
+
+  clear(pattern = "") {
+    const keysToDelete = [];
+    for (const key of cache.keys()) {
+      if (key.includes(pattern)) {
+        keysToDelete.push(key);
+      }
+    }
+    keysToDelete.forEach((key) => cache.delete(key));
+    logger.info("Beliefs cache cleared", {
+      pattern,
+      deletedCount: keysToDelete.length,
+    });
+  },
+};
+
+/**
+ * Process derivedFrom sources into SPARQL format
+ */
+function processDerivedFromSources(derivedFrom) {
+  if (!derivedFrom || derivedFrom.trim() === "") {
+    return `<${DATA_PREFIX}Not_given>`;
+  }
+
+  try {
+    return derivedFrom
+      .split(",")
+      .map((source) => {
+        const trimmedSource = source.trim();
+        // Validate URL format
+        if (
+          !trimmedSource.startsWith("http://") &&
+          !trimmedSource.startsWith("https://")
+        ) {
+          return `<${DATA_PREFIX}${trimmedSource}>`;
+        }
+        return `<${trimmedSource}>`;
+      })
+      .join(", ");
+  } catch (error) {
+    logger.error("Error processing derivedFrom sources", {
+      derivedFrom,
+      error: error.message,
+    });
+    return `<${DATA_PREFIX}Not_given>`;
+  }
+}
+
+/**
+ * Create nanopublication structure for causation belief
+ */
+function createNanopublicationDefinition(requestBody) {
   const {
     id,
     care_action_id,
@@ -141,7 +278,7 @@ function constructInsertQuery(req) {
     frequency,
     author,
     derivedFrom,
-  } = req.body;
+  } = requestBody;
 
   // Validate required parameters
   if (!id || !care_action_id || !transition_id || !author) {
@@ -151,40 +288,21 @@ function constructInsertQuery(req) {
     );
   }
 
-  const beliefId = `${PREFIX}CB${id}`;
+  // Ensure proper prefixes for care action and transition IDs
+  // Care actions should have ActAdminister prefix
+  const careActionUri = care_action_id.startsWith('ActAdminister')
+    ? `${DATA_PREFIX}${care_action_id}`
+    : `${DATA_PREFIX}ActAdminister${care_action_id}`;
+  
+  // Transitions should have Tr prefix
+  const transitionUri = transition_id.startsWith('Tr')
+    ? `${DATA_PREFIX}${transition_id}`
+    : `${DATA_PREFIX}Tr${transition_id}`;
+
+  const beliefId = `${DATA_PREFIX}CB${id}`;
   const date = new Date().toISOString();
-
-  // Handle derivedFrom sources
-  let derivedFromSources;
-  if (derivedFrom && derivedFrom.trim() !== "") {
-    try {
-      derivedFromSources = derivedFrom
-        .split(",")
-        .map((source) => {
-          const trimmedSource = source.trim();
-          // Validate URL format
-          if (
-            !trimmedSource.startsWith("http://") &&
-            !trimmedSource.startsWith("https://")
-          ) {
-            return `<${PREFIX}${trimmedSource}>`;
-          }
-          return `<${trimmedSource}>`;
-        })
-        .join(", ");
-    } catch (error) {
-      logger.error("Error processing derivedFrom sources", {
-        derivedFrom,
-        error: error.message,
-      });
-      derivedFromSources = `<${PREFIX}Not_given>`;
-    }
-  } else {
-    derivedFromSources = `<${PREFIX}Not_given>`;
-  }
-
-  // Escape special characters in string literals
-  const escapedAuthor = author.replace(/['"\\]/g, "\\$&");
+  const derivedFromSources = processDerivedFromSources(derivedFrom);
+  const escapedAuthor = escapeQuotes(author);
 
   // Build nanopublication structure
   const head = `GRAPH <${beliefId}_head> {
@@ -195,10 +313,10 @@ function constructInsertQuery(req) {
   }`;
 
   const assertion = `GRAPH <${beliefId}> {
-    <${PREFIX}ActAdminister${care_action_id}> vocab:causes <${PREFIX}Tr${transition_id}> .
+    <${careActionUri}> vocab:causes <${transitionUri}> .
     <${beliefId}> a vocab:CausationBelief ;
-            vocab:strength "${strength}"^^xsd:float ;
-            vocab:frequency "${frequency}"^^xsd:float .
+            vocab:strength "${escapeQuotes(strength)}"^^xsd:string ;
+            vocab:frequency "${escapeQuotes(frequency)}"^^xsd:string .
   }`;
 
   const provenance = `GRAPH <${beliefId}_provenance> {
@@ -209,243 +327,211 @@ function constructInsertQuery(req) {
 
   const publication = `GRAPH <${beliefId}_publicationinfo> {
     <${beliefId}_head> prov:generatedAtTime "${date}"^^xsd:dateTime ;
-                  prov:wasAttributedTo <${PREFIX}${escapedAuthor}> .
+                  prov:wasAttributedTo <${DATA_PREFIX}${escapedAuthor}> .
   }`;
 
-  return `INSERT DATA { ${head} ${assertion} ${provenance} ${publication} }`;
+  const completeDefinition = `${head} ${assertion} ${provenance} ${publication}`;
+
+  logger.debug("Generated nanopublication definition", {
+    id,
+    beliefId,
+    careActionUri,
+    transitionUri,
+    definitionLength: completeDefinition.length,
+  });
+
+  return {
+    definition: completeDefinition,
+    createdIds: {
+      beliefId: id,
+      beliefUri: beliefId,
+      careActionUri,
+      transitionUri,
+    },
+  };
 }
 
 /**
- * Enhanced endpoint to add a causation belief
+ * Execute belief operation (INSERT or DELETE)
  */
-router.post(
-  "/add",
-  [createLimiter, ...beliefValidationRules],
-  async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
+async function executeBeliefOperation(sparqlQuery, operationType, id) {
+  try {
+    let sparqlStatement;
 
-    try {
-      // Check validation results
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        logger.warn("Belief creation validation failed", {
-          requestId,
-          errors: errors.array(),
-          body: req.body,
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-          requestId,
-        });
-      }
-
-      logger.info("Creating causation belief", {
-        requestId,
-        id: req.body.id,
-        care_action_id: req.body.care_action_id,
-        transition_id: req.body.transition_id,
-        ip: req.ip,
-      });
-
-      // Construct SPARQL query
-      const sparqlQuery = constructInsertQuery(req);
-
-      logger.debug("Generated SPARQL query for belief creation", {
-        requestId,
-        query: sparqlQuery,
-        queryLength: sparqlQuery.length,
-      });
-
-      // Execute SPARQL update
-      const { status, data } = await utils.sparqlUpdate("beliefs", sparqlQuery);
-
-      if (status >= 400) {
-        throw new ErrorHandler(status, `SPARQL update failed: ${data}`);
-      }
-
-      const responseTime = Date.now() - startTime;
-
-      logger.info("Causation belief created successfully", {
-        requestId,
-        id: req.body.id,
-        status,
-        responseTime,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.CREATED).json({
-        status: "success",
-        message: `Causation belief ${req.body.id} created successfully`,
-        data: {
-          id: req.body.id,
-          belief_uri: `${PREFIX}CB${req.body.id}`,
-          operation: "create",
-        },
-        requestId,
-        responseTime,
-      });
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-
-      logger.error("Failed to create causation belief", {
-        requestId,
-        id: req.body?.id,
-        error: error.message,
-        stack: error.stack,
-        responseTime,
-        ip: req.ip,
-      });
-
-      if (error instanceof ErrorHandler) {
-        return res.status(error.statusCode).json({
-          status: "error",
-          message: error.message,
-          requestId,
-          responseTime,
-        });
-      }
-
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-        status: "error",
-        message: "Failed to create causation belief",
-        requestId,
-        responseTime,
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
-      });
+    if (operationType === config.INSERT) {
+      sparqlStatement = `INSERT DATA { ${sparqlQuery} }`;
+    } else if (operationType === config.DELETE) {
+      // Use helper function for dropping named graphs
+      sparqlStatement = auxFuncts.sparql_drop_named_graphs("beliefs", `CB${id}`);
+    } else {
+      throw new ErrorHandler(
+        StatusCodes.BAD_REQUEST,
+        `Invalid operation type: ${operationType}`
+      );
     }
+
+    logger.debug("Executing SPARQL operation", {
+      operation: operationType,
+      id,
+      queryLength: sparqlStatement.length,
+    });
+
+    const result = await utils.sparqlUpdate("beliefs", sparqlStatement);
+
+    if (result.status >= 400) {
+      throw new ErrorHandler(
+        result.status,
+        `SPARQL operation failed: ${result.data}`
+      );
+    }
+
+    return result;
+  } catch (error) {
+    logger.error("SPARQL operation failed", {
+      operation: operationType,
+      id,
+      error: error.message,
+    });
+    throw error;
   }
-);
+}
 
 /**
- * Enhanced endpoint to delete a causation belief
+ * Enhanced add handler with comprehensive validation and error handling
  */
-router.post(
-  "/delete",
-  [
-    deleteLimiter,
-    body("id")
-      .isString()
-      .trim()
-      .notEmpty()
-      .matches(/^[a-zA-Z0-9_-]+$/)
-      .withMessage(
-        "ID is required and must contain only alphanumeric characters, underscores, or hyphens"
-      ),
-  ],
-  async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
-
-    try {
-      // Check validation results
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        logger.warn("Belief deletion validation failed", {
-          requestId,
-          errors: errors.array(),
-          body: req.body,
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-          requestId,
-        });
-      }
-
-      const { id } = req.body;
-
-      logger.info("Deleting causation belief", {
-        requestId,
-        id,
+const createAddHandler = () => async (req, res) => {
+  try {
+    // Check validation results
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      logger.warn("Belief creation validation failed", {
+        errors: errors.array(),
+        body: req.body,
         ip: req.ip,
       });
 
-      // Construct delete query using helper function
-      const query = auxFuncts.sparql_drop_named_graphs("beliefs", `CB${id}`);
-
-      logger.debug("Generated SPARQL delete query", {
-        requestId,
-        id,
-        query,
-      });
-
-      // Execute delete operation
-      const { status, data } = await utils.sparqlUpdate("beliefs", query);
-
-      if (status >= 400) {
-        throw new ErrorHandler(status, `SPARQL delete failed: ${data}`);
-      }
-
-      const responseTime = Date.now() - startTime;
-
-      logger.info("Causation belief deleted successfully", {
-        requestId,
-        id,
-        status,
-        responseTime,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.OK).json({
-        status: "success",
-        message: `Causation belief ${id} deleted successfully`,
-        data: {
-          id,
-          operation: "delete",
-        },
-        requestId,
-        responseTime,
-      });
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-
-      logger.error("Failed to delete causation belief", {
-        requestId,
-        id: req.body?.id,
-        error: error.message,
-        stack: error.stack,
-        responseTime,
-        ip: req.ip,
-      });
-
-      if (error instanceof ErrorHandler) {
-        return res.status(error.statusCode).json({
-          status: "error",
-          message: error.message,
-          requestId,
-          responseTime,
-        });
-      }
-
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
-        message: "Failed to delete causation belief",
-        requestId,
-        responseTime,
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
+        message: "Validation failed",
+        errors: errors.array(),
       });
     }
+
+    logger.info("Creating causation belief", {
+      id: req.body.id,
+      care_action_id: req.body.care_action_id,
+      transition_id: req.body.transition_id,
+      ip: req.ip,
+    });
+
+    // Generate nanopublication definition
+    const { definition: sparqlQuery, createdIds } =
+      createNanopublicationDefinition(req.body);
+
+    // Execute the operation
+    const { status, data } = await executeBeliefOperation(
+      sparqlQuery,
+      config.INSERT,
+      req.body.id
+    );
+
+    logger.info("Causation belief created successfully", {
+      id: req.body.id,
+      beliefUri: createdIds.beliefUri,
+      status,
+    });
+
+    res.status(StatusCodes.CREATED).json({
+      status: "success",
+      message: `Causation belief ${req.body.id} created successfully`,
+      data: {
+        operation: data || "Operation completed",
+        createdResources: createdIds,
+      },
+    });
+  } catch (error) {
+    logger.error("Failed to create causation belief", {
+      id: req.body?.id,
+      error: error.message,
+      stack: error.stack,
+    });
+
+    if (error instanceof ErrorHandler) {
+      return res.status(error.statusCode).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to create causation belief",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
-);
+};
 
 /**
- * Enhanced endpoint to retrieve a specific causation belief
+ * Enhanced delete handler with validation
  */
-router.post("/all/get", beliefRetrievalRules, async (req, res) => {
+const createDeleteHandler = () => async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Validation failed",
+        errors: errors.array(),
+      });
+    }
+
+    const { id } = req.body;
+
+    logger.info("Deleting causation belief", {
+      id,
+      ip: req.ip,
+    });
+
+    const { status, data } = await executeBeliefOperation(
+      null,
+      config.DELETE,
+      id
+    );
+
+    logger.info("Causation belief deleted successfully", {
+      id,
+      status,
+    });
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      message: `Causation belief ${id} deleted successfully`,
+      data: data || "Operation completed",
+    });
+  } catch (error) {
+    logger.error("Failed to delete causation belief", {
+      id: req.body?.id,
+      error: error.message,
+    });
+
+    if (error instanceof ErrorHandler) {
+      return res.status(error.statusCode).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to delete causation belief",
+    });
+  }
+};
+
+/**
+ * Enhanced endpoint to retrieve a specific causation belief by ID or URI
+ */
+router.post("/get", beliefRetrievalRules, async (req, res) => {
   const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   const startTime = Date.now();
 
@@ -476,7 +562,7 @@ router.post("/all/get", beliefRetrievalRules, async (req, res) => {
       beliefUri = uri;
     } else {
       // Handle both CB-prefixed and non-prefixed IDs
-      beliefUri = id.includes("CB") ? `${PREFIX}${id}` : `${PREFIX}CB${id}`;
+      beliefUri = id.includes("CB") ? `${DATA_PREFIX}${id}` : `${DATA_PREFIX}CB${id}`;
     }
 
     logger.info("Retrieving causation belief", {
@@ -585,49 +671,29 @@ router.get("/health", (req, res) => {
     status: "healthy",
     service: "causation-beliefs",
     timestamp: new Date().toISOString(),
-    version: "2.0.0",
+    routes: Object.keys(ROUTE_MAPPINGS).length,
   });
 });
 
 /**
- * Get belief schema/info endpoint
+ * Get belief types/info endpoint
  */
-router.get("/info", (req, res) => {
+router.get("/types", (req, res) => {
+  const types = Object.entries(ROUTE_MAPPINGS).map(([route, config]) => ({
+    route: route || "/",
+    description: config.description,
+    requiresCareAction: config.requiresCareAction,
+    requiresTransition: config.requiresTransition,
+  }));
+
   res.status(StatusCodes.OK).json({
     status: "success",
     data: {
+      available_types: types,
+      total_count: types.length,
       service: "causation-beliefs",
       description:
         "Manages TMR-based causation beliefs between care actions and transitions",
-      endpoints: [
-        {
-          path: "/add",
-          method: "POST",
-          description: "Create a new causation belief",
-          rate_limit: "30 requests per 15 minutes",
-        },
-        {
-          path: "/delete",
-          method: "POST",
-          description: "Delete an existing causation belief",
-          rate_limit: "20 requests per 15 minutes",
-        },
-        {
-          path: "/all/get",
-          method: "POST",
-          description: "Retrieve a specific causation belief by ID or URI",
-        },
-        {
-          path: "/health",
-          method: "GET",
-          description: "Health check endpoint",
-        },
-        {
-          path: "/info",
-          method: "GET",
-          description: "Service information and API documentation",
-        },
-      ],
       required_fields: {
         add: [
           "id",
@@ -641,12 +707,44 @@ router.get("/info", (req, res) => {
         get: ["id OR uri"],
       },
       data_types: {
-        strength: "float (0-1)",
-        frequency: "float (0-1)",
+        strength: "string (high|medium|low)",
+        frequency: "string (always|never)",
         derivedFrom: "string (comma-separated URLs)",
       },
     },
   });
+});
+
+/**
+ * Register all routes dynamically with enhanced validation
+ */
+Object.entries(ROUTE_MAPPINGS).forEach(([route, routeConfig]) => {
+  const validationRules = getValidationRules();
+
+  // Add endpoints
+  router.post(
+    `${route}/add`,
+    createLimiter,
+    validationRules,
+    createAddHandler()
+  );
+
+  // Delete endpoints
+  router.post(
+    `${route}/delete`,
+    deleteLimiter,
+    [
+      body("id")
+        .isString()
+        .trim()
+        .notEmpty()
+        .matches(/^[a-zA-Z0-9_-]+$/)
+        .withMessage(
+          "ID is required and must contain only alphanumeric characters, underscores, or hyphens"
+        ),
+    ],
+    createDeleteHandler()
+  );
 });
 
 module.exports = router;

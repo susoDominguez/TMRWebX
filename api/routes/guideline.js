@@ -2,6 +2,7 @@
  * Guideline Routes
  * Handles TMR-based Clinical Implementation Guidelines (CIGs)
  * Enhanced with comprehensive validation, caching, and monitoring
+ * Refactored to follow careAction, transition, and belief patterns
  */
 
 const express = require("express");
@@ -15,6 +16,11 @@ const utils = require("../lib/utils");
 const { ErrorHandler } = require("../lib/errorHandler");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
+const { isValidId, escapeQuotes } = require("../lib/router_functs/route_helpers");
+
+// Constants and Configuration
+const DATA_PREFIX = "http://anonymous.org/data/";
+const VOCAB_PREFIX = "http://anonymous.org/vocab/";
 
 // Rate limiting for different operations
 const readLimiter = rateLimit({
@@ -48,6 +54,16 @@ const complexOperationLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+// Route mappings with metadata
+const ROUTE_MAPPINGS = Object.freeze({
+  "": {
+    description: "Clinical Implementation Guideline (CIG)",
+    maxContentLength: 50000,
+    minContentLength: 10,
+    supportsVersioning: true,
+  },
 });
 
 // Enhanced caching system
@@ -134,16 +150,19 @@ const cacheUtils = {
 };
 
 /**
- * Comprehensive validation rules
+ * Enhanced validation rules for guideline operations
  */
-const guidelineValidationRules = [
+const getGuidelineValidationRules = (routeConfig) => [
   body("guideline")
     .notEmpty()
     .withMessage("Guideline content is required")
     .isString()
     .withMessage("Guideline must be a string")
-    .isLength({ min: 10, max: 50000 })
-    .withMessage("Guideline must be between 10 and 50000 characters"),
+    .isLength({ 
+      min: routeConfig.minContentLength, 
+      max: routeConfig.maxContentLength 
+    })
+    .withMessage(`Guideline must be between ${routeConfig.minContentLength} and ${routeConfig.maxContentLength} characters`),
 
   body("filename")
     .optional()
@@ -225,18 +244,111 @@ const queryValidationRules = [
 ];
 
 /**
- * Enhanced endpoint to create a new guideline
+ * Create guideline SPARQL definition
  */
-router.post("/", [writeLimiter, guidelineValidationRules], async (req, res) => {
-  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const startTime = Date.now();
+function createGuidelineDefinition(requestBody) {
+  const { guideline, filename, metadata = {} } = requestBody;
 
+  // Generate unique ID if filename not provided
+  const guidelineId =
+    filename ||
+    `guideline_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+  // Build metadata
+  const guidelineMetadata = {
+    ...metadata,
+    created_at: new Date().toISOString(),
+    version: metadata.version || "1.0.0",
+  };
+
+  const guidelineUri = `${DATA_PREFIX}CIG${guidelineId}`;
+  const escapedContent = escapeQuotes(guideline);
+  const escapedVersion = escapeQuotes(guidelineMetadata.version);
+  const escapedCreatedAt = escapeQuotes(guidelineMetadata.created_at);
+
+  // Create RDF for guideline storage
+  const sparqlQuery = `
+    ${guidelineUri} a vocab:ClinicalGuideline ;
+      vocab:hasLabel "${escapeQuotes(guidelineId)}" ;
+      vocab:hasContent "${escapedContent}" ;
+      vocab:hasVersion "${escapedVersion}" ;
+      vocab:createdAt "${escapedCreatedAt}" .
+  `;
+
+  logger.debug("Generated guideline definition", {
+    guidelineId,
+    guidelineUri,
+    contentLength: guideline.length,
+    definitionLength: sparqlQuery.length,
+  });
+
+  return {
+    definition: sparqlQuery,
+    createdIds: {
+      guidelineId,
+      guidelineUri,
+      metadata: guidelineMetadata,
+    },
+  };
+}
+
+/**
+ * Execute guideline operation (INSERT, UPDATE, or DELETE)
+ */
+async function executeGuidelineOperation(
+  sparqlQuery,
+  operationType,
+  id
+) {
+  try {
+    let result;
+
+    if (operationType === "INSERT") {
+      const sparqlStatement = `INSERT DATA { ${sparqlQuery} }`;
+      result = await utils.sparqlUpdate("guidelines", sparqlStatement);
+    } else if (operationType === "UPDATE") {
+      result = await utils.update_guideline(id, sparqlQuery);
+    } else if (operationType === "DELETE") {
+      result = await utils.delete_guideline(id);
+    } else {
+      throw new ErrorHandler(
+        StatusCodes.BAD_REQUEST,
+        `Invalid operation type: ${operationType}`
+      );
+    }
+
+    logger.debug("Executing guideline operation", {
+      operation: operationType,
+      id,
+    });
+
+    if (result.status >= 400) {
+      throw new ErrorHandler(
+        result.status,
+        `Guideline operation failed: ${result.data || result.result}`
+      );
+    }
+
+    return result;
+  } catch (error) {
+    logger.error("Guideline operation failed", {
+      operation: operationType,
+      id,
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Enhanced create handler with comprehensive validation and error handling
+ */
+const createAddHandler = (routeConfig) => async (req, res) => {
   try {
     // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       logger.warn("Guideline creation validation failed", {
-        requestId,
         errors: errors.array(),
         ip: req.ip,
       });
@@ -245,24 +357,17 @@ router.post("/", [writeLimiter, guidelineValidationRules], async (req, res) => {
         status: "error",
         message: "Validation failed",
         errors: errors.array(),
-        requestId,
       });
     }
 
     const { guideline, filename, metadata = {} } = req.body;
 
     logger.info("Creating new guideline", {
-      requestId,
       filename,
       guidelineLength: guideline.length,
       metadata,
       ip: req.ip,
     });
-
-    // Generate unique ID if filename not provided
-    const guidelineId =
-      filename ||
-      `guideline_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
     // Parse and validate guideline structure
     let parsedGuideline;
@@ -270,7 +375,6 @@ router.post("/", [writeLimiter, guidelineValidationRules], async (req, res) => {
       parsedGuideline = await auxFuncts.parseGuidelineContent(guideline);
     } catch (parseError) {
       logger.error("Guideline parsing failed", {
-        requestId,
         error: parseError.message,
         ip: req.ip,
       });
@@ -279,129 +383,72 @@ router.post("/", [writeLimiter, guidelineValidationRules], async (req, res) => {
         status: "error",
         message: "Invalid guideline format",
         details: parseError.message,
-        requestId,
       });
     }
 
-    // Create guideline with metadata
-    const guidelineData = {
-      id: guidelineId,
-      content: guideline,
-      parsed: parsedGuideline,
-      metadata: {
-        ...metadata,
-        created_at: new Date().toISOString(),
-        created_by: req.ip,
-        version: metadata.version || "1.0.0",
-      },
-    };
+    // Generate guideline definition
+    const { definition: sparqlQuery, createdIds } =
+      createGuidelineDefinition(req.body);
 
-    // Create RDF for guideline storage
-    const guidelineUri = `http://anonymous.org/data/CIG${guidelineId}`;
-    const sparqlQuery = `
-      PREFIX vocab: <http://anonymous.org/vocab/>
-      PREFIX data: <http://anonymous.org/data/>
-      
-      INSERT DATA {
-        <${guidelineUri}> a vocab:ClinicalGuideline ;
-          vocab:hasLabel "${guidelineId}" ;
-          vocab:hasContent "${guideline.replace(/"/g, '\\"')}" ;
-          vocab:hasVersion "${guidelineData.metadata.version}" ;
-          vocab:createdAt "${guidelineData.metadata.created_at}" ;
-          vocab:createdBy "${guidelineData.metadata.created_by}" .
-      }
-    `;
-
-    // Store guideline in triple store
-    const { status, result } = await utils.sparqlUpdate(
-      "guidelines",
-      sparqlQuery
+    // Execute the operation
+    const { status, result } = await executeGuidelineOperation(
+      sparqlQuery,
+      "INSERT",
+      createdIds.guidelineId
     );
-
-    if (status >= 400) {
-      throw new ErrorHandler(
-        status,
-        "Failed to store guideline in triple store"
-      );
-    }
 
     // Invalidate related cache entries
     cacheUtils.invalidatePattern("list");
     cacheUtils.invalidatePattern("search");
 
-    const responseTime = Date.now() - startTime;
-
     logger.info("Guideline created successfully", {
-      requestId,
-      guidelineId,
-      responseTime,
-      ip: req.ip,
+      guidelineId: createdIds.guidelineId,
+      guidelineUri: createdIds.guidelineUri,
+      status,
     });
 
     res.status(StatusCodes.CREATED).json({
       status: "success",
-      message: "Guideline created successfully",
+      message: `Guideline ${createdIds.guidelineId} created successfully`,
       data: {
-        id: guidelineId,
-        guideline_uri: guidelineUri,
-        metadata: guidelineData.metadata,
+        operation: result || "Operation completed",
+        createdResources: createdIds,
         recommendations_count: parsedGuideline.recommendations?.length || 0,
       },
-      requestId,
-      responseTime,
     });
   } catch (error) {
-    const responseTime = Date.now() - startTime;
-
     logger.error("Failed to create guideline", {
-      requestId,
       error: error.message,
       stack: error.stack,
-      responseTime,
-      ip: req.ip,
     });
 
     if (error instanceof ErrorHandler) {
       return res.status(error.statusCode).json({
         status: "error",
         message: error.message,
-        requestId,
-        responseTime,
       });
     }
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
-      message: "An unexpected error occurred while creating guideline",
-      requestId,
-      responseTime,
+      message: "Failed to create guideline",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
-});
+};
 
 /**
  * Enhanced endpoint to get a specific guideline
  */
 router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
-  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const startTime = Date.now();
-
   try {
     // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Guideline get validation failed", {
-        requestId,
-        errors: errors.array(),
-        ip: req.ip,
-      });
-
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
         message: "Validation failed",
         errors: errors.array(),
-        requestId,
       });
     }
 
@@ -409,7 +456,6 @@ router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
     const { include_recommendations = true } = req.query;
 
     logger.info("Retrieving guideline", {
-      requestId,
       guidelineId: id,
       include_recommendations,
       ip: req.ip,
@@ -422,19 +468,14 @@ router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
     const cachedResult = cacheUtils.get(cacheKey);
 
     if (cachedResult) {
-      const responseTime = Date.now() - startTime;
       logger.info("Returning cached guideline", {
-        requestId,
         guidelineId: id,
-        responseTime,
         cached: true,
       });
 
       return res.status(StatusCodes.OK).json({
         ...cachedResult,
         cached: true,
-        requestId,
-        responseTime,
       });
     }
 
@@ -443,15 +484,12 @@ router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
 
     if (status === 404) {
       logger.warn("Guideline not found", {
-        requestId,
         guidelineId: id,
-        ip: req.ip,
       });
 
       return res.status(StatusCodes.NOT_FOUND).json({
         status: "error",
         message: "Guideline not found",
-        requestId,
       });
     }
 
@@ -485,358 +523,241 @@ router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
     // Cache the result
     cacheUtils.set(cacheKey, responseData, CACHE_TTL);
 
-    const responseTime = Date.now() - startTime;
-
     logger.info("Guideline retrieved successfully", {
-      requestId,
       guidelineId: id,
-      responseTime,
       cached: false,
-      ip: req.ip,
     });
 
     res.status(StatusCodes.OK).json({
       ...responseData,
       cached: false,
-      requestId,
-      responseTime,
     });
   } catch (error) {
-    const responseTime = Date.now() - startTime;
-
     logger.error("Failed to retrieve guideline", {
-      requestId,
       guidelineId: req.params.id,
       error: error.message,
       stack: error.stack,
-      responseTime,
-      ip: req.ip,
     });
 
     if (error instanceof ErrorHandler) {
       return res.status(error.statusCode).json({
         status: "error",
         message: error.message,
-        requestId,
-        responseTime,
       });
     }
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
-      message: "An unexpected error occurred while retrieving guideline",
-      requestId,
-      responseTime,
+      message: "Failed to retrieve guideline",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
 
 /**
- * Enhanced endpoint to update a guideline
+ * Enhanced update handler with validation
  */
-router.put(
-  "/:id",
-  [writeLimiter, guidelineIdValidation, guidelineValidationRules],
-  async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
-
-    try {
-      // Check validation results
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        logger.warn("Guideline update validation failed", {
-          requestId,
-          errors: errors.array(),
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-          requestId,
-        });
-      }
-
-      const { id } = req.params;
-      const { guideline, metadata = {} } = req.body;
-
-      logger.info("Updating guideline", {
-        requestId,
-        guidelineId: id,
-        guidelineLength: guideline.length,
-        metadata,
-        ip: req.ip,
-      });
-
-      // Check if guideline exists
-      const { status: existsStatus } = await utils.get_guideline_by_id(id);
-
-      if (existsStatus === 404) {
-        logger.warn("Cannot update non-existent guideline", {
-          requestId,
-          guidelineId: id,
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.NOT_FOUND).json({
-          status: "error",
-          message: "Guideline not found",
-          requestId,
-        });
-      }
-
-      // Parse and validate updated guideline
-      let parsedGuideline;
-      try {
-        parsedGuideline = await auxFuncts.parseGuidelineContent(guideline);
-      } catch (parseError) {
-        logger.error("Updated guideline parsing failed", {
-          requestId,
-          guidelineId: id,
-          error: parseError.message,
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Invalid guideline format",
-          details: parseError.message,
-          requestId,
-        });
-      }
-
-      // Update guideline with metadata
-      const updatedGuidelineData = {
-        id,
-        content: guideline,
-        parsed: parsedGuideline,
-        metadata: {
-          ...metadata,
-          updated_at: new Date().toISOString(),
-          updated_by: req.ip,
-        },
-      };
-
-      // Update guideline in triple store
-      const { status, result } = await utils.update_guideline(
-        id,
-        updatedGuidelineData
-      );
-
-      if (status >= 400) {
-        throw new ErrorHandler(
-          status,
-          "Failed to update guideline in triple store"
-        );
-      }
-
-      // Invalidate cache entries
-      cacheUtils.invalidatePattern(id);
-      cacheUtils.invalidatePattern("list");
-      cacheUtils.invalidatePattern("search");
-
-      const responseTime = Date.now() - startTime;
-
-      logger.info("Guideline updated successfully", {
-        requestId,
-        guidelineId: id,
-        responseTime,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.OK).json({
-        status: "success",
-        message: "Guideline updated successfully",
-        data: {
-          id,
-          metadata: updatedGuidelineData.metadata,
-          recommendations_count: parsedGuideline.recommendations?.length || 0,
-        },
-        requestId,
-        responseTime,
-      });
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-
-      logger.error("Failed to update guideline", {
-        requestId,
-        guidelineId: req.params.id,
-        error: error.message,
-        stack: error.stack,
-        responseTime,
-        ip: req.ip,
-      });
-
-      if (error instanceof ErrorHandler) {
-        return res.status(error.statusCode).json({
-          status: "error",
-          message: error.message,
-          requestId,
-          responseTime,
-        });
-      }
-
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+const createUpdateHandler = (routeConfig) => async (req, res) => {
+  try {
+    // Check validation results
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
-        message: "An unexpected error occurred while updating guideline",
-        requestId,
-        responseTime,
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
+        message: "Validation failed",
+        errors: errors.array(),
       });
     }
+
+    const { id } = req.params;
+    const { guideline, metadata = {} } = req.body;
+
+    logger.info("Updating guideline", {
+      guidelineId: id,
+      guidelineLength: guideline.length,
+      metadata,
+      ip: req.ip,
+    });
+
+    // Check if guideline exists
+    const { status: existsStatus } = await utils.get_guideline_by_id(id);
+
+    if (existsStatus === 404) {
+      logger.warn("Cannot update non-existent guideline", {
+        guidelineId: id,
+      });
+
+      return res.status(StatusCodes.NOT_FOUND).json({
+        status: "error",
+        message: "Guideline not found",
+      });
+    }
+
+    // Parse and validate updated guideline
+    let parsedGuideline;
+    try {
+      parsedGuideline = await auxFuncts.parseGuidelineContent(guideline);
+    } catch (parseError) {
+      logger.error("Updated guideline parsing failed", {
+        guidelineId: id,
+        error: parseError.message,
+      });
+
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Invalid guideline format",
+        details: parseError.message,
+      });
+    }
+
+    // Update guideline with metadata
+    const updatedGuidelineData = {
+      id,
+      content: guideline,
+      parsed: parsedGuideline,
+      metadata: {
+        ...metadata,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    // Update guideline in triple store
+    const { status, result } = await executeGuidelineOperation(
+      updatedGuidelineData,
+      "UPDATE",
+      id
+    );
+
+    // Invalidate cache entries
+    cacheUtils.invalidatePattern(id);
+    cacheUtils.invalidatePattern("list");
+    cacheUtils.invalidatePattern("search");
+
+    logger.info("Guideline updated successfully", {
+      guidelineId: id,
+      status,
+    });
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      message: `Guideline ${id} updated successfully`,
+      data: {
+        operation: result || "Operation completed",
+        id,
+        metadata: updatedGuidelineData.metadata,
+        recommendations_count: parsedGuideline.recommendations?.length || 0,
+      },
+    });
+  } catch (error) {
+    logger.error("Failed to update guideline", {
+      guidelineId: req.params.id,
+      error: error.message,
+      stack: error.stack,
+    });
+
+    if (error instanceof ErrorHandler) {
+      return res.status(error.statusCode).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to update guideline",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
-);
+};
 
 /**
- * Enhanced endpoint to delete a guideline
+ * Enhanced delete handler with validation
  */
-router.delete(
-  "/:id",
-  [writeLimiter, guidelineIdValidation],
-  async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
-
-    try {
-      // Check validation results
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        logger.warn("Guideline deletion validation failed", {
-          requestId,
-          errors: errors.array(),
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.BAD_REQUEST).json({
-          status: "error",
-          message: "Validation failed",
-          errors: errors.array(),
-          requestId,
-        });
-      }
-
-      const { id } = req.params;
-
-      logger.info("Deleting guideline", {
-        requestId,
-        guidelineId: id,
-        ip: req.ip,
-      });
-
-      // Check if guideline exists
-      const { status: existsStatus } = await utils.get_guideline_by_id(id);
-
-      if (existsStatus === 404) {
-        logger.warn("Cannot delete non-existent guideline", {
-          requestId,
-          guidelineId: id,
-          ip: req.ip,
-        });
-
-        return res.status(StatusCodes.NOT_FOUND).json({
-          status: "error",
-          message: "Guideline not found",
-          requestId,
-        });
-      }
-
-      // Delete guideline from triple store
-      const { status } = await utils.delete_guideline(id);
-
-      if (status >= 400) {
-        throw new ErrorHandler(
-          status,
-          "Failed to delete guideline from triple store"
-        );
-      }
-
-      // Invalidate cache entries
-      cacheUtils.invalidatePattern(id);
-      cacheUtils.invalidatePattern("list");
-      cacheUtils.invalidatePattern("search");
-
-      const responseTime = Date.now() - startTime;
-
-      logger.info("Guideline deleted successfully", {
-        requestId,
-        guidelineId: id,
-        responseTime,
-        ip: req.ip,
-      });
-
-      res.status(StatusCodes.OK).json({
-        status: "success",
-        message: "Guideline deleted successfully",
-        data: {
-          id,
-          deleted_at: new Date().toISOString(),
-        },
-        requestId,
-        responseTime,
-      });
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-
-      logger.error("Failed to delete guideline", {
-        requestId,
-        guidelineId: req.params.id,
-        error: error.message,
-        stack: error.stack,
-        responseTime,
-        ip: req.ip,
-      });
-
-      if (error instanceof ErrorHandler) {
-        return res.status(error.statusCode).json({
-          status: "error",
-          message: error.message,
-          requestId,
-          responseTime,
-        });
-      }
-
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+const createDeleteHandler = () => async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
-        message: "An unexpected error occurred while deleting guideline",
-        requestId,
-        responseTime,
-        error:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
+        message: "Validation failed",
+        errors: errors.array(),
       });
     }
+
+    const { id } = req.params;
+
+    logger.info("Deleting guideline", {
+      guidelineId: id,
+      ip: req.ip,
+    });
+
+    // Check if guideline exists
+    const { status: existsStatus } = await utils.get_guideline_by_id(id);
+
+    if (existsStatus === 404) {
+      logger.warn("Cannot delete non-existent guideline", {
+        guidelineId: id,
+      });
+
+      return res.status(StatusCodes.NOT_FOUND).json({
+        status: "error",
+        message: "Guideline not found",
+      });
+    }
+
+    // Delete guideline from triple store
+    const { status } = await executeGuidelineOperation(null, "DELETE", id);
+
+    // Invalidate cache entries
+    cacheUtils.invalidatePattern(id);
+    cacheUtils.invalidatePattern("list");
+    cacheUtils.invalidatePattern("search");
+
+    logger.info("Guideline deleted successfully", {
+      guidelineId: id,
+      status,
+    });
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      message: `Guideline ${id} deleted successfully`,
+      data: {
+        id,
+        deleted_at: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    logger.error("Failed to delete guideline", {
+      guidelineId: req.params.id,
+      error: error.message,
+    });
+
+    if (error instanceof ErrorHandler) {
+      return res.status(error.statusCode).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to delete guideline",
+    });
   }
-);
+};
 
 /**
  * Enhanced endpoint to list all guidelines
  */
 router.get("/", [readLimiter, queryValidationRules], async (req, res) => {
-  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const startTime = Date.now();
-
   try {
     // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Guidelines list validation failed", {
-        requestId,
-        errors: errors.array(),
-        ip: req.ip,
-      });
-
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
         message: "Validation failed",
         errors: errors.array(),
-        requestId,
       });
     }
 
@@ -855,7 +776,6 @@ router.get("/", [readLimiter, queryValidationRules], async (req, res) => {
     };
 
     logger.info("Listing guidelines", {
-      requestId,
       queryParams,
       ip: req.ip,
     });
@@ -865,18 +785,13 @@ router.get("/", [readLimiter, queryValidationRules], async (req, res) => {
     const cachedResult = cacheUtils.get(cacheKey);
 
     if (cachedResult) {
-      const responseTime = Date.now() - startTime;
       logger.info("Returning cached guidelines list", {
-        requestId,
-        responseTime,
         cached: true,
       });
 
       return res.status(StatusCodes.OK).json({
         ...cachedResult,
         cached: true,
-        requestId,
-        responseTime,
       });
     }
 
@@ -912,51 +827,44 @@ router.get("/", [readLimiter, queryValidationRules], async (req, res) => {
     // Cache the result
     cacheUtils.set(cacheKey, responseData, CACHE_TTL);
 
-    const responseTime = Date.now() - startTime;
-
     logger.info("Guidelines listed successfully", {
-      requestId,
       totalCount: totalCount || 0,
       returnedCount: guidelines?.length || 0,
-      responseTime,
       cached: false,
-      ip: req.ip,
     });
 
     res.status(StatusCodes.OK).json({
       ...responseData,
       cached: false,
-      requestId,
-      responseTime,
     });
   } catch (error) {
-    const responseTime = Date.now() - startTime;
-
     logger.error("Failed to list guidelines", {
-      requestId,
       error: error.message,
       stack: error.stack,
-      responseTime,
-      ip: req.ip,
     });
 
     if (error instanceof ErrorHandler) {
       return res.status(error.statusCode).json({
         status: "error",
         message: error.message,
-        requestId,
-        responseTime,
       });
     }
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
-      message: "An unexpected error occurred while listing guidelines",
-      requestId,
-      responseTime,
+      message: "Failed to list guidelines",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
+});
+
+/**
+ * Alias endpoint for /all - retrieves all guidelines (same as GET /)
+ */
+router.get("/all", [readLimiter, queryValidationRules], async (req, res) => {
+  // Forward to the main list endpoint
+  req.url = "/";
+  router.handle(req, res);
 });
 
 /**
@@ -966,11 +874,6 @@ router.get(
   "/:id/recommendations",
   [complexOperationLimiter, guidelineIdValidation],
   async (req, res) => {
-    const requestId = `${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 9)}`;
-    const startTime = Date.now();
-
     try {
       // Check validation results
       const errors = validationResult(req);
@@ -979,14 +882,12 @@ router.get(
           status: "error",
           message: "Validation failed",
           errors: errors.array(),
-          requestId,
         });
       }
 
       const { id } = req.params;
 
       logger.info("Retrieving guideline recommendations", {
-        requestId,
         guidelineId: id,
         ip: req.ip,
       });
@@ -996,12 +897,9 @@ router.get(
       const cachedResult = cacheUtils.get(cacheKey);
 
       if (cachedResult) {
-        const responseTime = Date.now() - startTime;
         return res.status(StatusCodes.OK).json({
           ...cachedResult,
           cached: true,
-          requestId,
-          responseTime,
         });
       }
 
@@ -1012,7 +910,6 @@ router.get(
         return res.status(StatusCodes.NOT_FOUND).json({
           status: "error",
           message: "Guideline not found",
-          requestId,
         });
       }
 
@@ -1034,43 +931,180 @@ router.get(
       // Cache the result
       cacheUtils.set(cacheKey, responseData, CACHE_TTL);
 
-      const responseTime = Date.now() - startTime;
-
       logger.info("Guideline recommendations retrieved successfully", {
-        requestId,
         guidelineId: id,
         recommendationsCount: recommendations.length,
-        responseTime,
-        ip: req.ip,
       });
 
       res.status(StatusCodes.OK).json({
         ...responseData,
         cached: false,
-        requestId,
-        responseTime,
       });
     } catch (error) {
-      const responseTime = Date.now() - startTime;
-
       logger.error("Failed to retrieve guideline recommendations", {
-        requestId,
         guidelineId: req.params.id,
         error: error.message,
-        responseTime,
-        ip: req.ip,
       });
 
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         status: "error",
-        message:
-          "An unexpected error occurred while retrieving recommendations",
-        requestId,
-        responseTime,
+        message: "Failed to retrieve guideline recommendations",
       });
     }
   }
 );
+
+/**
+ * Add a clinical recommendation to a guideline
+ * Creates a recommendation nanopublication with belief, care action, and metadata
+ */
+router.post("/rec/add", [writeLimiter], async (req, res) => {
+  try {
+    const {
+      cig_id,
+      id,
+      belief_id,
+      careAction_id,
+      label,
+      contribution,
+      isRecommended,
+      derivedFrom,
+      author,
+      strength,
+    } = req.body;
+
+    // Validate required fields
+    if (!cig_id || !id || !belief_id || !careAction_id || !label || !author || !strength) {
+      logger.warn("Recommendation creation validation failed - missing required fields", {
+        provided: Object.keys(req.body),
+        ip: req.ip,
+      });
+
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Missing required fields",
+        required: ["cig_id", "id", "belief_id", "careAction_id", "label", "author", "strength"],
+      });
+    }
+
+    logger.info("Creating clinical recommendation", {
+      cig_id,
+      id,
+      belief_id,
+      ip: req.ip,
+    });
+
+    // Build recommendation nanopublication
+    const recId = `data:Rec${cig_id}-${id}`;
+    const date = new Date().toISOString();
+    
+    // Handle derivedFrom sources
+    let sources = "";
+    if (derivedFrom) {
+      sources = `  prov:wasDerivedFrom  `;
+      derivedFrom.split(",").forEach((code) => {
+        sources += ` <${code.trim()}> ,`;
+      });
+      // Remove last comma
+      sources = sources.substring(0, sources.length - 1);
+      sources += " .";
+    }
+
+    // Build nanopublication structure
+    const head = `${recId}_head { 
+      ${recId}_head
+        a nanopub:Nanopublication ;
+        nanopub:hasAssertion ${recId} ;
+        nanopub:hasProvenance ${recId}_provenance ;
+        nanopub:hasPublicationInfo ${recId}_publicationinfo .
+    }`;
+
+    const assertion = `${recId} {
+      ${recId} a vocab:ClinicalRecommendation ;
+        rdfs:label '''${escapeQuotes(label)}'''@en ;
+        vocab:aboutExecutionOf data:ActAdminister${careAction_id} ;
+        vocab:partOf data:CIG-${cig_id} ;
+        vocab:basedOn data:CB${belief_id} ;
+        vocab:strength '''${escapeQuotes(strength)}''' .
+      data:CB${belief_id} vocab:contribution '''${escapeQuotes(contribution || 'positive')}''' .
+    }`;
+
+    const provenance = `${recId}_provenance {
+      ${recId}_provenance
+        a oa:Annotation ;
+        oa:hasBody ${recId} ;
+        oa:hasTarget [ oa:hasSource <http://hdl.handle.net/10222/43703> ] .
+      ${recId}
+        ${sources}
+    }`;
+
+    const publication = `${recId}_publicationinfo {
+      ${recId}_head
+        prov:generatedAtTime "${date}"^^xsd:dateTime ;
+        prov:wasAttributedTo data:${escapeQuotes(author)} .
+    }`;
+
+    const completeDefinition = `GRAPH ${head} GRAPH ${assertion} GRAPH ${provenance} GRAPH ${publication}`;
+    const sparqlQuery = `INSERT DATA { ${completeDefinition} }`;
+
+    logger.debug("Generated recommendation SPARQL", {
+      recId,
+      queryLength: sparqlQuery.length,
+    });
+
+    // Execute the SPARQL update
+    const { status, data } = await utils.sparqlUpdate(`CIG-${cig_id}`, sparqlQuery);
+
+    if (status >= 400) {
+      throw new ErrorHandler(
+        status,
+        `Failed to create recommendation: ${data || 'Unknown error'}`
+      );
+    }
+
+    // Invalidate related cache entries
+    cacheUtils.invalidatePattern(cig_id);
+    cacheUtils.invalidatePattern("list");
+
+    logger.info("Clinical recommendation created successfully", {
+      cig_id,
+      recId,
+      status,
+    });
+
+    res.status(StatusCodes.CREATED).json({
+      status: "success",
+      message: `Recommendation ${id} created successfully in guideline ${cig_id}`,
+      data: {
+        operation: data || "Operation completed",
+        recId: `Rec${cig_id}-${id}`,
+        recUri: recId,
+        cig_id: `CIG-${cig_id}`,
+        belief_id: `CB${belief_id}`,
+        careAction_id: `ActAdminister${careAction_id}`,
+      },
+    });
+  } catch (error) {
+    logger.error("Failed to create clinical recommendation", {
+      error: error.message,
+      stack: error.stack,
+      body: req.body,
+    });
+
+    if (error instanceof ErrorHandler) {
+      return res.status(error.statusCode).json({
+        status: "error",
+        message: error.message,
+      });
+    }
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to create clinical recommendation",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+});
 
 /**
  * Health check endpoint
@@ -1082,8 +1116,31 @@ router.get("/health", (req, res) => {
     status: "healthy",
     service: "clinical-implementation-guidelines",
     timestamp: new Date().toISOString(),
-    version: "2.0.0",
+    routes: Object.keys(ROUTE_MAPPINGS).length,
     cache: cacheStats,
+  });
+});
+
+/**
+ * Get guideline types/info endpoint
+ */
+router.get("/types", (req, res) => {
+  const types = Object.entries(ROUTE_MAPPINGS).map(([route, config]) => ({
+    route: route || "/",
+    description: config.description,
+    maxContentLength: config.maxContentLength,
+    minContentLength: config.minContentLength,
+    supportsVersioning: config.supportsVersioning,
+  }));
+
+  res.status(StatusCodes.OK).json({
+    status: "success",
+    data: {
+      available_types: types,
+      total_count: types.length,
+      service: "clinical-implementation-guidelines",
+      description: "Manages TMR-based Clinical Implementation Guidelines (CIGs)",
+    },
   });
 });
 
@@ -1111,6 +1168,38 @@ router.post("/cache/clear", (req, res) => {
       message: "Failed to clear cache",
     });
   }
+});
+
+/**
+ * Register all routes dynamically with enhanced validation
+ */
+Object.entries(ROUTE_MAPPINGS).forEach(([route, routeConfig]) => {
+  const validationRules = getGuidelineValidationRules(routeConfig);
+
+  // POST endpoint (create guideline)
+  router.post(
+    `${route}/`,
+    writeLimiter,
+    validationRules,
+    createAddHandler(routeConfig)
+  );
+
+  // PUT endpoint (update guideline)
+  router.put(
+    `${route}/:id`,
+    writeLimiter,
+    guidelineIdValidation,
+    validationRules,
+    createUpdateHandler(routeConfig)
+  );
+
+  // DELETE endpoint (delete guideline)
+  router.delete(
+    `${route}/:id`,
+    writeLimiter,
+    guidelineIdValidation,
+    createDeleteHandler()
+  );
 });
 
 module.exports = router;

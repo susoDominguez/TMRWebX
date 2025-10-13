@@ -216,16 +216,21 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
 
     const queryParams = { limit, offset, format, include_metadata, filter };
 
+    // Deduplicate care action types before logging (some aliases map to same vocab URI)
+    const uniqueCareActionTypes = [...new Set(careActionTypes)];
+
     logger.info("Processing care actions query", {
       requestId,
       route: req.route?.path,
-      careActionTypes,
+      careActionTypes: uniqueCareActionTypes,
+      originalTypesCount: careActionTypes.length,
+      deduplicatedTypesCount: uniqueCareActionTypes.length,
       queryParams,
       ip: req.ip,
     });
 
     // Validate care action types
-    if (!Array.isArray(careActionTypes) || careActionTypes.length === 0) {
+    if (!Array.isArray(uniqueCareActionTypes) || uniqueCareActionTypes.length === 0) {
       throw new ErrorHandler(
         StatusCodes.BAD_REQUEST,
         "No valid care action types provided"
@@ -233,7 +238,7 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
     }
 
     // Validate each care action type
-    const invalidTypes = careActionTypes.filter(
+    const invalidTypes = uniqueCareActionTypes.filter(
       (type) => !Object.values(CARE_ACTION_TYPES).includes(type)
     );
 
@@ -244,9 +249,9 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       );
     }
 
-    // Execute SPARQL queries with timeout and retry logic
+    // Execute SPARQL queries with timeout and retry logic (use deduplicated types)
     const sparqlResults = await Promise.allSettled(
-      careActionTypes.map(async (type) => {
+      uniqueCareActionTypes.map(async (type) => {
         try {
           const result = await utils.sparqlGetSubjectDefaultGraph(
             "careActions",
@@ -272,7 +277,7 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       if (result.status === "fulfilled" && result.value.success) {
         successfulResults.push(result.value.result);
       } else {
-        const type = careActionTypes[index];
+        const type = uniqueCareActionTypes[index];
         const error =
           result.status === "rejected"
             ? result.reason?.message || "Unknown error"
@@ -303,6 +308,23 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       );
     }
 
+    // Deduplicate results by URI (some resources may have multiple type assertions)
+    const seenUris = new Set();
+    parsedResults = parsedResults.filter((uri) => {
+      if (seenUris.has(uri)) {
+        return false;
+      }
+      seenUris.add(uri);
+      return true;
+    });
+
+    logger.debug("Deduplicated care action results", {
+      requestId,
+      originalCount: parsedResults.length + (parsedResults.length - [...seenUris].length),
+      deduplicatedCount: parsedResults.length,
+      removedDuplicates: [...seenUris].length - parsedResults.length,
+    });
+
     // Apply filtering if requested
     if (filter && filter.trim() !== "") {
       const filterLower = filter.toLowerCase().trim();
@@ -327,10 +349,10 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       parseInt(offset) + parseInt(limit)
     );
 
-    // Build response with unique query_types
-    const query_types = Array.from(new Set(
-      careActionTypes.map((type) => type.replace("vocab:", "http://anonymous.org/vocab/"))
-    ));
+    // Build response with unique query_types (already deduplicated via uniqueCareActionTypes)
+    const query_types = uniqueCareActionTypes.map((type) => 
+      type.replace("vocab:", "http://anonymous.org/vocab/")
+    );
     const responseData = {
       status: "success",
       data: paginatedResults,
