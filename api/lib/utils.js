@@ -679,37 +679,44 @@ module.exports = {
     WHERE {
       GRAPH ${belief_id} {
         ?cbUri a vocab:CausationBelief ; 
-       vocab:frequency ?freq ;
-       vocab:strength ?strength .
-      ?actAdmin vocab:causes ?TrUri .
-      } FILTER ( ?cbUri = ${belief_id}) .
-      SERVICE ${actUrl}
-      {
-        ?actAdmin a owl:NamedIndividual , ?adminT ;
-       	?of ?actId ;
-        rdfs:label ?act_label .
-        ?actId a owl:NamedIndividual , ?actType ;
-        rdfs:label ?actLabel .
-        FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
-           (?of = vocab:administrationOf || ?of = vocab:applicationOf || ?of = vocab:inoculationOf || ?of = vocab:combinedParticipationOf )
-           ) .
+              vocab:frequency ?freq ;
+              vocab:strength ?strength .
+        ?actAdmin vocab:causes ?TrUri .
       }
-        SERVICE ${TrUrl}
-       { 
-        ?TrUri a vocab:TransitionType ;
-           vocab:hasTransformableSituation ?sitFromId ;
-           vocab:hasExpectedSituation ?sitToId ;
-             vocab:affects ?propUri ;
-           vocab:derivative ?deriv .
-        OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
-             rdfs:label ?propLabel } .	
-        OPTIONAL { ?propUri vocab:hasSctId ?propUriSCT } .	        
-        ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
-          rdfs:label ?sitFromLabel .
-        OPTIONAL { ?sitFromId vocab:hasSctId ?sitFromIdSCT } .
-        ?sitToId a vocab:SituationType , owl:NamedIndividual ;
-          rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitToId vocab:hasSctId ?sitToIdSCT } .
+      FILTER ( ?cbUri = ${belief_id} ) .
+
+      OPTIONAL {
+        SERVICE SILENT ${actUrl}
+        {
+          ?actAdmin a owl:NamedIndividual , ?adminT ;
+                   ?of ?actId ;
+                   rdfs:label ?act_label .
+          ?actId a owl:NamedIndividual , ?actType ;
+                 rdfs:label ?actLabel .
+          FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
+             (?of = vocab:administrationOf || ?of = vocab:applicationOf || ?of = vocab:inoculationOf || ?of = vocab:combinedParticipationOf )
+          ) .
+        }
+      }
+
+      OPTIONAL {
+        SERVICE SILENT ${TrUrl}
+        { 
+          ?TrUri a vocab:TransitionType ;
+                 vocab:hasTransformableSituation ?sitFromId ;
+                 vocab:hasExpectedSituation ?sitToId ;
+                 vocab:affects ?propUri ;
+                 vocab:derivative ?deriv .
+          OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
+                       rdfs:label ?propLabel } .	
+          OPTIONAL { ?propUri vocab:hasSctId ?propUriSCT } .	        
+          ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
+                     rdfs:label ?sitFromLabel .
+          OPTIONAL { ?sitFromId vocab:hasSctId ?sitFromIdSCT } .
+          ?sitToId a vocab:SituationType , owl:NamedIndividual ;
+                   rdfs:label ?sitToLabel .
+          OPTIONAL { ?sitToId vocab:hasSctId ?sitToIdSCT } .
+        }
       }
     }
     `;

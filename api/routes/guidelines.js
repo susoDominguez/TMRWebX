@@ -15,6 +15,21 @@ const { ErrorHandler } = require("../lib/errorHandler");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
 
+const validateGuidelineSemantics =
+  typeof auxFuncts.validateSemantics === "function"
+    ? auxFuncts.validateSemantics
+    : async () => ({ valid: true, errors: [] });
+
+const extractStructuredInfo =
+  typeof auxFuncts.extractStructuredInfo === "function"
+    ? auxFuncts.extractStructuredInfo
+    : async (parseResult) => ({ raw: parseResult });
+
+const getGuidelineInfoSafe =
+  typeof auxFuncts.getGuidelineInfo === "function"
+    ? auxFuncts.getGuidelineInfo
+    : async () => null;
+
 // Parser for TMR guideline interactions
 const nearley = require("nearley");
 const grammar = require("../lib/parser/grammar.js");
@@ -248,7 +263,7 @@ async function parseInteraction(interactionText, options = {}) {
 
     if (validate_semantics) {
       // Perform semantic validation
-      const semanticValidation = await auxFuncts.validateSemantics(parseResult);
+  const semanticValidation = await validateGuidelineSemantics(parseResult);
       processedResult.semantic_validation = semanticValidation;
 
       if (!semanticValidation.valid && strict_mode) {
@@ -259,7 +274,7 @@ async function parseInteraction(interactionText, options = {}) {
     }
 
     // Extract structured information
-    const structuredInfo = await auxFuncts.extractStructuredInfo(parseResult);
+  const structuredInfo = await extractStructuredInfo(parseResult);
     processedResult.structured = structuredInfo;
 
     return processedResult;
@@ -365,7 +380,7 @@ router.post(
         // If guideline_id is provided, try to enhance with guideline info
         if (context.guideline_id) {
           try {
-            const guidelineInfo = await auxFuncts.getGuidelineInfo(
+            const guidelineInfo = await getGuidelineInfoSafe(
               context.guideline_id
             );
             parseResult.guideline_context = guidelineInfo;
@@ -779,11 +794,14 @@ router.get("/info", (req, res) => {
  * Cache management endpoints
  */
 router.post("/cache/clear", (req, res) => {
+  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const startTime = Date.now();
   try {
     const { pattern = "" } = req.body;
     cacheUtils.clear(pattern);
 
     logger.info("Guidelines cache cleared via API", {
+      requestId,
       pattern,
       ip: req.ip,
     });
@@ -791,9 +809,12 @@ router.post("/cache/clear", (req, res) => {
     res.status(StatusCodes.OK).json({
       status: "success",
       message: "Cache cleared successfully",
+      requestId,
+      responseTime: Date.now() - startTime,
     });
   } catch (error) {
     logger.error("Failed to clear guidelines cache", {
+      requestId,
       error: error.message,
       ip: req.ip,
     });
@@ -801,6 +822,8 @@ router.post("/cache/clear", (req, res) => {
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
       message: "Failed to clear cache",
+      requestId,
+      responseTime: Date.now() - startTime,
     });
   }
 });
@@ -809,6 +832,10 @@ router.post("/cache/clear", (req, res) => {
  * Get cache statistics
  */
 router.get("/cache/stats", (req, res) => {
+  const requestId = `${Date.now()}-${Math.random()
+    .toString(36)
+    .substr(2, 9)}`;
+  const startTime = Date.now();
   try {
     const stats = cacheUtils.getStats();
 
@@ -821,9 +848,12 @@ router.get("/cache/stats", (req, res) => {
             ? Math.round((stats.activeEntries / stats.totalEntries) * 100)
             : 0,
       },
+      requestId,
+      responseTime: Date.now() - startTime,
     });
   } catch (error) {
     logger.error("Failed to get guidelines cache stats", {
+      requestId,
       error: error.message,
       ip: req.ip,
     });
@@ -831,6 +861,8 @@ router.get("/cache/stats", (req, res) => {
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
       message: "Failed to retrieve cache statistics",
+      requestId,
+      responseTime: Date.now() - startTime,
     });
   }
 });

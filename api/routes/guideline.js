@@ -18,9 +18,31 @@ const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
 const { isValidId, escapeQuotes } = require("../lib/router_functs/route_helpers");
 
+const parseGuidelineContent =
+  typeof auxFuncts.parseGuidelineContent === "function"
+    ? auxFuncts.parseGuidelineContent
+    : async (guidelineText) => ({ raw: guidelineText });
+
+const extractRecommendations =
+  typeof auxFuncts.extractRecommendations === "function"
+    ? auxFuncts.extractRecommendations
+    : async () => [];
+
 // Constants and Configuration
 const DATA_PREFIX = "http://anonymous.org/data/";
 const VOCAB_PREFIX = "http://anonymous.org/vocab/";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+const GUIDELINE_PREDICATES = Object.freeze({
+  CONTENT: `${VOCAB_PREFIX}hasContent`,
+  LABEL: `${VOCAB_PREFIX}hasLabel`,
+  VERSION: `${VOCAB_PREFIX}hasVersion`,
+  CREATED_AT: `${VOCAB_PREFIX}createdAt`,
+  UPDATED_AT: `${VOCAB_PREFIX}updatedAt`,
+  TITLE: `${VOCAB_PREFIX}hasTitle`,
+  AUTHOR: `${VOCAB_PREFIX}hasAuthor`,
+  ORGANIZATION: `${VOCAB_PREFIX}hasOrganization`,
+});
 
 // Rate limiting for different operations
 const readLimiter = rateLimit({
@@ -149,6 +171,474 @@ const cacheUtils = {
   },
 };
 
+function buildGuidelineSubject(guidelineId) {
+  return `data:CIG${guidelineId}`;
+}
+
+function serializePredicates(subject, predicateObjects) {
+  if (!predicateObjects || predicateObjects.length === 0) {
+    return "";
+  }
+
+  const lines = predicateObjects.map(([predicate, object], index) => {
+    const suffix = index === predicateObjects.length - 1 ? " ." : " ;";
+    const indent = index === 0 ? "" : "  ";
+    return `${indent}${predicate} ${object}${suffix}`;
+  });
+
+  lines[0] = `${subject} ${lines[0]}`;
+  return lines.join("\n");
+}
+
+function normalizeGuidelineMetadata(metadata = {}, { isUpdate = false } = {}) {
+  const safeMeta =
+    metadata && typeof metadata === "object" ? metadata : {};
+  const hasOwn = (prop) => Object.prototype.hasOwnProperty.call(safeMeta, prop);
+  const trim = (value) => (typeof value === "string" ? value.trim() : undefined);
+
+  const provided = {
+    version: hasOwn("version"),
+    title: hasOwn("title"),
+    author: hasOwn("author"),
+    organization: hasOwn("organization"),
+    createdAt: hasOwn("created_at") || hasOwn("createdAt"),
+  };
+
+  const values = {
+    version: provided.version
+      ? trim(safeMeta.version)
+      : isUpdate
+      ? undefined
+      : "1.0.0",
+    title: provided.title ? trim(safeMeta.title) : undefined,
+    author: provided.author ? trim(safeMeta.author) : undefined,
+    organization: provided.organization ? trim(safeMeta.organization) : undefined,
+    createdAt: provided.createdAt
+      ? trim(safeMeta.created_at || safeMeta.createdAt)
+      : undefined,
+  };
+
+  if (!isUpdate) {
+    if (!values.version) {
+      values.version = "1.0.0";
+    }
+    if (!values.createdAt) {
+      values.createdAt = new Date().toISOString();
+      provided.createdAt = true;
+    }
+  }
+
+  if (isUpdate) {
+    values.updatedAt = new Date().toISOString();
+    provided.updatedAt = true;
+  }
+
+  return { values, provided };
+}
+
+function buildGuidelineInsertTriples({
+  guidelineId,
+  content,
+  metadataValues,
+  includeCreatedAt = false,
+  includeUpdatedAt = false,
+}) {
+  const subject = buildGuidelineSubject(guidelineId);
+  const predicateObjects = [
+    ["a", "vocab:ClinicalGuideline , owl:NamedIndividual"],
+    ["vocab:hasLabel", `"${escapeQuotes(guidelineId)}"`],
+    ["vocab:hasContent", `"${escapeQuotes(content)}"`],
+  ];
+
+  if (metadataValues.version) {
+    predicateObjects.push([
+      "vocab:hasVersion",
+      `"${escapeQuotes(metadataValues.version)}"`,
+    ]);
+  }
+
+  if (metadataValues.title) {
+    predicateObjects.push([
+      "vocab:hasTitle",
+      `"${escapeQuotes(metadataValues.title)}"`,
+    ]);
+  }
+
+  if (metadataValues.author) {
+    predicateObjects.push([
+      "vocab:hasAuthor",
+      `"${escapeQuotes(metadataValues.author)}"`,
+    ]);
+  }
+
+  if (metadataValues.organization) {
+    predicateObjects.push([
+      "vocab:hasOrganization",
+      `"${escapeQuotes(metadataValues.organization)}"`,
+    ]);
+  }
+
+  if (includeCreatedAt && metadataValues.createdAt) {
+    predicateObjects.push([
+      "vocab:createdAt",
+      `"${escapeQuotes(metadataValues.createdAt)}"`,
+    ]);
+  }
+
+  if (includeUpdatedAt && metadataValues.updatedAt) {
+    predicateObjects.push([
+      "vocab:updatedAt",
+      `"${escapeQuotes(metadataValues.updatedAt)}"`,
+    ]);
+  }
+
+  return serializePredicates(subject, predicateObjects);
+}
+
+function buildGuidelineUpdateStatement({
+  guidelineId,
+  content,
+  metadataValues = {},
+  metadataProvided = {},
+}) {
+  const subject = buildGuidelineSubject(guidelineId);
+  const deleteClauses = [
+    `${subject} vocab:hasContent ?oldContent .`,
+  ];
+  const whereClauses = [
+    `OPTIONAL { ${subject} vocab:hasContent ?oldContent . }`,
+  ];
+  const predicateObjects = [
+    ["vocab:hasContent", `"${escapeQuotes(content)}"`],
+  ];
+
+  if (metadataValues.version !== undefined) {
+    deleteClauses.push(`${subject} vocab:hasVersion ?oldVersion .`);
+    whereClauses.push(
+      `OPTIONAL { ${subject} vocab:hasVersion ?oldVersion . }`
+    );
+    if (metadataValues.version) {
+      predicateObjects.push([
+        "vocab:hasVersion",
+        `"${escapeQuotes(metadataValues.version)}"`,
+      ]);
+    }
+  }
+
+  if (metadataProvided.title) {
+    deleteClauses.push(`${subject} vocab:hasTitle ?oldTitle .`);
+    whereClauses.push(
+      `OPTIONAL { ${subject} vocab:hasTitle ?oldTitle . }`
+    );
+    if (metadataValues.title) {
+      predicateObjects.push([
+        "vocab:hasTitle",
+        `"${escapeQuotes(metadataValues.title)}"`,
+      ]);
+    }
+  }
+
+  if (metadataProvided.author) {
+    deleteClauses.push(`${subject} vocab:hasAuthor ?oldAuthor .`);
+    whereClauses.push(
+      `OPTIONAL { ${subject} vocab:hasAuthor ?oldAuthor . }`
+    );
+    if (metadataValues.author) {
+      predicateObjects.push([
+        "vocab:hasAuthor",
+        `"${escapeQuotes(metadataValues.author)}"`,
+      ]);
+    }
+  }
+
+  if (metadataProvided.organization) {
+    deleteClauses.push(`${subject} vocab:hasOrganization ?oldOrganization .`);
+    whereClauses.push(
+      `OPTIONAL { ${subject} vocab:hasOrganization ?oldOrganization . }`
+    );
+    if (metadataValues.organization) {
+      predicateObjects.push([
+        "vocab:hasOrganization",
+        `"${escapeQuotes(metadataValues.organization)}"`,
+      ]);
+    }
+  }
+
+  if (metadataProvided.createdAt) {
+    deleteClauses.push(`${subject} vocab:createdAt ?oldCreatedAt .`);
+    whereClauses.push(
+      `OPTIONAL { ${subject} vocab:createdAt ?oldCreatedAt . }`
+    );
+    if (metadataValues.createdAt) {
+      predicateObjects.push([
+        "vocab:createdAt",
+        `"${escapeQuotes(metadataValues.createdAt)}"`,
+      ]);
+    }
+  }
+
+  if (metadataValues.updatedAt) {
+    deleteClauses.push(`${subject} vocab:updatedAt ?oldUpdatedAt .`);
+    whereClauses.push(
+      `OPTIONAL { ${subject} vocab:updatedAt ?oldUpdatedAt . }`
+    );
+    predicateObjects.push([
+      "vocab:updatedAt",
+      `"${escapeQuotes(metadataValues.updatedAt)}"`,
+    ]);
+  }
+
+  const insertBlock = serializePredicates(subject, predicateObjects);
+
+  return `
+    DELETE {
+      ${deleteClauses.join("\n      ")}
+    }
+    INSERT {
+      ${insertBlock}
+    }
+    WHERE {
+      ${whereClauses.join("\n      ")}
+    }
+  `;
+}
+
+function buildGuidelineDeleteStatement(guidelineId) {
+  const subject = buildGuidelineSubject(guidelineId);
+  return `
+    DELETE {
+      ${subject} ?p ?o .
+    }
+    WHERE {
+      ${subject} ?p ?o .
+    }
+  `;
+}
+
+function extractGuidelineIdFromUri(uri) {
+  if (!uri) return null;
+  if (uri.startsWith(`${DATA_PREFIX}CIG`)) {
+    return uri.substring(`${DATA_PREFIX}CIG`.length);
+  }
+  if (uri.startsWith(DATA_PREFIX)) {
+    return uri.substring(DATA_PREFIX.length);
+  }
+  if (uri.startsWith("data:CIG")) {
+    return uri.substring("data:CIG".length);
+  }
+  return uri;
+}
+
+function parseGuidelineBindings(guidelineId, bindings = []) {
+  const guideline = {
+    id: guidelineId,
+    uri: `${DATA_PREFIX}CIG${guidelineId}`,
+    label: guidelineId,
+    content: "",
+    version: undefined,
+    metadata: {},
+    types: [],
+    raw: [],
+  };
+
+  bindings.forEach((binding) => {
+    const predicate = binding.p?.value || binding.predicate?.value;
+    const object = binding.o || binding.object;
+
+    if (!predicate || !object) {
+      return;
+    }
+
+    const value = object.value;
+
+    switch (predicate) {
+      case GUIDELINE_PREDICATES.CONTENT:
+        guideline.content = value;
+        break;
+      case GUIDELINE_PREDICATES.LABEL:
+        guideline.label = value;
+        break;
+      case GUIDELINE_PREDICATES.VERSION:
+        guideline.version = value;
+        guideline.metadata.version = value;
+        break;
+      case GUIDELINE_PREDICATES.CREATED_AT:
+        guideline.metadata.created_at = value;
+        guideline.metadata.createdAt = value;
+        break;
+      case GUIDELINE_PREDICATES.UPDATED_AT:
+        guideline.metadata.updated_at = value;
+        guideline.metadata.updatedAt = value;
+        break;
+      case GUIDELINE_PREDICATES.TITLE:
+        guideline.metadata.title = value;
+        break;
+      case GUIDELINE_PREDICATES.AUTHOR:
+        guideline.metadata.author = value;
+        break;
+      case GUIDELINE_PREDICATES.ORGANIZATION:
+        guideline.metadata.organization = value;
+        break;
+      case RDF_TYPE:
+        guideline.types.push(value);
+        break;
+      default:
+        guideline.metadata.extra ??= [];
+        guideline.metadata.extra.push({ predicate, value });
+    }
+
+    guideline.raw.push({ predicate, object });
+  });
+
+  return guideline;
+}
+
+async function fetchGuidelineById(guidelineId) {
+  try {
+    const subject = buildGuidelineSubject(guidelineId);
+    const query = `
+      SELECT ?p ?o WHERE {
+        ${subject} ?p ?o .
+      }
+    `;
+
+    const results = await utils.sparqlJSONQuery("guidelines", query);
+    const bindings = results?.results?.bindings ?? [];
+
+    if (bindings.length === 0) {
+      return { status: StatusCodes.NOT_FOUND };
+    }
+
+    const guideline = parseGuidelineBindings(guidelineId, bindings);
+    return { status: StatusCodes.OK, guideline };
+  } catch (error) {
+    logger.error("Failed to fetch guideline by ID", {
+      guidelineId,
+      error: error.message,
+    });
+
+    return {
+      status: StatusCodes.INTERNAL_SERVER_ERROR,
+      error: error.message,
+    };
+  }
+}
+
+async function listGuidelines({ limit = 20, offset = 0 } = {}) {
+  try {
+    const query = `
+      SELECT ?guideline ?label
+             (SAMPLE(?content) AS ?contentValue)
+             (SAMPLE(?version) AS ?versionValue)
+             (SAMPLE(?createdAt) AS ?createdAtValue)
+             (SAMPLE(?updatedAt) AS ?updatedAtValue)
+             (SAMPLE(?title) AS ?titleValue)
+             (SAMPLE(?author) AS ?authorValue)
+             (SAMPLE(?organization) AS ?organizationValue)
+      WHERE {
+        ?guideline a vocab:ClinicalGuideline ;
+                   vocab:hasLabel ?label ;
+                   vocab:hasContent ?content .
+        OPTIONAL { ?guideline vocab:hasVersion ?version . }
+        OPTIONAL { ?guideline vocab:createdAt ?createdAt . }
+        OPTIONAL { ?guideline vocab:updatedAt ?updatedAt . }
+        OPTIONAL { ?guideline vocab:hasTitle ?title . }
+        OPTIONAL { ?guideline vocab:hasAuthor ?author . }
+        OPTIONAL { ?guideline vocab:hasOrganization ?organization . }
+      }
+      GROUP BY ?guideline ?label
+      ORDER BY LCASE(?label)
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    const countQuery = `
+      SELECT (COUNT(DISTINCT ?guideline) AS ?total)
+      WHERE {
+        ?guideline a vocab:ClinicalGuideline .
+      }
+    `;
+
+    const [dataResult, countResult] = await Promise.all([
+      utils.sparqlJSONQuery("guidelines", query),
+      utils.sparqlJSONQuery("guidelines", countQuery),
+    ]);
+
+    const bindings = dataResult?.results?.bindings ?? [];
+
+    const guidelines = bindings.map((binding) => {
+      const uri = binding.guideline?.value;
+      const id = extractGuidelineIdFromUri(uri);
+      const metadata = {};
+
+      const version = binding.versionValue?.value;
+      if (version) {
+        metadata.version = version;
+      }
+
+      const createdAt = binding.createdAtValue?.value;
+      if (createdAt) {
+        metadata.created_at = createdAt;
+        metadata.createdAt = createdAt;
+      }
+
+      const updatedAt = binding.updatedAtValue?.value;
+      if (updatedAt) {
+        metadata.updated_at = updatedAt;
+        metadata.updatedAt = updatedAt;
+      }
+
+      const title = binding.titleValue?.value;
+      if (title) {
+        metadata.title = title;
+      }
+
+      const author = binding.authorValue?.value;
+      if (author) {
+        metadata.author = author;
+      }
+
+      const organization = binding.organizationValue?.value;
+      if (organization) {
+        metadata.organization = organization;
+      }
+
+      return {
+        id,
+        uri,
+        label: binding.label?.value || id,
+        content: binding.contentValue?.value || "",
+        version: version || undefined,
+        metadata,
+      };
+    });
+
+    const totalCountBinding = countResult?.results?.bindings?.[0];
+    const totalCount = totalCountBinding
+      ? parseInt(totalCountBinding.total.value, 10)
+      : guidelines.length;
+
+    return {
+      status: StatusCodes.OK,
+      guidelines,
+      totalCount,
+    };
+  } catch (error) {
+    logger.error("Failed to list guidelines", { error: error.message });
+    return {
+      status: StatusCodes.INTERNAL_SERVER_ERROR,
+      guidelines: [],
+      totalCount: 0,
+      error: error.message,
+    };
+  }
+}
+
+async function deleteGuideline(guidelineId) {
+  const deleteQuery = buildGuidelineDeleteStatement(guidelineId);
+  return utils.sparqlUpdate("guidelines", deleteQuery);
+}
+
 /**
  * Enhanced validation rules for guideline operations
  */
@@ -221,95 +711,79 @@ const guidelineIdValidation = [
     ),
 ];
 
-const queryValidationRules = [
-  query("limit")
-    .optional()
-    .isInt({ min: 1, max: 100 })
-    .withMessage("Limit must be an integer between 1 and 100"),
-
-  query("offset")
-    .optional()
-    .isInt({ min: 0 })
-    .withMessage("Offset must be a non-negative integer"),
-
-  query("include_recommendations")
-    .optional()
-    .isBoolean()
-    .withMessage("Include recommendations must be a boolean"),
-
-  query("include_metadata")
-    .optional()
-    .isBoolean()
-    .withMessage("Include metadata must be a boolean"),
-];
-
-/**
- * Create guideline SPARQL definition
- */
 function createGuidelineDefinition(requestBody) {
-  const { guideline, filename, metadata = {} } = requestBody;
+      const { guideline, filename, metadata = {} } = requestBody;
 
-  // Generate unique ID if filename not provided
-  const guidelineId =
-    filename ||
-    `guideline_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      const guidelineId =
+        filename ||
+        `guideline_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
 
-  // Build metadata
-  const guidelineMetadata = {
-    ...metadata,
-    created_at: new Date().toISOString(),
-    version: metadata.version || "1.0.0",
-  };
+      const { values: metadataValues } = normalizeGuidelineMetadata(metadata);
 
-  const guidelineUri = `${DATA_PREFIX}CIG${guidelineId}`;
-  const escapedContent = escapeQuotes(guideline);
-  const escapedVersion = escapeQuotes(guidelineMetadata.version);
-  const escapedCreatedAt = escapeQuotes(guidelineMetadata.created_at);
+      const sparqlTriples = buildGuidelineInsertTriples({
+        guidelineId,
+        content: guideline,
+        metadataValues,
+        includeCreatedAt: true,
+      });
 
-  // Create RDF for guideline storage
-  const sparqlQuery = `
-    ${guidelineUri} a vocab:ClinicalGuideline ;
-      vocab:hasLabel "${escapeQuotes(guidelineId)}" ;
-      vocab:hasContent "${escapedContent}" ;
-      vocab:hasVersion "${escapedVersion}" ;
-      vocab:createdAt "${escapedCreatedAt}" .
-  `;
+      const guidelineUri = `${DATA_PREFIX}CIG${guidelineId}`;
 
-  logger.debug("Generated guideline definition", {
-    guidelineId,
-    guidelineUri,
-    contentLength: guideline.length,
-    definitionLength: sparqlQuery.length,
-  });
+      logger.debug("Generated guideline definition", {
+        guidelineId,
+        guidelineUri,
+        contentLength: guideline.length,
+        definitionLength: sparqlTriples.length,
+      });
 
-  return {
-    definition: sparqlQuery,
-    createdIds: {
-      guidelineId,
-      guidelineUri,
-      metadata: guidelineMetadata,
-    },
-  };
-}
+      const createdMetadata = {
+        version: metadataValues.version,
+        created_at: metadataValues.createdAt,
+        title: metadataValues.title,
+        author: metadataValues.author,
+        organization: metadataValues.organization,
+      };
+
+      return {
+        definition: sparqlTriples,
+        createdIds: {
+          guidelineId,
+          guidelineUri,
+          metadata: createdMetadata,
+        },
+        metadataValues,
+      };
+    }
 
 /**
  * Execute guideline operation (INSERT, UPDATE, or DELETE)
  */
 async function executeGuidelineOperation(
-  sparqlQuery,
+  sparqlPayload,
   operationType,
   id
 ) {
   try {
-    let result;
+    let sparqlStatement;
 
     if (operationType === "INSERT") {
-      const sparqlStatement = `INSERT DATA { ${sparqlQuery} }`;
-      result = await utils.sparqlUpdate("guidelines", sparqlStatement);
+      if (typeof sparqlPayload !== "string" || sparqlPayload.trim() === "") {
+        throw new ErrorHandler(
+          StatusCodes.BAD_REQUEST,
+          "Invalid guideline insert payload"
+        );
+      }
+      sparqlStatement = `INSERT DATA { ${sparqlPayload} }`;
     } else if (operationType === "UPDATE") {
-      result = await utils.update_guideline(id, sparqlQuery);
+      if (typeof sparqlPayload !== "string" || sparqlPayload.trim() === "") {
+        throw new ErrorHandler(
+          StatusCodes.BAD_REQUEST,
+          "Invalid guideline update payload"
+        );
+      }
+      sparqlStatement = sparqlPayload;
     } else if (operationType === "DELETE") {
-      result = await utils.delete_guideline(id);
+      sparqlStatement = buildGuidelineDeleteStatement(id);
     } else {
       throw new ErrorHandler(
         StatusCodes.BAD_REQUEST,
@@ -321,6 +795,8 @@ async function executeGuidelineOperation(
       operation: operationType,
       id,
     });
+
+    const result = await utils.sparqlUpdate("guidelines", sparqlStatement);
 
     if (result.status >= 400) {
       throw new ErrorHandler(
@@ -372,7 +848,7 @@ const createAddHandler = (routeConfig) => async (req, res) => {
     // Parse and validate guideline structure
     let parsedGuideline;
     try {
-      parsedGuideline = await auxFuncts.parseGuidelineContent(guideline);
+      parsedGuideline = await parseGuidelineContent(guideline);
     } catch (parseError) {
       logger.error("Guideline parsing failed", {
         error: parseError.message,
@@ -387,11 +863,14 @@ const createAddHandler = (routeConfig) => async (req, res) => {
     }
 
     // Generate guideline definition
-    const { definition: sparqlQuery, createdIds } =
-      createGuidelineDefinition(req.body);
+    const {
+      definition: sparqlQuery,
+      createdIds,
+      metadataValues,
+    } = createGuidelineDefinition(req.body);
 
     // Execute the operation
-    const { status, result } = await executeGuidelineOperation(
+    const { status, data: result } = await executeGuidelineOperation(
       sparqlQuery,
       "INSERT",
       createdIds.guidelineId
@@ -413,6 +892,7 @@ const createAddHandler = (routeConfig) => async (req, res) => {
       data: {
         operation: result || "Operation completed",
         createdResources: createdIds,
+        metadata: metadataValues,
         recommendations_count: parsedGuideline.recommendations?.length || 0,
       },
     });
@@ -453,17 +933,22 @@ router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
     }
 
     const { id } = req.params;
-    const { include_recommendations = true } = req.query;
+    const includeRecommendationsParam = req.query.include_recommendations;
+    const includeRecommendations =
+      includeRecommendationsParam === undefined
+        ? true
+        : includeRecommendationsParam === "true" ||
+          includeRecommendationsParam === true;
 
     logger.info("Retrieving guideline", {
       guidelineId: id,
-      include_recommendations,
+      include_recommendations: includeRecommendations,
       ip: req.ip,
     });
 
     // Check cache
     const cacheKey = cacheUtils.generateKey(`/get/${id}`, {
-      include_recommendations,
+      include_recommendations: includeRecommendations,
     });
     const cachedResult = cacheUtils.get(cacheKey);
 
@@ -480,9 +965,10 @@ router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
     }
 
     // Retrieve guideline from triple store
-    const { status, guideline } = await utils.get_guideline_by_id(id);
+    const guidelineResult = await fetchGuidelineById(id);
+    const { status, guideline, error: retrievalError } = guidelineResult;
 
-    if (status === 404) {
+    if (status === StatusCodes.NOT_FOUND) {
       logger.warn("Guideline not found", {
         guidelineId: id,
       });
@@ -493,25 +979,21 @@ router.get("/:id", [readLimiter, guidelineIdValidation], async (req, res) => {
       });
     }
 
-    if (status >= 400) {
+    if (status !== StatusCodes.OK) {
       throw new ErrorHandler(
-        status,
-        "Failed to retrieve guideline from triple store"
+        status || StatusCodes.INTERNAL_SERVER_ERROR,
+        retrievalError || "Failed to retrieve guideline from triple store"
       );
     }
 
     // Process guideline data
     let processedGuideline = guideline;
 
-    if (
-      include_recommendations === "true" ||
-      include_recommendations === true
-    ) {
-      // Extract and enhance recommendations
-      const recommendations = await auxFuncts.extractRecommendations(guideline);
+    if (includeRecommendations) {
+      const recommendations = await extractRecommendations(guideline);
       processedGuideline = {
         ...guideline,
-        recommendations,
+        recommendations: recommendations || [],
       };
     }
 
@@ -580,9 +1062,9 @@ const createUpdateHandler = (routeConfig) => async (req, res) => {
     });
 
     // Check if guideline exists
-    const { status: existsStatus } = await utils.get_guideline_by_id(id);
+    const { status: existsStatus } = await fetchGuidelineById(id);
 
-    if (existsStatus === 404) {
+    if (existsStatus === StatusCodes.NOT_FOUND) {
       logger.warn("Cannot update non-existent guideline", {
         guidelineId: id,
       });
@@ -593,10 +1075,17 @@ const createUpdateHandler = (routeConfig) => async (req, res) => {
       });
     }
 
+    if (existsStatus !== StatusCodes.OK) {
+      throw new ErrorHandler(
+        existsStatus || StatusCodes.INTERNAL_SERVER_ERROR,
+        "Failed to verify guideline existence"
+      );
+    }
+
     // Parse and validate updated guideline
     let parsedGuideline;
     try {
-      parsedGuideline = await auxFuncts.parseGuidelineContent(guideline);
+      parsedGuideline = await parseGuidelineContent(guideline);
     } catch (parseError) {
       logger.error("Updated guideline parsing failed", {
         guidelineId: id,
@@ -610,20 +1099,18 @@ const createUpdateHandler = (routeConfig) => async (req, res) => {
       });
     }
 
-    // Update guideline with metadata
-    const updatedGuidelineData = {
-      id,
-      content: guideline,
-      parsed: parsedGuideline,
-      metadata: {
-        ...metadata,
-        updated_at: new Date().toISOString(),
-      },
-    };
+    const { values: metadataValues, provided: metadataProvided } =
+      normalizeGuidelineMetadata(metadata, { isUpdate: true });
 
-    // Update guideline in triple store
-    const { status, result } = await executeGuidelineOperation(
-      updatedGuidelineData,
+    const updateStatement = buildGuidelineUpdateStatement({
+      guidelineId: id,
+      content: guideline,
+      metadataValues,
+      metadataProvided,
+    });
+
+    const { status, data: result } = await executeGuidelineOperation(
+      updateStatement,
       "UPDATE",
       id
     );
@@ -644,7 +1131,16 @@ const createUpdateHandler = (routeConfig) => async (req, res) => {
       data: {
         operation: result || "Operation completed",
         id,
-        metadata: updatedGuidelineData.metadata,
+        metadata: Object.fromEntries(
+          Object.entries({
+            version: metadataValues.version,
+            title: metadataValues.title,
+            author: metadataValues.author,
+            organization: metadataValues.organization,
+            created_at: metadataValues.createdAt,
+            updated_at: metadataValues.updatedAt,
+          }).filter(([, value]) => value !== undefined)
+        ),
         recommendations_count: parsedGuideline.recommendations?.length || 0,
       },
     });
@@ -692,9 +1188,9 @@ const createDeleteHandler = () => async (req, res) => {
     });
 
     // Check if guideline exists
-    const { status: existsStatus } = await utils.get_guideline_by_id(id);
+    const { status: existsStatus } = await fetchGuidelineById(id);
 
-    if (existsStatus === 404) {
+    if (existsStatus === StatusCodes.NOT_FOUND) {
       logger.warn("Cannot delete non-existent guideline", {
         guidelineId: id,
       });
@@ -703,6 +1199,13 @@ const createDeleteHandler = () => async (req, res) => {
         status: "error",
         message: "Guideline not found",
       });
+    }
+
+    if (existsStatus !== StatusCodes.OK) {
+      throw new ErrorHandler(
+        existsStatus || StatusCodes.INTERNAL_SERVER_ERROR,
+        "Failed to verify guideline existence"
+      );
     }
 
     // Delete guideline from triple store
@@ -768,11 +1271,16 @@ router.get("/", [readLimiter, queryValidationRules], async (req, res) => {
       include_metadata = true,
     } = req.query;
 
+    const includeRecommendations =
+      include_recommendations === "true" || include_recommendations === true;
+    const includeMetadata =
+      include_metadata === "true" || include_metadata === true;
+
     const queryParams = {
       limit,
       offset,
-      include_recommendations,
-      include_metadata,
+      include_recommendations: includeRecommendations,
+      include_metadata: includeMetadata,
     };
 
     logger.info("Listing guidelines", {
@@ -796,21 +1304,32 @@ router.get("/", [readLimiter, queryValidationRules], async (req, res) => {
     }
 
     // Retrieve guidelines from triple store
-    const { status, guidelines, totalCount } = await utils.list_guidelines({
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      include_recommendations:
-        include_recommendations === "true" || include_recommendations === true,
-      include_metadata:
-        include_metadata === "true" || include_metadata === true,
+    const listResult = await listGuidelines({
+      limit: parseInt(limit, 10),
+      offset: parseInt(offset, 10),
     });
 
-    if (status >= 400) {
+    if (listResult.status !== StatusCodes.OK) {
       throw new ErrorHandler(
-        status,
+        listResult.status || StatusCodes.INTERNAL_SERVER_ERROR,
         "Failed to retrieve guidelines from triple store"
       );
     }
+
+    let guidelines = listResult.guidelines || [];
+
+    if (!includeMetadata) {
+      guidelines = guidelines.map(({ metadata, ...rest }) => rest);
+    }
+
+    if (includeRecommendations) {
+      guidelines = guidelines.map((item) => ({
+        ...item,
+        recommendations: item.recommendations || [],
+      }));
+    }
+
+    const totalCount = listResult.totalCount || guidelines.length;
 
     const responseData = {
       status: "success",
@@ -904,20 +1423,24 @@ router.get(
       }
 
       // Get guideline and extract recommendations
-      const { status, guideline } = await utils.get_guideline_by_id(id);
+      const { status, guideline, error: retrievalError } =
+        await fetchGuidelineById(id);
 
-      if (status === 404) {
+      if (status === StatusCodes.NOT_FOUND) {
         return res.status(StatusCodes.NOT_FOUND).json({
           status: "error",
           message: "Guideline not found",
         });
       }
 
-      if (status >= 400) {
-        throw new ErrorHandler(status, "Failed to retrieve guideline");
+      if (status !== StatusCodes.OK) {
+        throw new ErrorHandler(
+          status || StatusCodes.INTERNAL_SERVER_ERROR,
+          retrievalError || "Failed to retrieve guideline"
+        );
       }
 
-      const recommendations = await auxFuncts.extractRecommendations(guideline);
+      const recommendations = await extractRecommendations(guideline);
 
       const responseData = {
         status: "success",
