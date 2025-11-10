@@ -506,6 +506,17 @@ module.exports = {
    * @param {string | undefined} uri
    */
   getCareActionData: async function (dataset_id, id, uri) {
+    const queryContext = {
+      dataset: dataset_id,
+      id: id || null,
+      uri: uri || null,
+    };
+    const startTime = Date.now();
+    logger.info("Fetching care action data", {
+      ...queryContext,
+      stage: "start",
+    });
+
     const SELECT_BLOCK = `
       SELECT DISTINCT ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
         (GROUP_CONCAT(DISTINCT ?subsumption; SEPARATOR=", ") AS ?subsumes)
@@ -560,6 +571,10 @@ module.exports = {
 
     const actionFilter = buildActionFilter();
     if (!actionFilter) {
+      logger.warn("Care action lookup skipped due to missing identifier", {
+        ...queryContext,
+        stage: "validation",
+      });
       return {
         results: {
           bindings: [],
@@ -568,18 +583,55 @@ module.exports = {
     }
 
     const query = SELECT_BLOCK.replace("__FILTER_CONDITIONS__", actionFilter);
-    const result = await sparqlJSONQuery(dataset_id, query);
-    const bindings = result?.results?.bindings ?? [];
+    logger.debug("Executing care action SPARQL query", {
+      ...queryContext,
+      stage: "query",
+      filter: actionFilter,
+      queryLength: query.length,
+    });
 
-    if (bindings.length === 0) {
-      return {
-        results: {
-          bindings: [],
-        },
-      };
+    try {
+      const result = await sparqlJSONQuery(dataset_id, query);
+      const bindings = result?.results?.bindings ?? [];
+      const duration = Date.now() - startTime;
+
+      if (bindings.length === 0) {
+        logger.warn("Care action not found", {
+          ...queryContext,
+          stage: "complete",
+          durationMs: duration,
+          filter: actionFilter,
+        });
+        return {
+          results: {
+            bindings: [],
+          },
+        };
+      }
+
+      logger.info("Care action data retrieved", {
+        ...queryContext,
+        stage: "complete",
+        durationMs: duration,
+        bindings: bindings.length,
+      });
+
+      logger.debug("Care action bindings sample", {
+        ...queryContext,
+        stage: "complete",
+        sample: bindings[0],
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Care action query failed", {
+        ...queryContext,
+        stage: "error",
+        durationMs: Date.now() - startTime,
+        error: error.message,
+      });
+      throw error;
     }
-
-    return result;
   },
 
   /**

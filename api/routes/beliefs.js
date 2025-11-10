@@ -15,6 +15,7 @@ const utils = require("../lib/utils");
 const { ErrorHandler } = require("../lib/errorHandler");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
+const { logStart, logSuccess, logWarn, logError } = require("../lib/requestLogger");
 
 // Rate limiting for query operations
 const queryLimiter = rateLimit({
@@ -144,18 +145,18 @@ const queryValidationRules = [
  * Enhanced endpoint to retrieve causation beliefs from named graphs
  */
 router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
-  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const startTime = Date.now();
+  const requestId =
+    req.requestId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  const startTime = logStart(req, "Beliefs query requested", {
+    query: req.query,
+  });
 
   try {
-    // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Beliefs query validation failed", {
-        requestId,
+      logWarn(req, "Beliefs query validation failed", startTime, {
         errors: errors.array(),
-        query: req.query,
-        ip: req.ip,
       });
 
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -166,7 +167,6 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
       });
     }
 
-    // Extract query parameters
     const {
       limit = 100,
       offset = 0,
@@ -177,22 +177,15 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
 
     const queryParams = { limit, offset, format, include_metadata, filter };
 
-    logger.info("Retrieving causation beliefs", {
-      requestId,
-      queryParams,
-      ip: req.ip,
-    });
-
-    // Check cache
     const cacheKey = cacheUtils.generateKey("/get", queryParams);
     const cachedResult = cacheUtils.get(cacheKey);
 
     if (cachedResult) {
       const responseTime = Date.now() - startTime;
-      logger.info("Returning cached beliefs result", {
+      logSuccess(req, "Beliefs query served from cache", startTime, {
         requestId,
-        responseTime,
         cached: true,
+        responseTime,
       });
 
       return res.status(StatusCodes.OK).json({
@@ -203,15 +196,11 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
       });
     }
 
-    // Fetch causation beliefs from the data store
-    const {
-      status = 500,
-      bindings,
-      head_vars,
-    } = await utils.get_named_subject_in_named_graphs_from_object(
-      "beliefs",
-      "vocab:CausationBelief"
-    );
+    const { status = 500, bindings } =
+      await utils.get_named_subject_in_named_graphs_from_object(
+        "beliefs",
+        "vocab:CausationBelief"
+      );
 
     if (status >= 400) {
       throw new ErrorHandler(
@@ -222,10 +211,8 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
 
     let result = [];
     if (bindings && bindings.length > 0) {
-      // Process the bindings into a readable format
       result = await auxFuncts.get_rdf_atom_as_array(bindings);
 
-      // Apply filtering if requested
       if (filter && filter.trim() !== "") {
         const filterLower = filter.toLowerCase().trim();
         result = result.filter((item) => {
@@ -241,14 +228,12 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
         });
       }
 
-      // Apply pagination
       const totalCount = result.length;
       const paginatedResult = result.slice(
         parseInt(offset),
         parseInt(offset) + parseInt(limit)
       );
 
-      // Build response
       const responseData = {
         status: "success",
         data: paginatedResult,
@@ -261,7 +246,6 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
         },
       };
 
-      // Include additional metadata if requested
       if (include_metadata === "true" || include_metadata === true) {
         responseData.metadata.query_params = queryParams;
         responseData.metadata.sparql_status = status;
@@ -270,18 +254,16 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
           "http://anonymous.org/vocab/CausationBelief";
       }
 
-      // Cache the result
       cacheUtils.set(cacheKey, responseData, CACHE_TTL);
 
       const responseTime = Date.now() - startTime;
 
-      logger.info("Causation beliefs retrieved successfully", {
+      logSuccess(req, "Beliefs query completed", startTime, {
         requestId,
+        cached: false,
         totalCount,
         returnedCount: paginatedResult.length,
         responseTime,
-        cached: false,
-        ip: req.ip,
       });
 
       res.status(StatusCodes.OK).json({
@@ -291,7 +273,6 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
         responseTime,
       });
     } else {
-      // No beliefs found
       const responseData = {
         status: "success",
         data: [],
@@ -304,15 +285,13 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
         },
       };
 
-      // Cache empty result for shorter time
-      cacheUtils.set(cacheKey, responseData, 60); // 1 minute for empty results
+      cacheUtils.set(cacheKey, responseData, 60);
 
       const responseTime = Date.now() - startTime;
 
-      logger.info("No causation beliefs found", {
+      logWarn(req, "Beliefs query returned no results", startTime, {
         requestId,
         responseTime,
-        ip: req.ip,
       });
 
       res.status(StatusCodes.OK).json({
@@ -325,12 +304,9 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
   } catch (error) {
     const responseTime = Date.now() - startTime;
 
-    logger.error("Failed to retrieve causation beliefs", {
+    logError(req, "Beliefs query failed", startTime, error, {
       requestId,
-      error: error.message,
-      stack: error.stack,
       responseTime,
-      ip: req.ip,
     });
 
     if (error instanceof ErrorHandler) {
@@ -356,78 +332,132 @@ router.post("/get", [queryLimiter, queryValidationRules], async (req, res) => {
  * Health check endpoint
  */
 router.get("/health", (req, res) => {
-  const cacheStats = cacheUtils.getStats();
+  const requestId =
+    req.requestId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  const startTime = logStart(req, "Beliefs health check requested");
 
-  res.status(StatusCodes.OK).json({
-    status: "healthy",
-    service: "causation-beliefs-query",
-    timestamp: new Date().toISOString(),
-    version: "2.0.0",
-    cache: cacheStats,
-  });
+  try {
+    const cacheStats = cacheUtils.getStats();
+
+    logSuccess(req, "Beliefs health check succeeded", startTime, {
+      requestId,
+    });
+
+    res.status(StatusCodes.OK).json({
+      status: "healthy",
+      service: "causation-beliefs-query",
+      timestamp: new Date().toISOString(),
+      version: "2.0.0",
+      cache: cacheStats,
+      requestId,
+    });
+  } catch (error) {
+    logError(req, "Beliefs health check failed", startTime, error, {
+      requestId,
+    });
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to retrieve health status",
+      requestId,
+    });
+  }
 });
 
 /**
  * Service information endpoint
  */
 router.get("/info", (req, res) => {
-  res.status(StatusCodes.OK).json({
-    status: "success",
-    data: {
-      service: "causation-beliefs-query",
-      description: "Query service for TMR-based causation beliefs",
-      endpoints: [
-        {
-          path: "/get",
-          method: "POST",
-          description:
-            "Retrieve all causation beliefs with pagination and filtering",
-          query_parameters: [
-            "limit (1-1000)",
-            "offset (>=0)",
-            "format (json, rdf, turtle)",
-            "include_metadata (boolean)",
-            "filter (string)",
-          ],
+  const requestId =
+    req.requestId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  const startTime = logStart(req, "Beliefs service info requested");
+
+  try {
+    const payload = {
+      status: "success",
+      data: {
+        service: "causation-beliefs-query",
+        description: "Query service for TMR-based causation beliefs",
+        endpoints: [
+          {
+            path: "/get",
+            method: "POST",
+            description:
+              "Retrieve all causation beliefs with pagination and filtering",
+            query_parameters: [
+              "limit (1-1000)",
+              "offset (>=0)",
+              "format (json, rdf, turtle)",
+              "include_metadata (boolean)",
+              "filter (string)",
+            ],
+          },
+          {
+            path: "/health",
+            method: "GET",
+            description: "Health check endpoint",
+          },
+          {
+            path: "/info",
+            method: "GET",
+            description: "Service information and API documentation",
+          },
+          {
+            path: "/cache/clear",
+            method: "POST",
+            description: "Clear query cache",
+          },
+          {
+            path: "/cache/stats",
+            method: "GET",
+            description: "Get cache statistics",
+          },
+        ],
+        data_source: "beliefs triple store",
+        object_type: "http://anonymous.org/vocab/CausationBelief",
+        caching: {
+          enabled: true,
+          ttl_seconds: CACHE_TTL,
+          max_entries: 100,
         },
-        {
-          path: "/health",
-          method: "GET",
-          description: "Health check endpoint",
-        },
-        {
-          path: "/info",
-          method: "GET",
-          description: "Service information and API documentation",
-        },
-        {
-          path: "/cache/clear",
-          method: "POST",
-          description: "Clear query cache",
-        },
-        {
-          path: "/cache/stats",
-          method: "GET",
-          description: "Get cache statistics",
-        },
-      ],
-      data_source: "beliefs triple store",
-      object_type: "http://anonymous.org/vocab/CausationBelief",
-      caching: {
-        enabled: true,
-        ttl_seconds: CACHE_TTL,
-        max_entries: 100,
       },
-    },
-  });
+      requestId,
+    };
+
+    logSuccess(req, "Beliefs service info served", startTime, {
+      requestId,
+    });
+
+    res.status(StatusCodes.OK).json(payload);
+  } catch (error) {
+    logError(req, "Beliefs service info failed", startTime, error, {
+      requestId,
+    });
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to retrieve service information",
+      requestId,
+    });
+  }
 });
 
 /**
  * Cache management endpoints
  */
 router.post("/cache/clear", (req, res) => {
+  const requestId =
+    req.requestId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  const { pattern = "" } = req.body || {};
+  const startTime = logStart(req, "Beliefs cache clear requested", {
+    requestId,
+    pattern,
+  });
+
   try {
-    const { pattern = "" } = req.body;
     const statsBefore = cacheUtils.getStats();
 
     cacheUtils.clear(pattern);
@@ -435,10 +465,11 @@ router.post("/cache/clear", (req, res) => {
     const statsAfter = cacheUtils.getStats();
     const clearedCount = statsBefore.totalEntries - statsAfter.totalEntries;
 
-    logger.info("Beliefs cache cleared via API", {
-      pattern,
+    logSuccess(req, "Beliefs cache cleared", startTime, {
+      requestId,
+      pattern: pattern || "all",
       clearedCount,
-      ip: req.ip,
+      remaining: statsAfter.totalEntries,
     });
 
     res.status(StatusCodes.OK).json({
@@ -449,16 +480,17 @@ router.post("/cache/clear", (req, res) => {
         entries_cleared: clearedCount,
         entries_remaining: statsAfter.totalEntries,
       },
+      requestId,
     });
   } catch (error) {
-    logger.error("Failed to clear beliefs cache", {
-      error: error.message,
-      ip: req.ip,
+    logError(req, "Beliefs cache clear failed", startTime, error, {
+      requestId,
     });
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
       message: "Failed to clear cache",
+      requestId,
     });
   }
 });
@@ -467,8 +499,21 @@ router.post("/cache/clear", (req, res) => {
  * Get cache statistics
  */
 router.get("/cache/stats", (req, res) => {
+  const requestId =
+    req.requestId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  const startTime = logStart(req, "Beliefs cache stats requested", {
+    requestId,
+  });
+
   try {
     const stats = cacheUtils.getStats();
+
+    logSuccess(req, "Beliefs cache stats served", startTime, {
+      requestId,
+      totalEntries: stats.totalEntries,
+      activeEntries: stats.activeEntries,
+    });
 
     res.status(StatusCodes.OK).json({
       status: "success",
@@ -479,16 +524,17 @@ router.get("/cache/stats", (req, res) => {
             ? Math.round((stats.activeEntries / stats.totalEntries) * 100)
             : 0,
       },
+      requestId,
     });
   } catch (error) {
-    logger.error("Failed to get beliefs cache stats", {
-      error: error.message,
-      ip: req.ip,
+    logError(req, "Beliefs cache stats failed", startTime, error, {
+      requestId,
     });
 
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
       message: "Failed to retrieve cache statistics",
+      requestId,
     });
   }
 });

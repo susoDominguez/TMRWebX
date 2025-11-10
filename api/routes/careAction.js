@@ -697,9 +697,15 @@ router.post(
       .withMessage("URI must be a valid URL"),
   ],
   async (req, res) => {
+    const requestStartedAt = Date.now();
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
+        logger.warn("Care action retrieval validation failed", {
+          route: "/all/get",
+          errors: errors.array(),
+          ip: req.ip,
+        });
         return res.status(StatusCodes.BAD_REQUEST).json({
           status: "error",
           message: "Validation failed",
@@ -708,15 +714,27 @@ router.post(
       }
 
       const { id, uri } = req.body;
+      const startTime = requestStartedAt;
 
       if (!id && !uri) {
+        logger.warn("Care action retrieval missing identifier", {
+          route: "/all/get",
+          ip: req.ip,
+          requestId: req.requestId,
+        });
         return res.status(StatusCodes.BAD_REQUEST).json({
           status: "error",
           message: "Either ID or URI must be provided",
         });
       }
 
-      logger.info("Retrieving care action", { id, uri, ip: req.ip });
+      logger.info("Retrieving care action", {
+        id: id || null,
+        uri: uri || null,
+        ip: req.ip,
+        requestId: req.requestId,
+        stage: "start",
+      });
 
       const sparqlResults = await utils.getCareActionData(
         "careActions",
@@ -724,10 +742,12 @@ router.post(
         uri
       );
 
-      logger.debug("SPARQL Results received", {
-        hasResults: !!sparqlResults,
-        hasResultsProperty: !!sparqlResults?.results,
+      logger.debug("SPARQL results received for care action", {
+        id: id || null,
+        uri: uri || null,
+        requestId: req.requestId,
         bindingsLength: sparqlResults?.results?.bindings?.length || 0,
+        durationMs: Date.now() - startTime,
       });
 
       if (
@@ -736,6 +756,12 @@ router.post(
         !sparqlResults.results.bindings ||
         sparqlResults.results.bindings.length === 0
       ) {
+        logger.warn("Care action lookup returned no results", {
+          id: id || null,
+          uri: uri || null,
+          requestId: req.requestId,
+          durationMs: Date.now() - startTime,
+        });
         return res.status(StatusCodes.NOT_FOUND).json({
           status: "error",
           message: "Care action not found",
@@ -744,7 +770,13 @@ router.post(
 
       const data = auxFunct.get_care_action_data(sparqlResults, {});
 
-      logger.info("Care action retrieved successfully", { id, uri });
+      logger.info("Care action retrieved successfully", {
+        id: id || null,
+        uri: uri || null,
+        requestId: req.requestId,
+        records: Array.isArray(data) ? data.length : 1,
+        durationMs: Date.now() - startTime,
+      });
 
       res.status(StatusCodes.OK).json({
         status: "success",
@@ -756,6 +788,8 @@ router.post(
         uri: req.body?.uri,
         error: error.message,
         stack: error.stack,
+        requestId: req.requestId,
+        durationMs: Date.now() - requestStartedAt,
       });
 
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

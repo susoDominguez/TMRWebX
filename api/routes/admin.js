@@ -8,7 +8,13 @@ const router = express.Router();
 const { asyncHandler } = require("../middleware/errorMiddleware");
 const appConfig = require("../config/appConfig");
 const appMonitoring = require("../config/monitoring");
-const logger = require("../config/winston");
+const {
+  logStart,
+  logSuccess,
+  logWarn,
+  logError,
+  buildContext,
+} = require("../lib/requestLogger");
 
 // Middleware to restrict admin access (simple IP-based for demo)
 const adminMiddleware = (req, res, next) => {
@@ -21,6 +27,7 @@ const adminMiddleware = (req, res, next) => {
   if (appConfig.isDevelopment() || adminIPs.includes(clientIP)) {
     next();
   } else {
+    logWarn(req, "Admin access denied", null, { clientIP });
     res.status(403).json({
       status: "error",
       message: "Admin access denied",
@@ -43,76 +50,81 @@ router.use(adminMiddleware);
 router.get(
   "/health",
   asyncHandler(async (req, res) => {
-    const db = req.app.locals.db;
+    const startTime = logStart(req, "Admin health check requested");
 
-    // Collect health information from all components
-    const healthData = {
-      service: "TMRWebX API",
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-      checks: {},
-    };
-
-    // Database health
     try {
-      const dbHealth = await db.healthCheck();
-      healthData.checks.database = dbHealth;
-    } catch (error) {
-      healthData.checks.database = {
-        status: "unhealthy",
-        error: error.message,
+      const db = req.app.locals.db;
+
+      const healthData = {
+        service: "TMRWebX API",
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+        checks: {},
       };
-      healthData.status = "degraded";
+
+      try {
+        const dbHealth = await db.healthCheck();
+        healthData.checks.database = dbHealth;
+      } catch (error) {
+        healthData.checks.database = {
+          status: "unhealthy",
+          error: error.message,
+        };
+        healthData.status = "degraded";
+      }
+
+      const systemHealth = appMonitoring.getHealthStatus();
+      healthData.checks.system = systemHealth;
+
+      if (systemHealth.status === "unhealthy") {
+        healthData.status = "degraded";
+      }
+
+      healthData.checks.configuration = {
+        status: "healthy",
+        environment: appConfig.getServerConfig().environment,
+        features: Object.keys(appConfig.getFeaturesConfig()).filter((key) =>
+          appConfig.isFeatureEnabled(key)
+        ),
+      };
+
+      const memUsage = process.memoryUsage();
+      const memUsageMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+      healthData.checks.memory = {
+        status: memUsageMB > 512 ? "warning" : "healthy",
+        heapUsed: `${memUsageMB}MB`,
+        heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+      };
+
+      const checkStatuses = Object.values(healthData.checks).map(
+        (check) => check.status
+      );
+      if (checkStatuses.includes("unhealthy")) {
+        healthData.status = "unhealthy";
+      } else if (
+        checkStatuses.includes("warning") ||
+        checkStatuses.includes("degraded")
+      ) {
+        healthData.status = "degraded";
+      }
+
+      const statusCode =
+        healthData.status === "healthy"
+          ? 200
+          : healthData.status === "degraded"
+          ? 200
+          : 503;
+
+      logSuccess(req, "Admin health check completed", startTime, {
+        status: healthData.status,
+      });
+
+      res.status(statusCode).json(healthData);
+    } catch (error) {
+      logError(req, "Admin health check failed", startTime, error);
+      throw error;
     }
-
-    // System health
-    const systemHealth = appMonitoring.getHealthStatus();
-    healthData.checks.system = systemHealth;
-
-    if (systemHealth.status === "unhealthy") {
-      healthData.status = "degraded";
-    }
-
-    // Application-specific health checks
-    healthData.checks.configuration = {
-      status: "healthy",
-      environment: appConfig.getServerConfig().environment,
-      features: Object.keys(appConfig.getFeaturesConfig()).filter((key) =>
-        appConfig.isFeatureEnabled(key)
-      ),
-    };
-
-    // Memory usage check
-    const memUsage = process.memoryUsage();
-    const memUsageMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-    healthData.checks.memory = {
-      status: memUsageMB > 512 ? "warning" : "healthy",
-      heapUsed: `${memUsageMB}MB`,
-      heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
-    };
-
-    // Determine overall status
-    const checkStatuses = Object.values(healthData.checks).map(
-      (check) => check.status
-    );
-    if (checkStatuses.includes("unhealthy")) {
-      healthData.status = "unhealthy";
-    } else if (
-      checkStatuses.includes("warning") ||
-      checkStatuses.includes("degraded")
-    ) {
-      healthData.status = "degraded";
-    }
-
-    const statusCode =
-      healthData.status === "healthy"
-        ? 200
-        : healthData.status === "degraded"
-        ? 200
-        : 503;
-
-    res.status(statusCode).json(healthData);
   })
 );
 
@@ -123,14 +135,25 @@ router.get(
 router.get(
   "/metrics",
   asyncHandler(async (req, res) => {
-    const metrics = appMonitoring.getMetrics();
+    const startTime = logStart(req, "Admin metrics requested");
 
-    res.json({
-      status: "success",
-      data: metrics,
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+    try {
+      const metrics = appMonitoring.getMetrics();
+
+      logSuccess(req, "Admin metrics delivered", startTime, {
+        metricGroups: Object.keys(metrics || {}),
+      });
+
+      res.json({
+        status: "success",
+        data: metrics,
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      logError(req, "Admin metrics retrieval failed", startTime, error);
+      throw error;
+    }
   })
 );
 
@@ -141,20 +164,23 @@ router.get(
 router.post(
   "/metrics/reset",
   asyncHandler(async (req, res) => {
-    appMonitoring.resetMetrics();
+    const startTime = logStart(req, "Admin metrics reset requested");
 
-    logger.info("Metrics reset by admin", {
-      ip: req.ip,
-      userAgent: req.get("User-Agent"),
-      requestId: req.requestId,
-    });
+    try {
+      appMonitoring.resetMetrics();
 
-    res.json({
-      status: "success",
-      message: "Metrics reset successfully",
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+      logSuccess(req, "Admin metrics reset completed", startTime);
+
+      res.json({
+        status: "success",
+        message: "Metrics reset successfully",
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      logError(req, "Admin metrics reset failed", startTime, error);
+      throw error;
+    }
   })
 );
 
@@ -165,14 +191,25 @@ router.post(
 router.get(
   "/config",
   asyncHandler(async (req, res) => {
-    const config = appConfig.getSafeConfig();
+    const startTime = logStart(req, "Admin configuration requested");
 
-    res.json({
-      status: "success",
-      data: config,
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+    try {
+      const config = appConfig.getSafeConfig();
+
+      logSuccess(req, "Admin configuration delivered", startTime, {
+        sections: Object.keys(config || {}),
+      });
+
+      res.json({
+        status: "success",
+        data: config,
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      logError(req, "Admin configuration retrieval failed", startTime, error);
+      throw error;
+    }
   })
 );
 
@@ -184,8 +221,16 @@ router.post(
   "/config/features",
   asyncHandler(async (req, res) => {
     const { feature, enabled } = req.body;
+    const startTime = logStart(req, "Admin feature toggle requested", {
+      feature,
+      enabled,
+    });
 
     if (!feature || typeof enabled !== "boolean") {
+      logWarn(req, "Admin feature toggle validation failed", startTime, {
+        feature,
+        enabled,
+      });
       return res.status(400).json({
         status: "error",
         message: "Feature name and enabled status (boolean) required",
@@ -193,33 +238,45 @@ router.post(
       });
     }
 
-    const success = appConfig.updateFeature(feature, enabled);
+    try {
+      const success = appConfig.updateFeature(feature, enabled);
 
-    if (!success) {
-      return res.status(404).json({
-        status: "error",
-        message: `Feature '${feature}' not found`,
+      if (!success) {
+        logWarn(req, "Admin feature toggle target not found", startTime, {
+          feature,
+          enabled,
+        });
+        return res.status(404).json({
+          status: "error",
+          message: `Feature '${feature}' not found`,
+          requestId: req.requestId,
+        });
+      }
+
+      logSuccess(
+        req,
+        `Admin feature ${enabled ? "enable" : "disable"} completed`,
+        startTime,
+        {
+          feature,
+          enabled,
+        }
+      );
+
+      res.json({
+        status: "success",
+        message: `Feature '${feature}' ${enabled ? "enabled" : "disabled"}`,
+        data: { feature, enabled },
+        timestamp: new Date().toISOString(),
         requestId: req.requestId,
       });
-    }
-
-    logger.info(
-      `Feature ${feature} ${enabled ? "enabled" : "disabled"} by admin`,
-      {
+    } catch (error) {
+      logError(req, "Admin feature toggle failed", startTime, error, {
         feature,
         enabled,
-        ip: req.ip,
-        requestId: req.requestId,
-      }
-    );
-
-    res.json({
-      status: "success",
-      message: `Feature '${feature}' ${enabled ? "enabled" : "disabled"}`,
-      data: { feature, enabled },
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+      });
+      throw error;
+    }
   })
 );
 
@@ -234,42 +291,53 @@ router.post(
 router.get(
   "/info",
   asyncHandler(async (req, res) => {
-    const info = {
-      application: {
-        name: "TMRWebX API",
-        version: process.env.npm_package_version || "1.0.0",
-        environment: appConfig.getServerConfig().environment,
-        uptime: Math.round(process.uptime()),
-        startTime: new Date(Date.now() - process.uptime() * 1000).toISOString(),
-      },
-      system: {
-        nodeVersion: process.version,
-        platform: process.platform,
-        architecture: process.arch,
-        memory: {
-          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-          external: Math.round(process.memoryUsage().external / 1024 / 1024),
-        },
-      },
-      configuration: {
-        port: appConfig.getServerConfig().port,
-        logLevel: appConfig.getServerConfig().logLevel,
-        database: {
-          fuseki: appConfig.getDatabaseConfig().fuseki.url,
-          dataset: appConfig.getDatabaseConfig().fuseki.dataset,
-          timeout: appConfig.getDatabaseConfig().fuseki.timeout,
-        },
-        features: appConfig.getFeaturesConfig(),
-      },
-    };
+    const startTime = logStart(req, "Admin info requested");
 
-    res.json({
-      status: "success",
-      data: info,
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+    try {
+      const info = {
+        application: {
+          name: "TMRWebX API",
+          version: process.env.npm_package_version || "1.0.0",
+          environment: appConfig.getServerConfig().environment,
+          uptime: Math.round(process.uptime()),
+          startTime: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+        },
+        system: {
+          nodeVersion: process.version,
+          platform: process.platform,
+          architecture: process.arch,
+          memory: {
+            total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+            used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+            external: Math.round(process.memoryUsage().external / 1024 / 1024),
+          },
+        },
+        configuration: {
+          port: appConfig.getServerConfig().port,
+          logLevel: appConfig.getServerConfig().logLevel,
+          database: {
+            fuseki: appConfig.getDatabaseConfig().fuseki.url,
+            dataset: appConfig.getDatabaseConfig().fuseki.dataset,
+            timeout: appConfig.getDatabaseConfig().fuseki.timeout,
+          },
+          features: appConfig.getFeaturesConfig(),
+        },
+      };
+
+      logSuccess(req, "Admin info delivered", startTime, {
+        sections: Object.keys(info),
+      });
+
+      res.json({
+        status: "success",
+        data: info,
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      logError(req, "Admin info retrieval failed", startTime, error);
+      throw error;
+    }
   })
 );
 
@@ -280,20 +348,31 @@ router.get(
 router.get(
   "/logs",
   asyncHandler(async (req, res) => {
-    const { level = "info", limit = 100 } = req.query;
+    const startTime = logStart(req, "Admin logs requested");
 
-    // This is a simplified version - in production you'd read from log files
-    res.json({
-      status: "success",
-      message:
-        "Log endpoint available - implement log file reading based on your logging setup",
-      parameters: {
+    try {
+      const { level = "info", limit = 100 } = req.query;
+
+      logSuccess(req, "Admin log request processed", startTime, {
         level,
-        limit: parseInt(limit),
-      },
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+        limit: Number.parseInt(limit, 10) || 0,
+      });
+
+      res.json({
+        status: "success",
+        message:
+          "Log endpoint available - implement log file reading based on your logging setup",
+        parameters: {
+          level,
+          limit: parseInt(limit),
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      logError(req, "Admin log request failed", startTime, error);
+      throw error;
+    }
   })
 );
 
@@ -308,21 +387,32 @@ router.get(
 router.get(
   "/database/health",
   asyncHandler(async (req, res) => {
-    const db = req.app.locals.db;
+    const startTime = logStart(req, "Admin database health requested");
 
-    const health = await db.healthCheck();
-    const stats = db.getConnectionStats();
+    try {
+      const db = req.app.locals.db;
 
-    res.json({
-      status: "success",
-      data: {
-        health,
-        statistics: stats,
-        configuration: appConfig.getDatabaseConfig(),
-      },
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+      const health = await db.healthCheck();
+      const stats = db.getConnectionStats();
+
+      logSuccess(req, "Admin database health delivered", startTime, {
+        healthStatus: health?.status,
+      });
+
+      res.json({
+        status: "success",
+        data: {
+          health,
+          statistics: stats,
+          configuration: appConfig.getDatabaseConfig(),
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      logError(req, "Admin database health retrieval failed", startTime, error);
+      throw error;
+    }
   })
 );
 
@@ -335,29 +425,33 @@ router.post(
   asyncHandler(async (req, res) => {
     const { query = "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }" } =
       req.body;
-    const db = req.app.locals.db;
-
-    const startTime = Date.now();
+    const startTime = logStart(req, "Admin database test query", { query });
 
     try {
+      const db = req.app.locals.db;
       const result = await db.sparqlQuery(
         appConfig.getDatabaseConfig().fuseki.dataset,
         query
       );
-      const duration = Date.now() - startTime;
+
+      logSuccess(req, "Admin database test query succeeded", startTime, {
+        bindingCount: result?.bindings?.length,
+      });
 
       res.json({
         status: "success",
         data: {
           query,
           result,
-          duration,
+          duration: Date.now() - startTime,
           timestamp: new Date().toISOString(),
         },
         requestId: req.requestId,
       });
     } catch (error) {
-      const duration = Date.now() - startTime;
+      logError(req, "Admin database test query failed", startTime, error, {
+        query,
+      });
 
       res.status(500).json({
         status: "error",
@@ -365,7 +459,7 @@ router.post(
         error: error.message,
         data: {
           query,
-          duration,
+          duration: Date.now() - startTime,
         },
         timestamp: new Date().toISOString(),
         requestId: req.requestId,
@@ -385,23 +479,32 @@ router.post(
 router.get(
   "/routes",
   asyncHandler(async (req, res) => {
-    // This would require middleware to collect route information
-    // For now, return a placeholder
-    res.json({
-      status: "success",
-      message:
-        "Route listing available - implement route collection middleware",
-      data: {
-        registered_routes: [
-          "GET /health",
-          "GET /careAction/*",
-          "GET /guideline/*",
-          // ... other routes
-        ],
-      },
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+    const startTime = logStart(req, "Admin route listing requested");
+
+    try {
+      res.json({
+        status: "success",
+        message:
+          "Route listing available - implement route collection middleware",
+        data: {
+          registered_routes: [
+            "GET /health",
+            "GET /careAction/*",
+            "GET /guideline/*",
+            // ... other routes
+          ],
+        },
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+
+      logSuccess(req, "Admin route listing delivered", startTime, {
+        routeCount: 3,
+      });
+    } catch (error) {
+      logError(req, "Admin route listing failed", startTime, error);
+      throw error;
+    }
   })
 );
 
@@ -412,18 +515,22 @@ router.get(
 router.post(
   "/cache/clear",
   asyncHandler(async (req, res) => {
-    // Implement cache clearing logic here
-    logger.info("Cache cleared by admin", {
-      ip: req.ip,
-      requestId: req.requestId,
-    });
+    const startTime = logStart(req, "Admin cache clear requested");
 
-    res.json({
-      status: "success",
-      message: "Cache cleared successfully",
-      timestamp: new Date().toISOString(),
-      requestId: req.requestId,
-    });
+    try {
+      // Implement cache clearing logic here
+      logSuccess(req, "Admin cache clear completed", startTime);
+
+      res.json({
+        status: "success",
+        message: "Cache cleared successfully",
+        timestamp: new Date().toISOString(),
+        requestId: req.requestId,
+      });
+    } catch (error) {
+      logError(req, "Admin cache clear failed", startTime, error);
+      throw error;
+    }
   })
 );
 

@@ -7,7 +7,7 @@
 
 const express = require("express");
 const { body, query, validationResult } = require("express-validator");
-const { StatusCodes, ReasonPhrases } = require("http-status-codes");
+const { StatusCodes } = require("http-status-codes");
 const rateLimit = require("express-rate-limit");
 const router = express.Router();
 
@@ -18,6 +18,7 @@ const { ErrorHandler } = require("../lib/errorHandler");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
 const { isValidId, escapeQuotes } = require("../lib/router_functs/route_helpers");
+const { logStart, logSuccess, logWarn, logError } = require("../lib/requestLogger");
 
 // Constants and Configuration
 const DATA_PREFIX = "http://anonymous.org/data/";
@@ -400,14 +401,17 @@ async function executeBeliefOperation(sparqlQuery, operationType, id) {
  * Enhanced add handler with comprehensive validation and error handling
  */
 const createAddHandler = () => async (req, res) => {
+  const startTime = logStart(req, "Belief creation requested", {
+    id: req.body?.id,
+    careActionId: req.body?.care_action_id,
+    transitionId: req.body?.transition_id,
+  });
   try {
     // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Belief creation validation failed", {
+      logWarn(req, "Belief creation validation failed", startTime, {
         errors: errors.array(),
-        body: req.body,
-        ip: req.ip,
       });
 
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -416,13 +420,6 @@ const createAddHandler = () => async (req, res) => {
         errors: errors.array(),
       });
     }
-
-    logger.info("Creating causation belief", {
-      id: req.body.id,
-      care_action_id: req.body.care_action_id,
-      transition_id: req.body.transition_id,
-      ip: req.ip,
-    });
 
     // Generate nanopublication definition
     const { definition: sparqlQuery, createdIds } =
@@ -435,7 +432,7 @@ const createAddHandler = () => async (req, res) => {
       req.body.id
     );
 
-    logger.info("Causation belief created successfully", {
+    logSuccess(req, "Belief creation completed", startTime, {
       id: req.body.id,
       beliefUri: createdIds.beliefUri,
       status,
@@ -450,10 +447,8 @@ const createAddHandler = () => async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error("Failed to create causation belief", {
+    logError(req, "Belief creation failed", startTime, error, {
       id: req.body?.id,
-      error: error.message,
-      stack: error.stack,
     });
 
     if (error instanceof ErrorHandler) {
@@ -475,9 +470,15 @@ const createAddHandler = () => async (req, res) => {
  * Enhanced delete handler with validation
  */
 const createDeleteHandler = () => async (req, res) => {
+  const startTime = logStart(req, "Belief deletion requested", {
+    id: req.body?.id,
+  });
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      logWarn(req, "Belief deletion validation failed", startTime, {
+        errors: errors.array(),
+      });
       return res.status(StatusCodes.BAD_REQUEST).json({
         status: "error",
         message: "Validation failed",
@@ -487,18 +488,13 @@ const createDeleteHandler = () => async (req, res) => {
 
     const { id } = req.body;
 
-    logger.info("Deleting causation belief", {
-      id,
-      ip: req.ip,
-    });
-
     const { status, data } = await executeBeliefOperation(
       null,
       config.DELETE,
       id
     );
 
-    logger.info("Causation belief deleted successfully", {
+    logSuccess(req, "Belief deletion completed", startTime, {
       id,
       status,
     });
@@ -509,9 +505,8 @@ const createDeleteHandler = () => async (req, res) => {
       data: data || "Operation completed",
     });
   } catch (error) {
-    logger.error("Failed to delete causation belief", {
+    logError(req, "Belief deletion failed", startTime, error, {
       id: req.body?.id,
-      error: error.message,
     });
 
     if (error instanceof ErrorHandler) {
@@ -532,18 +527,19 @@ const createDeleteHandler = () => async (req, res) => {
  * Enhanced endpoint to retrieve a specific causation belief by ID or URI
  */
 router.post("/get", beliefRetrievalRules, async (req, res) => {
-  const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  const startTime = Date.now();
+  const requestId =
+    req.requestId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  req.requestId = requestId;
+  const startTime = logStart(req, "Belief retrieval requested", {
+    id: req.body?.id,
+    uri: req.body?.uri,
+  });
 
   try {
-    // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      logger.warn("Belief retrieval validation failed", {
-        requestId,
+      logWarn(req, "Belief retrieval validation failed", startTime, {
         errors: errors.array(),
-        body: req.body,
-        ip: req.ip,
       });
 
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -556,24 +552,12 @@ router.post("/get", beliefRetrievalRules, async (req, res) => {
 
     const { id, uri } = req.body;
 
-    // Determine belief URI
-    let beliefUri;
-    if (uri) {
-      beliefUri = uri;
-    } else {
-      // Handle both CB-prefixed and non-prefixed IDs
-      beliefUri = id.includes("CB") ? `${DATA_PREFIX}${id}` : `${DATA_PREFIX}CB${id}`;
-    }
+    const beliefUri = uri
+      ? uri
+      : id.includes("CB")
+      ? `${DATA_PREFIX}${id}`
+      : `${DATA_PREFIX}CB${id}`;
 
-    logger.info("Retrieving causation belief", {
-      requestId,
-      id,
-      uri,
-      beliefUri,
-      ip: req.ip,
-    });
-
-    // Retrieve belief data
     const { status, head_vars, bindings } = await utils.getBeliefData(
       "beliefs",
       beliefUri,
@@ -591,16 +575,13 @@ router.post("/get", beliefRetrievalRules, async (req, res) => {
     const responseTime = Date.now() - startTime;
 
     if (bindings && bindings.length > 0) {
-      // Process the belief data
       const data = auxFuncts.get_CB_object(head_vars, bindings[0]);
 
-      logger.info("Causation belief retrieved successfully", {
-        requestId,
+      logSuccess(req, "Belief retrieval completed", startTime, {
         id,
         beliefUri,
         status,
         responseTime,
-        ip: req.ip,
       });
 
       logger.debug("Retrieved belief data", {
@@ -615,13 +596,11 @@ router.post("/get", beliefRetrievalRules, async (req, res) => {
         responseTime,
       });
     } else {
-      logger.info("Causation belief not found", {
-        requestId,
+      logWarn(req, "Belief retrieval yielded no results", startTime, {
         id,
         beliefUri,
         status,
         responseTime,
-        ip: req.ip,
       });
 
       res.status(StatusCodes.NOT_FOUND).json({
@@ -634,14 +613,10 @@ router.post("/get", beliefRetrievalRules, async (req, res) => {
   } catch (error) {
     const responseTime = Date.now() - startTime;
 
-    logger.error("Failed to retrieve causation belief", {
-      requestId,
+    logError(req, "Belief retrieval failed", startTime, error, {
       id: req.body?.id,
       uri: req.body?.uri,
-      error: error.message,
-      stack: error.stack,
       responseTime,
-      ip: req.ip,
     });
 
     if (error instanceof ErrorHandler) {
@@ -667,10 +642,16 @@ router.post("/get", beliefRetrievalRules, async (req, res) => {
  * Health check endpoint
  */
 router.get("/health", (req, res) => {
+  const startTime = logStart(req, "Belief service health check");
+
   res.status(StatusCodes.OK).json({
     status: "healthy",
     service: "causation-beliefs",
     timestamp: new Date().toISOString(),
+    routes: Object.keys(ROUTE_MAPPINGS).length,
+  });
+
+  logSuccess(req, "Belief service health reported", startTime, {
     routes: Object.keys(ROUTE_MAPPINGS).length,
   });
 });
@@ -679,6 +660,8 @@ router.get("/health", (req, res) => {
  * Get belief types/info endpoint
  */
 router.get("/types", (req, res) => {
+  const startTime = logStart(req, "Belief types requested");
+
   const types = Object.entries(ROUTE_MAPPINGS).map(([route, config]) => ({
     route: route || "/",
     description: config.description,
@@ -712,6 +695,10 @@ router.get("/types", (req, res) => {
         derivedFrom: "string (comma-separated URLs)",
       },
     },
+  });
+
+  logSuccess(req, "Belief types delivered", startTime, {
+    totalTypes: types.length,
   });
 });
 
