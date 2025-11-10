@@ -506,93 +506,80 @@ module.exports = {
    * @param {string | undefined} uri
    */
   getCareActionData: async function (dataset_id, id, uri) {
-    // If URI is provided, use it directly
-    if (uri) {
-      const atom = `<${uri}>`;
-      const query = `
-      SELECT DISTINCT  ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
-        (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
-        (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
-        (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
-        (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
+    const SELECT_BLOCK = `
+      SELECT DISTINCT ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
+        (GROUP_CONCAT(DISTINCT ?subsumption; SEPARATOR=", ") AS ?subsumes)
+        (GROUP_CONCAT(DISTINCT ?criterion; SEPARATOR=", ") AS ?hasGroupingCriteria)
+        (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)
+        (GROUP_CONCAT(DISTINCT ?component; SEPARATOR=", ") AS ?components)
       WHERE {
         ?actId a owl:NamedIndividual , ?adminT ;
                ?Of ?drugTid ;
                rdfs:label ?act_label .
         OPTIONAL { ?actId vocab:hasSctId  ?actSctid . }
         OPTIONAL { ?actId vocab:hasSctLbl ?actSctid_label . }
-        OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
-        OPTIONAL { ?actId vocab:hasComponent ?component . }  
-        ?drugTid  a  owl:NamedIndividual , ?drugType  ;
-                  rdfs:label ?drugLabel .
+        OPTIONAL { ?actId vocab:subsumes ?subsumption . }
+        OPTIONAL { ?actId vocab:hasComponent ?component . }
+        ?drugTid a owl:NamedIndividual , ?drugType ;
+                 rdfs:label ?drugLabel .
         OPTIONAL { ?drugTid vocab:hasSctId  ?sctid . }
         OPTIONAL { ?drugTid vocab:hasSctLbl ?sctid_label . }
-        OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
-        OPTIONAL { ?drugTid owl:sameAs ?same . } 
-        FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
-      } GROUP BY ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label`;
-
-      return sparqlJSONQuery(dataset_id, query);
-    }
-
-    // If ID is provided, we need to try different care action prefixes
-    const careActionPrefixes = [
-      "ActAdminister", // For all care actions (drugs, non-drugs, vaccines)
-    ];
-
-    // Try each prefix until we find a match
-    for (const prefix of careActionPrefixes) {
-      const atom = `data:${prefix}${id}`;
-      const query = `
-        SELECT DISTINCT  ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
-        (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
-        (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
-        (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
-        (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
-        WHERE {
-          ?actId a owl:NamedIndividual , ?adminT ;
-                 ?Of ?drugTid ;
-                 rdfs:label ?act_label .
-          OPTIONAL { ?actId vocab:hasSctId  ?actSctid . }
-          OPTIONAL { ?actId vocab:hasSctLbl ?actSctid_label . }
-          OPTIONAL { ?actId vocab:subsumes ?subsumption . } 
-          OPTIONAL { ?actId vocab:hasComponent ?component . }  
-          ?drugTid a owl:NamedIndividual , ?drugType  ;
-                  rdfs:label ?drugLabel .
-          OPTIONAL { ?drugTid vocab:hasSctId  ?sctid . }
-          OPTIONAL { ?drugTid vocab:hasSctLbl ?sctid_label . }
-          OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
-          OPTIONAL { ?drugTid owl:sameAs ?same . } 
-          FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:provisionOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
-        } GROUP BY ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label`;
-
-      try {
-        const result = await sparqlJSONQuery(dataset_id, query);
-
-        // If we got results, return them
-        if (
-          result &&
-          result.results &&
-          result.results.bindings &&
-          result.results.bindings.length > 0
-        ) {
-          return result;
-        }
-      } catch (error) {
-        // Log but continue trying other prefixes
-        logger.debug(
-          `Failed to find care action with prefix ${prefix}${id}:`,
-          error.message
-        );
+        OPTIONAL { ?drugTid vocab:hasGroupingCriteria ?criterion . }
+        OPTIONAL { ?drugTid owl:sameAs ?same . }
+        FILTER ( __FILTER_CONDITIONS__ &&
+                 ?adminT = vocab:DrugAdministrationType &&
+                 ( ?Of = vocab:administrationOf ||
+                   ?Of = vocab:provisionOf ||
+                   ?Of = vocab:applicationOf ||
+                   ?Of = vocab:combinedAdministrationOf ||
+                   ?Of = vocab:vaccinationWith ) )
       }
+      GROUP BY ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label`;
+
+    const buildActionFilter = () => {
+      if (uri) {
+        if (!/^https?:\/\//.test(uri) || !uri.includes("ActAdminister")) {
+          return null;
+        }
+        return `?actId = <${uri}>`;
+      }
+
+      if (id) {
+        const cleanedId = String(id).trim();
+        if (!/^[A-Za-z0-9_-]+$/.test(cleanedId)) {
+          throw new ErrorHandler(
+            StatusCodes.BAD_REQUEST,
+            `Invalid care action identifier: ${cleanedId}`
+          );
+        }
+        return `?actId = data:ActAdminister${cleanedId}`;
+      }
+
+      return null;
+    };
+
+    const actionFilter = buildActionFilter();
+    if (!actionFilter) {
+      return {
+        results: {
+          bindings: [],
+        },
+      };
     }
 
-    // If no results found with any prefix, return empty result structure
-    return {
-      results: {
-        bindings: [],
-      },
-    };
+    const query = SELECT_BLOCK.replace("__FILTER_CONDITIONS__", actionFilter);
+    const result = await sparqlJSONQuery(dataset_id, query);
+    const bindings = result?.results?.bindings ?? [];
+
+    if (bindings.length === 0) {
+      return {
+        results: {
+          bindings: [],
+        },
+      };
+    }
+
+    return result;
   },
 
   /**
