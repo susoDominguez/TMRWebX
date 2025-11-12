@@ -248,10 +248,10 @@ const cb_tr_schema = {
     targetKey: "transition.property.value.coding[1].code",
     transform: (value, result) => {
       if (value) {
-        result.property ??= { value: { coding: [] } };
-        result.property.value.coding[1] ??= {};
-        result.property.value.coding[1].code = value;
-        result.property.value.coding[1].system = sct_prefix;
+        result.transition.property ??= { value: { coding: [] } };
+        result.transition.property.value.coding[1] ??= {};
+        result.transition.property.value.coding[1].code = value;
+        result.transition.property.value.coding[1].system = sct_prefix;
       }
     },
   },
@@ -259,9 +259,12 @@ const cb_tr_schema = {
     targetKey: "transition.property.value.coding[1].display",
     transform: (value, result) => {
       if (value) {
-        result.property ??= { value: { coding: [] } };
-        result.property.value.coding[1] ??= {};
-        result.property.value.coding[1].display = value;
+        result.transition.property ??= { value: { coding: [] } };
+        result.transition.property.value.coding[1] ??= {};
+        result.transition.property.value.coding[1].display = value;
+        if (!result.transition.property.value.text) {
+          result.transition.property.value.text = value;
+        }
       }
     },
   },
@@ -593,7 +596,16 @@ const care_action_schema = {
     targetKey: "administers.type",
     transform: (value, result) => {
       result.administers ??= {};
-      result.administers.type = value.slice(value.lastIndexOf("/") + 1);
+      if (!value) {
+        return;
+      }
+      const fragment = value.includes("#")
+        ? value.substring(value.lastIndexOf("#") + 1)
+        : value.substring(value.lastIndexOf("/") + 1);
+      if (!fragment || fragment === "NamedIndividual") {
+        return;
+      }
+      result.administers.type ??= fragment;
     },
   },
   drugLabel: {

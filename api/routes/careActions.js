@@ -5,15 +5,13 @@
 
 const express = require("express");
 const { body, query, validationResult } = require("express-validator");
-const { StatusCodes, ReasonPhrases } = require("http-status-codes");
+const { StatusCodes } = require("http-status-codes");
 const rateLimit = require("express-rate-limit");
 const router = express.Router();
 
 // Core dependencies
-const config = require("../lib/config");
 const utils = require("../lib/utils");
 const { ErrorHandler } = require("../lib/errorHandler");
-const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
 
 // Constants and Configuration
@@ -30,21 +28,22 @@ const CARE_ACTION_TYPES = Object.freeze({
   DrugCombinationAdministrationType: "vocab:DrugAdministrationType",
 });
 
+const DATA_URI_PREFIX = "http://anonymous.org/data/";
+
 // Route configurations with metadata
 const ROUTE_CONFIGURATIONS = Object.freeze({
   "/drugs/individual/get": {
-    types: [CARE_ACTION_TYPES.VaccineType, CARE_ACTION_TYPES.DrugType],
-    description: "Get all individual drug types and vaccines",
+    types: [CARE_ACTION_TYPES.DrugType],
+    description: "Get all individual drug types",
     category: "drugs",
     subcategory: "individual",
+    uriPrefixes: [`${DATA_URI_PREFIX}DrugT`],
   },
   "/drugs/get": {
     types: [
       CARE_ACTION_TYPES.DrugCombinationType,
       CARE_ACTION_TYPES.DrugCategory,
       CARE_ACTION_TYPES.DrugType,
-      CARE_ACTION_TYPES.VaccineCategory,
-      CARE_ACTION_TYPES.VaccineType,
     ],
     description:
       "Get all drug-related care actions including combinations, categories, and types",
@@ -64,10 +63,11 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     subcategory: "vaccines",
   },
   "/drugs/category/get": {
-    types: [CARE_ACTION_TYPES.DrugCategory],
+    types: [CARE_ACTION_TYPES.DrugCategory, CARE_ACTION_TYPES.DrugType],
     description: "Get all drug categories",
     category: "drugs",
     subcategory: "category",
+    uriPrefixes: [`${DATA_URI_PREFIX}DrugCat`],
   },
   "/drugs/vaccines/category/get": {
     types: [CARE_ACTION_TYPES.VaccineCategory],
@@ -80,16 +80,23 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     description: "Get all drug combinations",
     category: "drugs",
     subcategory: "combination",
+    uriPrefixes: [`${DATA_URI_PREFIX}CombDrugT`],
   },
   "/get": {
     types: [
+      CARE_ACTION_TYPES.DrugCombinationType,
+      CARE_ACTION_TYPES.DrugCategory,
+      CARE_ACTION_TYPES.DrugType,
+      CARE_ACTION_TYPES.VaccineCategory,
+      CARE_ACTION_TYPES.VaccineType,
+      CARE_ACTION_TYPES.NonDrugType,
       CARE_ACTION_TYPES.NonDrugAdministrationType,
       CARE_ACTION_TYPES.DrugAdministrationType,
       CARE_ACTION_TYPES.VaccinationType,
       CARE_ACTION_TYPES.DrugCombinationAdministrationType,
     ],
     description:
-      "Get all care actions, including drugs, vaccines, and non-drug administrations",
+      "Get all care action types including drug, vaccine, and non-drug therapies",
     category: "all",
     subcategory: "administrations",
   },
@@ -105,20 +112,34 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     description: "Get vaccine types",
     category: "vaccines",
     subcategory: "all",
+    uriPrefixes: [`${DATA_URI_PREFIX}VacT`],
   },
   "/medications/get": {
-    types: [CARE_ACTION_TYPES.DrugCategory, CARE_ACTION_TYPES.DrugType],
-    description: "Get drug types including categories and individual drugs",
+    types: [
+      CARE_ACTION_TYPES.DrugCategory,
+      CARE_ACTION_TYPES.DrugCombinationType,
+      CARE_ACTION_TYPES.DrugType,
+    ],
+    description:
+      "Get medication types including categories, combination therapies, and individual drugs",
     category: "medications",
     subcategory: "all",
+    uriPrefixes: [
+      `${DATA_URI_PREFIX}DrugCat`,
+      `${DATA_URI_PREFIX}CombDrugT`,
+      `${DATA_URI_PREFIX}DrugT`,
+    ],
   },
   "/medications/individual/get": {
     types: [CARE_ACTION_TYPES.DrugType],
     description: "Get individual drug types excluding categories",
     category: "medications",
     subcategory: "individual",
+    uriPrefixes: [`${DATA_URI_PREFIX}DrugT`],
+    excludePrefixes: [`${DATA_URI_PREFIX}DrugCat`, `${DATA_URI_PREFIX}CombDrugT`],
   },
 });
+
 
 // Rate limiting for query operations
 const queryLimiter = rateLimit({
@@ -213,8 +234,17 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       include_metadata = false,
       filter = "",
     } = req.query;
+    const exactMatch =
+      req.query.exact_match === "true" || req.query.exact_match === true;
 
-    const queryParams = { limit, offset, format, include_metadata, filter };
+    const queryParams = {
+      limit,
+      offset,
+      format,
+      include_metadata,
+      filter,
+      exact_match: exactMatch,
+    };
 
     // Deduplicate care action types before logging (some aliases map to same vocab URI)
     const uniqueCareActionTypes = [...new Set(careActionTypes)];
@@ -249,122 +279,98 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       );
     }
 
-    // Execute SPARQL queries with timeout and retry logic (use deduplicated types)
-    const sparqlResults = await Promise.allSettled(
-      uniqueCareActionTypes.map(async (type) => {
-        try {
-          const result = await utils.sparqlGetSubjectDefaultGraph(
-            "careActions",
-            type
-          );
-          return { type, result, success: true };
-        } catch (error) {
-          logger.error("SPARQL query failed for type", {
-            requestId,
-            type,
-            error: error.message,
-          });
-          return { type, error: error.message, success: false };
-        }
-      })
+    const careActionQuery = `
+      SELECT DISTINCT ?resource ?type ?label ?sctid
+      WHERE {
+        ?resource a ?type ;
+                  rdfs:label ?label .
+        FILTER(?type IN (${uniqueCareActionTypes.join(", ")}))
+        OPTIONAL { ?resource vocab:hasSctId ?sctid . }
+      }
+    `;
+
+    const sparqlResponse = await utils.sparqlJSONQuery(
+      "careActions",
+      careActionQuery
     );
 
-    // Process results and handle partial failures
-    const successfulResults = [];
-    const failedResults = [];
+    const bindings = sparqlResponse?.results?.bindings ?? [];
+    const resources = new Map();
 
-    sparqlResults.forEach((result, index) => {
-      if (result.status === "fulfilled" && result.value.success) {
-        successfulResults.push(result.value.result);
-      } else {
-        const type = uniqueCareActionTypes[index];
-        const error =
-          result.status === "rejected"
-            ? result.reason?.message || "Unknown error"
-            : result.value.error;
-
-        failedResults.push({ type, error });
-        logger.error("Query failed for care action type", {
-          requestId,
-          type,
-          error,
-        });
+    bindings.forEach((binding) => {
+      const uri = binding.resource?.value;
+      if (!uri) {
+        return;
       }
+
+      const info = resources.get(uri) || {};
+      info.type = info.type || binding.type?.value || null;
+      info.label = info.label || binding.label?.value || null;
+      info.sctid = info.sctid || binding.sctid?.value || null;
+      resources.set(uri, info);
     });
 
-    // Parse successful results
-    let parsedResults;
-    try {
-      parsedResults = await auxFuncts.get_sparqlquery_arr(successfulResults);
-    } catch (parseError) {
-      logger.error("Failed to parse SPARQL results", {
-        requestId,
-        error: parseError.message,
-        resultCount: successfulResults.length,
-      });
-      throw new ErrorHandler(
-        StatusCodes.INTERNAL_SERVER_ERROR,
-        "Failed to parse query results"
+    const allowPrefixes = Array.isArray(routeConfig.uriPrefixes)
+      ? routeConfig.uriPrefixes.filter((prefix) => typeof prefix === "string" && prefix.length > 0)
+      : [];
+    const blockPrefixes = Array.isArray(routeConfig.excludePrefixes)
+      ? routeConfig.excludePrefixes.filter((prefix) => typeof prefix === "string" && prefix.length > 0)
+      : [];
+
+    let entries = Array.from(resources.entries());
+
+    if (allowPrefixes.length > 0) {
+      entries = entries.filter(([uri]) =>
+        allowPrefixes.some((prefix) => uri.startsWith(prefix))
       );
     }
 
-    // Deduplicate results by URI (some resources may have multiple type assertions)
-    const seenUris = new Set();
-    parsedResults = parsedResults.filter((uri) => {
-      if (seenUris.has(uri)) {
-        return false;
-      }
-      seenUris.add(uri);
-      return true;
-    });
+    if (blockPrefixes.length > 0) {
+      entries = entries.filter(([uri]) =>
+        !blockPrefixes.some((prefix) => uri.startsWith(prefix))
+      );
+    }
 
-    logger.debug("Deduplicated care action results", {
-      requestId,
-      originalCount: parsedResults.length + (parsedResults.length - [...seenUris].length),
-      deduplicatedCount: parsedResults.length,
-      removedDuplicates: [...seenUris].length - parsedResults.length,
-    });
-
-    // Apply filtering if requested
-    if (filter && filter.trim() !== "") {
-      const filterLower = filter.toLowerCase().trim();
-      parsedResults = parsedResults.filter((item) => {
-        const searchableText = [
-          item.label || "",
-          item.id || "",
-          item.description || "",
-          item.sctLabel || "",
-        ]
+    const filterLower = filter && filter.trim() !== "" ? filter.toLowerCase().trim() : null;
+    if (filterLower) {
+      entries = entries.filter(([uri, info]) => {
+        const haystack = [uri, info.label || "", info.sctid || ""]
           .join(" ")
           .toLowerCase();
-
-        return searchableText.includes(filterLower);
+        return exactMatch ? haystack === filterLower : haystack.includes(filterLower);
       });
     }
 
-    // Apply pagination
-    const totalCount = parsedResults.length;
-    const paginatedResults = parsedResults.slice(
-      parseInt(offset),
-      parseInt(offset) + parseInt(limit)
-    );
+    entries.sort((a, b) => {
+      const labelA = a[1].label || a[0];
+      const labelB = b[1].label || b[0];
+      return labelA.localeCompare(labelB);
+    });
 
-    // Build response with unique query_types (already deduplicated via uniqueCareActionTypes)
-    const query_types = uniqueCareActionTypes.map((type) => 
+    const parsedLimit = Number.parseInt(limit, 10);
+    const limitNum = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 100;
+    const parsedOffset = Number.parseInt(offset, 10);
+    const offsetNum = Number.isFinite(parsedOffset) && parsedOffset >= 0 ? parsedOffset : 0;
+
+    const page = entries.slice(offsetNum, offsetNum + limitNum);
+    const uriList = page.map(([uri]) => uri);
+
+    const totalCount = entries.length;
+    const query_types = uniqueCareActionTypes.map((type) =>
       type.replace("vocab:", "http://anonymous.org/vocab/")
     );
     const responseData = {
       status: "success",
-      data: paginatedResults,
+      data: uriList,
       metadata: {
         total_count: totalCount,
-        returned_count: paginatedResults.length,
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        has_more: parseInt(offset) + parseInt(limit) < totalCount,
+        returned_count: uriList.length,
+        limit: limitNum,
+        offset: offsetNum,
+        has_more: offsetNum + limitNum < totalCount,
         query_types,
-        successful_queries: successfulResults.length,
-        failed_queries: failedResults.length,
+        successful_queries: uniqueCareActionTypes.length,
+        failed_queries: 0,
       },
       requestId,
       responseTime: Date.now() - startTime,
@@ -378,8 +384,16 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
         subcategory: routeConfig.subcategory,
       };
 
-      if (failedResults.length > 0) {
-        responseData.metadata.failed_types = failedResults;
+      const details = page.reduce((acc, [uri, info]) => {
+        acc[uri] = {
+          label: info.label || null,
+          sctid: info.sctid || null,
+          type: info.type || null,
+        };
+        return acc;
+      }, {});
+      if (Object.keys(details).length > 0) {
+        responseData.metadata.details = details;
       }
     }
 
@@ -387,8 +401,8 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       requestId,
       route: req.route?.path,
       totalResults: totalCount,
-      returnedResults: paginatedResults.length,
-      failedQueries: failedResults.length,
+      returnedResults: uriList.length,
+      failedQueries: 0,
       responseTime: Date.now() - startTime,
     });
 

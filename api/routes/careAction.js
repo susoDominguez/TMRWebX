@@ -1,6 +1,6 @@
 const express = require("express");
 const { body, validationResult } = require("express-validator");
-const { StatusCodes, ReasonPhrases } = require("http-status-codes");
+const { StatusCodes } = require("http-status-codes");
 const router = express.Router();
 const rateLimit = require("express-rate-limit");
 
@@ -16,6 +16,200 @@ const SNOMED_PREFIX = "http://snomed.info/sct/";
 const DATA_PREFIX = "http://anonymous.org/data/";
 const VOCAB_PREFIX = "http://anonymous.org/vocab/";
 const { isValidId, parseIdsInput, escapeQuotes } = require("../lib/router_functs/route_helpers");
+
+function mergeUniqueLists(base = [], incoming = []) {
+  const seen = new Set();
+  const result = [];
+
+  const pushValue = (value) => {
+    if (value === undefined || value === null) return;
+    const normalized = typeof value === "string" ? value.trim() : value;
+    if (typeof normalized === "string" && normalized.length === 0) return;
+    const key = typeof normalized === "string" ? normalized : JSON.stringify(normalized);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(normalized);
+    }
+  };
+
+  (Array.isArray(base) ? base : base ? [base] : []).forEach(pushValue);
+  (Array.isArray(incoming) ? incoming : incoming ? [incoming] : []).forEach(pushValue);
+
+  return result;
+}
+
+function normaliseCodingList(coding = []) {
+  const entries = Array.isArray(coding) ? coding : coding ? [coding] : [];
+  const seen = new Set();
+  const result = [];
+
+  entries.forEach((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+
+    const normalized = {
+      ...(entry.system ? { system: entry.system } : {}),
+      ...(entry.code ? { code: entry.code } : {}),
+      ...(entry.display ? { display: entry.display } : {}),
+    };
+
+    if (Object.keys(normalized).length === 0) {
+      return;
+    }
+
+    const key = `${normalized.system || ""}|${normalized.code || ""}|${normalized.display || ""}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(normalized);
+    }
+  });
+
+  return result;
+}
+
+function normaliseAdminEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const normalised = {};
+  if (entry.id) {
+    normalised.id = entry.id;
+  }
+  if (entry.type) {
+    normalised.type = entry.type;
+  }
+
+  if (entry.value && typeof entry.value === "object") {
+    const value = {};
+    if (entry.value.text) {
+      value.text = entry.value.text;
+    }
+    const coding = normaliseCodingList(entry.value.coding);
+    if (coding.length > 0) {
+      value.coding = coding;
+    }
+    if (Object.keys(value).length > 0) {
+      normalised.value = value;
+    }
+  }
+
+  if (entry.has_components) {
+    const components = mergeUniqueLists(entry.has_components);
+    if (components.length > 0) {
+      normalised.has_components = components;
+    }
+  }
+
+  return Object.keys(normalised).length > 0 ? normalised : null;
+}
+
+function mergeAdminEntry(baseEntry, incomingEntry) {
+  if (!baseEntry) return incomingEntry;
+  if (!incomingEntry) return baseEntry;
+
+  const merged = {
+    id: baseEntry.id || incomingEntry.id,
+    type: baseEntry.type || incomingEntry.type,
+  };
+
+  const coding = normaliseCodingList([
+    ...(baseEntry.value?.coding || []),
+    ...(incomingEntry.value?.coding || []),
+  ]);
+  const text = baseEntry.value?.text || incomingEntry.value?.text;
+
+  if (coding.length > 0 || text) {
+    merged.value = {};
+    if (text) {
+      merged.value.text = text;
+    }
+    if (coding.length > 0) {
+      merged.value.coding = coding;
+    }
+  }
+
+  const components = mergeUniqueLists(
+    baseEntry.has_components,
+    incomingEntry.has_components
+  );
+  if (components.length > 0) {
+    merged.has_components = components;
+  }
+
+  return merged;
+}
+
+function mergeCareActionRecords(records = []) {
+  const byId = new Map();
+
+  records.forEach((record) => {
+    if (!record || typeof record !== "object" || !record.id) {
+      return;
+    }
+
+    const existing = byId.get(record.id);
+    const adminEntry = normaliseAdminEntry(record.administers);
+
+    if (!existing) {
+      const initial = {
+        ...record,
+        subsumes: mergeUniqueLists([], record.subsumes),
+        has_grouping_criteria: mergeUniqueLists([], record.has_grouping_criteria),
+        same_as: mergeUniqueLists([], record.same_as),
+        administers: adminEntry ? [adminEntry] : [],
+      };
+      byId.set(record.id, initial);
+      return;
+    }
+
+    existing.subsumes = mergeUniqueLists(existing.subsumes, record.subsumes);
+    existing.has_grouping_criteria = mergeUniqueLists(
+      existing.has_grouping_criteria,
+      record.has_grouping_criteria
+    );
+    existing.same_as = mergeUniqueLists(existing.same_as, record.same_as);
+
+    if (adminEntry) {
+      existing.administers ??= [];
+      const matchIndex = existing.administers.findIndex(
+        (entry) => entry.id === adminEntry.id
+      );
+      if (matchIndex === -1) {
+        existing.administers.push(adminEntry);
+      } else {
+        existing.administers[matchIndex] = mergeAdminEntry(
+          existing.administers[matchIndex],
+          adminEntry
+        );
+      }
+    }
+  });
+
+  return Array.from(byId.values()).map((record) => {
+    if (Array.isArray(record.administers)) {
+      if (record.administers.length === 0) {
+        delete record.administers;
+      } else if (record.administers.length === 1) {
+        record.administers = record.administers[0];
+      }
+    }
+
+    if (Array.isArray(record.subsumes) && record.subsumes.length === 0) {
+      delete record.subsumes;
+    }
+    if (
+      Array.isArray(record.has_grouping_criteria) &&
+      record.has_grouping_criteria.length === 0
+    ) {
+      delete record.has_grouping_criteria;
+    }
+    if (Array.isArray(record.same_as) && record.same_as.length === 0) {
+      delete record.same_as;
+    }
+
+    return record;
+  });
+}
 
 // Rate limiting for create/delete operations
 const createLimiter = rateLimit({
@@ -768,19 +962,24 @@ router.post(
         });
       }
 
-      const data = auxFunct.get_care_action_data(sparqlResults, {});
+      const rawData = auxFunct.get_care_action_data(sparqlResults, {});
+      const mergedData = mergeCareActionRecords(
+        Array.isArray(rawData) ? rawData : [rawData]
+      );
+      const payload =
+        mergedData.length <= 1 ? mergedData[0] || null : mergedData;
 
       logger.info("Care action retrieved successfully", {
         id: id || null,
         uri: uri || null,
         requestId: req.requestId,
-        records: Array.isArray(data) ? data.length : 1,
+        records: Array.isArray(payload) ? payload.length : 1,
         durationMs: Date.now() - startTime,
       });
 
       res.status(StatusCodes.OK).json({
         status: "success",
-        data,
+        data: payload,
       });
     } catch (error) {
       logger.error("Failed to retrieve care action", {

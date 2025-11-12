@@ -226,6 +226,8 @@ module.exports = {
     }
   },
 
+  sparqlJSONQuery,
+
   /**
    *
    * @param {string} dataset_id CIG identifier
@@ -461,7 +463,7 @@ module.exports = {
    * @param {string} TrUri
    */
   getTransitionData: async function (dataset_id, TrUri) {
-    let query = ` SELECT DISTINCT  ?TrId ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?deriv ?propLabel ?propUri ?sitFromIdSCT ?sitToIdSCT ?propUriSCT 
+    let query = ` SELECT DISTINCT  ?TrId ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?deriv ?propLabel ?propUri ?sitFromIdSCT ?sitToIdSCT ?propUriSCT ?sitFromLabelSCT ?sitToLabelSCT ?propLabelSCT 
       WHERE {
       ?TrId a vocab:TransitionType ;
             vocab:derivative ?deriv ; 
@@ -475,9 +477,12 @@ module.exports = {
       OPTIONAL { ?TrId  vocab:affects  ?propUri .
          ?propUri a  vocab:TropeType ;
            rdfs:label ?propLabel  } .
-      OPTIONAL { ?sitFromId vocab:hasSctId  ?sitFromIdSCT } .
-      OPTIONAL { ?sitToId vocab:hasSctId  ?sitToIdSCT } .
-      OPTIONAL { ?propUri vocab:hasSctId  ?propUriSCT } .
+  OPTIONAL { ?sitFromId vocab:hasSctId  ?sitFromIdSCT } .
+  OPTIONAL { ?sitFromId vocab:hasSctLbl ?sitFromLabelSCT } .
+  OPTIONAL { ?sitToId vocab:hasSctId  ?sitToIdSCT } .
+  OPTIONAL { ?sitToId vocab:hasSctLbl ?sitToLabelSCT } .
+  OPTIONAL { ?propUri vocab:hasSctId  ?propUriSCT } .
+  OPTIONAL { ?propUri vocab:hasSctLbl ?propLabelSCT } .
       }
 		`;
 
@@ -710,10 +715,10 @@ module.exports = {
     if (belief_id.startsWith("http")) belief_id = `<${belief_id}>`;
 
     let query = `
-    SELECT DISTINCT 
-    ?cbUri ?freq ?strength ?TrUri
-    ?propUri ?propLabel ?propUriSCT
-    ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT
+  SELECT DISTINCT 
+  ?cbUri ?freq ?strength ?TrUri
+  ?propUri ?propLabel ?propUriSCT ?propLabelSCT
+  ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT ?sitFromLabelSCT ?sitToLabelSCT
     ?actAdmin ?act_label ?actType ?actLabel ?actId
     WHERE {
       GRAPH ${belief_id} {
@@ -749,12 +754,15 @@ module.exports = {
           OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
                        rdfs:label ?propLabel } .	
           OPTIONAL { ?propUri vocab:hasSctId ?propUriSCT } .	        
+          OPTIONAL { ?propUri vocab:hasSctLbl ?propLabelSCT } .
           ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
                      rdfs:label ?sitFromLabel .
           OPTIONAL { ?sitFromId vocab:hasSctId ?sitFromIdSCT } .
+          OPTIONAL { ?sitFromId vocab:hasSctLbl ?sitFromLabelSCT } .
           ?sitToId a vocab:SituationType , owl:NamedIndividual ;
                    rdfs:label ?sitToLabel .
           OPTIONAL { ?sitToId vocab:hasSctId ?sitToIdSCT } .
+          OPTIONAL { ?sitToId vocab:hasSctLbl ?sitToLabelSCT } .
         }
       }
     }
