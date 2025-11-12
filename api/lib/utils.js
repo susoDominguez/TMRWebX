@@ -705,13 +705,14 @@ module.exports = {
    */
   getBeliefData: async function (
     datasetId,
-    belief_id,
+    beliefSelector,
     tr_ds_id,
     care_act_ds_id
   ) {
     // For SERVICE clauses in federated SPARQL queries, Fuseki needs to use localhost
     // because it's executing the query and needs to access its own datasets
     const serviceHost = "localhost";
+    const dataNamespace = "http://anonymous.org/data/";
     
     const TrUrl =
       "<http://" +
@@ -731,23 +732,90 @@ module.exports = {
       care_act_ds_id +
       "/query>";
 
-    //format belief_id
-    if (belief_id.startsWith("http")) belief_id = `<${belief_id}>`;
+    const normalizeToIri = (value) => {
+      if (!value || typeof value !== "string") {
+        return null;
+      }
+      if (value.startsWith("<") && value.endsWith(">")) {
+        return value;
+      }
+      if (value.startsWith("http")) {
+        return `<${value}>`;
+      }
+      return value;
+    };
+
+    let beliefGraph = null;
+    let beliefUri = null;
+
+    if (beliefSelector && typeof beliefSelector === "object") {
+      beliefGraph = beliefSelector.graphUri || beliefSelector.assertionGraph || beliefSelector.graph || null;
+      beliefUri = beliefSelector.beliefUri || beliefSelector.uri || beliefSelector.id || beliefGraph;
+    } else {
+      beliefUri = beliefSelector;
+      beliefGraph = null;
+    }
+
+    const beliefRef = normalizeToIri(beliefUri);
+    const graphRef = normalizeToIri(beliefGraph);
+
+    if (!beliefRef) {
+      throw new Error("Belief URI is required to retrieve causation belief data");
+    }
+
+    const graphLookupQuery = `
+  SELECT DISTINCT ?beliefGraph
+  WHERE {
+    GRAPH ?beliefGraph {
+      ${beliefRef} a vocab:CausationBelief .
+    }
+  }
+  LIMIT 5
+    `;
+
+    const graphLookupResults = await sparqlJSONQuery(datasetId, graphLookupQuery);
+    const graphBindings = graphLookupResults?.results?.bindings || [];
+    const graphUris = graphBindings
+      .map((binding) => binding?.beliefGraph?.value)
+      .filter((value) => typeof value === "string" && value.length > 0);
+
+    if (graphUris.length === 0) {
+      return {
+        status: 200,
+        head_vars: [],
+        bindings: [],
+        raw: graphLookupResults,
+      };
+    }
+
+    const selectedGraphUri = graphRef
+      ? graphRef.slice(1, -1)
+      : graphUris[0];
+
+    const assertionGraphRef = normalizeToIri(selectedGraphUri);
+    const provenanceGraphRef = normalizeToIri(`${selectedGraphUri}_provenance`);
+    const publicationGraphRef = normalizeToIri(`${selectedGraphUri}_publicationinfo`);
+    const nanopublicationRef = normalizeToIri(`${selectedGraphUri}_nanopub`);
 
     let query = `
   SELECT DISTINCT 
-  ?cbUri ?freq ?strength ?TrUri
+  ?beliefGraph ?cbUri ?cbId ?freq ?strength ?TrUri ?trId
   ?propUri ?propLabel ?propUriSCT ?propLabelSCT
-  ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT ?sitFromLabelSCT ?sitToLabelSCT
+  ?deriv ?derivedFromCB ?hasSourcesCB
+  ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT ?sitFromLabelSCT ?sitToLabelSCT
     ?actAdmin ?act_label ?actType ?actLabel ?actId
+    ?generatedAtTime ?attributedTo
     WHERE {
-      GRAPH ${belief_id} {
-        ?cbUri a vocab:CausationBelief ; 
-              vocab:frequency ?freq ;
-              vocab:strength ?strength .
+      GRAPH ${assertionGraphRef} {
+        BIND(${assertionGraphRef} AS ?beliefGraph)
+        BIND(${beliefRef} AS ?cbUri)
+        BIND(STRAFTER(STR(?cbUri), "${dataNamespace}") AS ?cbId)
+        ?cbUri a vocab:CausationBelief .
+        OPTIONAL { ?cbUri vocab:frequency ?freq . }
+        OPTIONAL { ?cbUri vocab:strength ?strength . }
         ?actAdmin vocab:causes ?TrUri .
+        BIND(?TrUri AS ?trId)
       }
-      FILTER ( ?cbUri = ${belief_id} ) .
 
       OPTIONAL {
         SERVICE SILENT ${actUrl}
@@ -785,9 +853,45 @@ module.exports = {
           OPTIONAL { ?sitToId vocab:hasSctLbl ?sitToLabelSCT } .
         }
       }
+
+      OPTIONAL {
+        GRAPH ${provenanceGraphRef} {
+          OPTIONAL { ${beliefRef} prov:wasDerivedFrom ?derivedFromCB . }
+          OPTIONAL {
+            ${provenanceGraphRef} a oa:Annotation ;
+                    oa:hasBody ${beliefRef} .
+            OPTIONAL { ${provenanceGraphRef} prov:wasDerivedFrom ?derivedFromCB . }
+            OPTIONAL {
+              ${provenanceGraphRef} oa:hasTarget ?annotationTarget .
+              OPTIONAL { ?annotationTarget oa:hasSource ?hasSourcesCB . }
+            }
+          }
+        }
+      }
+
+      OPTIONAL {
+        GRAPH ${publicationGraphRef} {
+          ${nanopublicationRef} prov:generatedAtTime ?generatedAtTime .
+        }
+      }
+
+      OPTIONAL {
+        GRAPH ${publicationGraphRef} {
+          ${nanopublicationRef} prov:wasAttributedTo ?attributedTo .
+        }
+      }
     }
     `;
-    return sparqlJSONQuery(datasetId, query);
+    const rawResults = await sparqlJSONQuery(datasetId, query);
+
+    return {
+      status: 200,
+      head_vars: rawResults?.head?.vars || [],
+      bindings: rawResults?.results?.bindings || [],
+      raw: rawResults,
+      graph: selectedGraphUri,
+      graphsConsidered: graphUris,
+    };
   },
 
   /**

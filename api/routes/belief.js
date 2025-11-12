@@ -68,6 +68,226 @@ const ROUTE_MAPPINGS = Object.freeze({
   },
 });
 
+const ALLOWED_FREQUENCIES = Object.freeze([
+  "always",
+  "never",
+  "sometimes",
+  "frequently",
+  "occasionally",
+  "rarely",
+  "often",
+]);
+
+const STRENGTH_LEVEL_PATTERN = /^L\d+$/i;
+
+function getBindingValue(binding, key) {
+  return binding && binding[key] && binding[key].value
+    ? binding[key].value
+    : null;
+}
+
+function addToSet(targetSet, value) {
+  if (!targetSet || !(targetSet instanceof Set)) {
+    return;
+  }
+  if (value && typeof value === "string" && value.trim().length > 0) {
+    targetSet.add(value.trim());
+  }
+}
+
+function buildBeliefResponse(bindings = [], { graph, graphsConsidered } = {}) {
+  if (!Array.isArray(bindings) || bindings.length === 0) {
+    return null;
+  }
+
+  const aggregated = {
+    uri: null,
+    id: null,
+    frequency: null,
+    strength: null,
+    derivedFrom: new Set(),
+    sources: new Set(),
+    careAction: {
+      administration: null,
+      label: null,
+      type: null,
+      resource: null,
+      resourceLabel: null,
+    },
+    transition: {
+      uri: null,
+      derivative: null,
+      property: {
+        uri: null,
+        label: null,
+        sctId: null,
+        sctLabel: null,
+      },
+      from: {
+        uri: null,
+        label: null,
+        sctId: null,
+        sctLabel: null,
+      },
+      to: {
+        uri: null,
+        label: null,
+        sctId: null,
+        sctLabel: null,
+      },
+    },
+    generatedAtTime: null,
+    attributedTo: null,
+    assertion_graph: graph || null,
+    graph_candidates: Array.isArray(graphsConsidered)
+      ? graphsConsidered
+      : [],
+  };
+
+  bindings.forEach((binding) => {
+    const cbUri = getBindingValue(binding, "cbUri") || getBindingValue(binding, "belief");
+    if (cbUri) {
+      aggregated.uri ??= cbUri;
+    }
+
+    const cbId = getBindingValue(binding, "cbId");
+    if (cbId) {
+      aggregated.id ??= cbId;
+    }
+
+    const freq = getBindingValue(binding, "freq");
+    if (freq) {
+      aggregated.frequency ??= freq;
+    }
+
+    const strength = getBindingValue(binding, "strength");
+    if (strength) {
+      aggregated.strength ??= strength;
+    }
+
+    addToSet(aggregated.derivedFrom, getBindingValue(binding, "derivedFromCB"));
+    addToSet(aggregated.sources, getBindingValue(binding, "hasSourcesCB"));
+
+    const actAdmin = getBindingValue(binding, "actAdmin");
+    if (actAdmin) {
+      aggregated.careAction.administration ??= actAdmin;
+    }
+
+    const actId = getBindingValue(binding, "actId");
+    if (actId) {
+      aggregated.careAction.resource ??= actId;
+    }
+
+    const adminLabel = getBindingValue(binding, "act_label");
+    if (adminLabel) {
+      aggregated.careAction.label ??= adminLabel;
+    }
+
+    const actLabel = getBindingValue(binding, "actLabel");
+    if (actLabel) {
+      aggregated.careAction.resourceLabel ??= actLabel;
+    }
+
+    const actType = getBindingValue(binding, "actType");
+    if (actType) {
+      aggregated.careAction.type ??= actType;
+    }
+
+    const trUri = getBindingValue(binding, "TrUri") ||
+      getBindingValue(binding, "trId") ||
+      getBindingValue(binding, "transition");
+    if (trUri) {
+      aggregated.transition.uri ??= trUri;
+    }
+
+    const derivative = getBindingValue(binding, "deriv");
+    if (derivative) {
+      aggregated.transition.derivative ??= derivative;
+    }
+
+    const propUri = getBindingValue(binding, "propUri");
+    if (propUri) {
+      aggregated.transition.property.uri ??= propUri;
+    }
+
+    const propLabel = getBindingValue(binding, "propLabel");
+    if (propLabel) {
+      aggregated.transition.property.label ??= propLabel;
+    }
+
+    const propUriSct = getBindingValue(binding, "propUriSCT");
+    if (propUriSct) {
+      aggregated.transition.property.sctId ??= propUriSct;
+    }
+
+    const propLabelSct = getBindingValue(binding, "propLabelSCT");
+    if (propLabelSct) {
+      aggregated.transition.property.sctLabel ??= propLabelSct;
+    }
+
+    const sitFromId = getBindingValue(binding, "sitFromId");
+    if (sitFromId) {
+      aggregated.transition.from.uri ??= sitFromId;
+    }
+
+    const sitFromLabel = getBindingValue(binding, "sitFromLabel");
+    if (sitFromLabel) {
+      aggregated.transition.from.label ??= sitFromLabel;
+    }
+
+    const sitFromIdSct = getBindingValue(binding, "sitFromIdSCT");
+    if (sitFromIdSct) {
+      aggregated.transition.from.sctId ??= sitFromIdSct;
+    }
+
+    const sitFromLabelSct = getBindingValue(binding, "sitFromLabelSCT");
+    if (sitFromLabelSct) {
+      aggregated.transition.from.sctLabel ??= sitFromLabelSct;
+    }
+
+    const sitToId = getBindingValue(binding, "sitToId");
+    if (sitToId) {
+      aggregated.transition.to.uri ??= sitToId;
+    }
+
+    const sitToLabel = getBindingValue(binding, "sitToLabel");
+    if (sitToLabel) {
+      aggregated.transition.to.label ??= sitToLabel;
+    }
+
+    const sitToIdSct = getBindingValue(binding, "sitToIdSCT");
+    if (sitToIdSct) {
+      aggregated.transition.to.sctId ??= sitToIdSct;
+    }
+
+    const sitToLabelSct = getBindingValue(binding, "sitToLabelSCT");
+    if (sitToLabelSct) {
+      aggregated.transition.to.sctLabel ??= sitToLabelSct;
+    }
+
+    const generated = getBindingValue(binding, "generatedAtTime");
+    if (generated) {
+      aggregated.generatedAtTime ??= generated;
+    }
+
+    const attributed = getBindingValue(binding, "attributedTo");
+    if (attributed) {
+      aggregated.attributedTo ??= attributed;
+    }
+  });
+
+  if (!aggregated.id && aggregated.uri) {
+    aggregated.id = aggregated.uri.startsWith(DATA_PREFIX)
+      ? aggregated.uri.slice(DATA_PREFIX.length)
+      : aggregated.uri;
+  }
+
+  aggregated.derivedFrom = Array.from(aggregated.derivedFrom);
+  aggregated.sources = Array.from(aggregated.sources);
+
+  return aggregated;
+}
+
 /**
  * Enhanced validation rules for belief creation
  */
@@ -102,16 +322,37 @@ const getValidationRules = () => [
   body("strength")
     .isString()
     .trim()
-    .customSanitizer((v) => (typeof v === "string" ? v.toLowerCase() : v))
-    .isIn(["high", "medium", "low"])
-    .withMessage("Strength must be one of: 'high', 'medium', 'low'"),
+    .custom((value) => {
+      if (typeof value !== "string") {
+        return false;
+      }
+      const trimmed = value.trim();
+      if (trimmed.length === 0) {
+        return false;
+      }
+      if (STRENGTH_LEVEL_PATTERN.test(trimmed)) {
+        return true;
+      }
+      const normalized = trimmed.toLowerCase();
+      return ["high", "medium", "low"].includes(normalized);
+    })
+    .withMessage(
+      "Strength must be 'high', 'medium', 'low', or match the pattern 'L<number>'"
+    ),
 
   body("frequency")
     .isString()
     .trim()
-    .customSanitizer((v) => (typeof v === "string" ? v.toLowerCase() : v))
-    .isIn(["always", "never"])
-    .withMessage("Frequency must be either 'always' or 'never'"),
+    .custom((value) => {
+      if (typeof value !== "string") {
+        return false;
+      }
+      const normalized = value.trim().toLowerCase();
+      return ALLOWED_FREQUENCIES.includes(normalized);
+    })
+    .withMessage(
+      `Frequency must be one of: ${ALLOWED_FREQUENCIES.join(", ")}`
+    ),
 
   body("author")
     .isString()
@@ -235,35 +476,79 @@ const cacheUtils = {
   },
 };
 
+function sanitizeLocalIdentifier(value, fallback = "Not_given") {
+  if (!value || typeof value !== "string") {
+    return fallback;
+  }
+  const sanitized = value
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9:_.\/\-]/g, "");
+  return sanitized.length > 0 ? sanitized : fallback;
+}
+
+function normalizeStrengthValue(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (STRENGTH_LEVEL_PATTERN.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+  const normalized = trimmed.toLowerCase();
+  if (["high", "medium", "low"].includes(normalized)) {
+    return normalized;
+  }
+  return trimmed;
+}
+
+function normalizeFrequencyValue(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const normalized = value.trim().toLowerCase();
+  return ALLOWED_FREQUENCIES.includes(normalized)
+    ? normalized
+    : value.trim();
+}
+
+function normalizeAuthorId(author) {
+  return sanitizeLocalIdentifier(author, "UnknownAuthor");
+}
+
 /**
  * Process derivedFrom sources into SPARQL format
  */
 function processDerivedFromSources(derivedFrom) {
-  if (!derivedFrom || derivedFrom.trim() === "") {
-    return `<${DATA_PREFIX}Not_given>`;
+  const fallback = [`<${DATA_PREFIX}Not_given>`];
+
+  if (!derivedFrom || typeof derivedFrom !== "string") {
+    return fallback;
   }
 
   try {
-    return derivedFrom
+    const sources = derivedFrom
       .split(",")
+      .map((source) => source.trim())
+      .filter((source) => source.length > 0)
       .map((source) => {
-        const trimmedSource = source.trim();
-        // Validate URL format
         if (
-          !trimmedSource.startsWith("http://") &&
-          !trimmedSource.startsWith("https://")
+          source.startsWith("http://") ||
+          source.startsWith("https://")
         ) {
-          return `<${DATA_PREFIX}${trimmedSource}>`;
+          return `<${source}>`;
         }
-        return `<${trimmedSource}>`;
-      })
-      .join(", ");
+        return `<${DATA_PREFIX}${sanitizeLocalIdentifier(source)}>`;
+      });
+
+    const uniqueSources = [...new Set(sources)];
+    return uniqueSources.length > 0 ? uniqueSources : fallback;
   } catch (error) {
     logger.error("Error processing derivedFrom sources", {
       derivedFrom,
       error: error.message,
     });
-    return `<${DATA_PREFIX}Not_given>`;
+    return fallback;
   }
 }
 
@@ -290,52 +575,85 @@ function createNanopublicationDefinition(requestBody) {
   }
 
   // Ensure proper prefixes for care action and transition IDs
-  // Care actions should have ActAdminister prefix
-  const careActionUri = care_action_id.startsWith('ActAdminister')
-    ? `${DATA_PREFIX}${care_action_id}`
-    : `${DATA_PREFIX}ActAdminister${care_action_id}`;
-  
-  // Transitions should have Tr prefix
-  const transitionUri = transition_id.startsWith('Tr')
-    ? `${DATA_PREFIX}${transition_id}`
-    : `${DATA_PREFIX}Tr${transition_id}`;
+  const careActionLocalId = care_action_id.startsWith("ActAdminister")
+    ? care_action_id
+    : `ActAdminister${care_action_id}`;
+  const transitionLocalId = transition_id.startsWith("Tr")
+    ? transition_id
+    : `Tr${transition_id}`;
 
-  const beliefId = `${DATA_PREFIX}CB${id}`;
-  const date = new Date().toISOString();
+  const careActionUri = `${DATA_PREFIX}${careActionLocalId}`;
+  const transitionUri = `${DATA_PREFIX}${transitionLocalId}`;
+  const careActionRef = `<${careActionUri}>`;
+  const transitionRef = `<${transitionUri}>`;
+
+  const beliefLocalId = `CB${id}`;
+  const beliefUri = `${DATA_PREFIX}${beliefLocalId}`;
+  const beliefRef = `<${beliefUri}>`;
+  const headGraph = `<${beliefUri}_head>`;
+  const provenanceGraph = `<${beliefUri}_provenance>`;
+  const publicationGraph = `<${beliefUri}_publicationinfo>`;
+  const nanopublicationUri = `<${beliefUri}_nanopub>`;
+
+  const normalizedStrength = normalizeStrengthValue(strength);
+  const normalizedFrequency = normalizeFrequencyValue(frequency);
   const derivedFromSources = processDerivedFromSources(derivedFrom);
-  const escapedAuthor = escapeQuotes(author);
+  const derivedFromValues = derivedFromSources.map((source) =>
+    source.startsWith("<") && source.endsWith(">")
+      ? source.slice(1, -1)
+      : source
+  );
+  const authorId = normalizeAuthorId(author);
+  const authorUri = `<${DATA_PREFIX}${authorId}>`;
+  const issuedAt = new Date().toISOString();
 
-  // Build nanopublication structure
-  const head = `GRAPH <${beliefId}_head> {
-    <${beliefId}> a nanopub:Nanopublication ;
-              nanopub:hasAssertion <${beliefId}> ;
-              nanopub:hasProvenance <${beliefId}_provenance> ;
-              nanopub:hasPublicationInfo <${beliefId}_publicationinfo> .
+  const derivedStatements = derivedFromSources
+    .map((source) => `    ${beliefRef} prov:wasDerivedFrom ${source} .`)
+    .join("\n");
+
+  const annotationTargetLines = derivedFromSources
+    .map((source, index) => {
+      const terminator =
+        index === derivedFromSources.length - 1 ? " ." : " ;";
+      return `            oa:hasTarget [ oa:hasSource ${source} ]${terminator}`;
+    })
+    .join("\n");
+
+  // Build nanopublication structure mirroring existing RDF
+  const head = `GRAPH ${headGraph} {
+    ${nanopublicationUri} a nanopub:Nanopublication ;
+            nanopub:hasAssertion ${beliefRef} ;
+            nanopub:hasProvenance ${provenanceGraph} ;
+            nanopub:hasPublicationInfo ${publicationGraph} .
   }`;
 
-  const assertion = `GRAPH <${beliefId}> {
-    <${careActionUri}> vocab:causes <${transitionUri}> .
-    <${beliefId}> a vocab:CausationBelief ;
-            vocab:strength "${escapeQuotes(strength)}"^^xsd:string ;
-            vocab:frequency "${escapeQuotes(frequency)}"^^xsd:string .
+  const assertion = `GRAPH ${beliefRef} {
+    ${careActionRef} vocab:causes ${transitionRef} .
+    ${beliefRef} a vocab:CausationBelief ;
+            vocab:frequency "${escapeQuotes(normalizedFrequency)}" ;
+            vocab:strength "${escapeQuotes(normalizedStrength)}" .
   }`;
 
-  const provenance = `GRAPH <${beliefId}_provenance> {
-    <${beliefId}_provenance> a oa:Annotation ;
-                      oa:hasBody <${beliefId}> ;
-                      prov:wasDerivedFrom ${derivedFromSources} .
+  const provenance = `GRAPH ${provenanceGraph} {
+${derivedStatements}
+    ${provenanceGraph} a oa:Annotation ;
+            oa:hasBody ${beliefRef} ;
+${annotationTargetLines}
   }`;
 
-  const publication = `GRAPH <${beliefId}_publicationinfo> {
-    <${beliefId}_head> prov:generatedAtTime "${date}"^^xsd:dateTime ;
-                  prov:wasAttributedTo <${DATA_PREFIX}${escapedAuthor}> .
+  const publication = `GRAPH ${publicationGraph} {
+    ${nanopublicationUri} prov:generatedAtTime "${issuedAt}"^^xsd:dateTime ;
+            prov:wasAttributedTo ${authorUri} .
   }`;
 
-  const completeDefinition = `${head} ${assertion} ${provenance} ${publication}`;
+  const completeDefinition = [head, assertion, provenance, publication].join(
+    "\n\n"
+  );
 
   logger.debug("Generated nanopublication definition", {
     id,
-    beliefId,
+    beliefUri,
+    nanopublicationUri,
     careActionUri,
     transitionUri,
     definitionLength: completeDefinition.length,
@@ -344,10 +662,16 @@ function createNanopublicationDefinition(requestBody) {
   return {
     definition: completeDefinition,
     createdIds: {
-      beliefId: id,
-      beliefUri: beliefId,
+      beliefId: beliefLocalId,
+      beliefUri,
+      nanopublicationUri: `${DATA_PREFIX}${beliefLocalId}_nanopub`,
+      headGraph: `${DATA_PREFIX}${beliefLocalId}_head`,
+      provenanceGraph: `${DATA_PREFIX}${beliefLocalId}_provenance`,
+      publicationGraph: `${DATA_PREFIX}${beliefLocalId}_publicationinfo`,
       careActionUri,
       transitionUri,
+      authorUri: `${DATA_PREFIX}${authorId}`,
+      derivedFrom: derivedFromValues,
     },
   };
 }
@@ -432,6 +756,8 @@ const createAddHandler = () => async (req, res) => {
       req.body.id
     );
 
+    cacheUtils.clear();
+
     logSuccess(req, "Belief creation completed", startTime, {
       id: req.body.id,
       beliefUri: createdIds.beliefUri,
@@ -493,6 +819,8 @@ const createDeleteHandler = () => async (req, res) => {
       config.DELETE,
       id
     );
+
+    cacheUtils.clear();
 
     logSuccess(req, "Belief deletion completed", startTime, {
       id,
@@ -558,12 +886,13 @@ router.post("/get", beliefRetrievalRules, async (req, res) => {
       ? `${DATA_PREFIX}${id}`
       : `${DATA_PREFIX}CB${id}`;
 
-    const { status, head_vars, bindings } = await utils.getBeliefData(
+    const { status, head_vars, bindings, raw, graph, graphsConsidered } =
+      await utils.getBeliefData(
       "beliefs",
       beliefUri,
       "transitions",
       "careActions"
-    );
+      );
 
     if (status >= 400) {
       throw new ErrorHandler(
@@ -575,7 +904,11 @@ router.post("/get", beliefRetrievalRules, async (req, res) => {
     const responseTime = Date.now() - startTime;
 
     if (bindings && bindings.length > 0) {
-      const data = auxFuncts.get_CB_object(head_vars, bindings[0]);
+      const data =
+        buildBeliefResponse(bindings, {
+          graph,
+          graphsConsidered,
+        }) || {};
 
       logSuccess(req, "Belief retrieval completed", startTime, {
         id,
