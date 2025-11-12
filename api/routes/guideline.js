@@ -711,6 +711,28 @@ const guidelineIdValidation = [
     ),
 ];
 
+const queryValidationRules = [
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 200 })
+    .withMessage("Limit must be an integer between 1 and 200"),
+
+  query("offset")
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage("Offset must be a non-negative integer"),
+
+  query("include_recommendations")
+    .optional()
+    .isBoolean()
+    .withMessage("Include recommendations must be a boolean"),
+
+  query("include_metadata")
+    .optional()
+    .isBoolean()
+    .withMessage("Include metadata must be a boolean"),
+];
+
 function createGuidelineDefinition(requestBody) {
       const { guideline, filename, metadata = {} } = requestBody;
 
