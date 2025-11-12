@@ -49,7 +49,7 @@ if dev_mode:
         ],
         live_update=[
             # Sync source code changes
-            sync('./api/', '/usr/src/app/'),
+            sync(local_path='./api/', remote_path='/usr/src/app/'),
             # Handle dependency changes
             sync('./api/package.json', '/usr/src/app/package.json'),
             sync('./api/package-lock.json', '/usr/src/app/package-lock.json'),
@@ -76,7 +76,7 @@ docker_build(
     dockerfile='./backend/Dockerfile',
     ignore=['.git', '*.log'],
     live_update=[
-        sync('./backend/', '/usr/server/backend/'),
+        sync(local_path='./backend/', remote_path='/usr/server/backend/'),
     ] if dev_mode else []
 )
 
@@ -181,7 +181,8 @@ local_resource(
     'fuseki-init',
     cmd=exec_fuseki_init,
     resource_deps=['store_app'],
-    labels=['setup']
+    labels=['setup'],
+    auto_init=False
 )
 
 # -------------------

@@ -51,11 +51,6 @@ services:
       - "9229:9229"
     networks:
       - cig_handler
-    volumes:
-      - ./api/:/usr/src/app/
-      - ./api/package.json:/usr/src/app/package.json
-      - ./api/package-lock.json:/usr/src/app/package-lock.json
-      - /usr/src/app/node_modules/
     environment:
       - NODE_ENV=development
       - JENA_HOST=store_service

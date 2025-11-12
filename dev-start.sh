@@ -16,12 +16,6 @@ if ! docker info &> /dev/null; then
     exit 1
 fi
 
-# Install API dependencies if needed
-if [ ! -d "api/node_modules" ]; then
-    echo "📦 Installing API dependencies..."
-    cd api && npm install && cd ..
-fi
-
 # Start the development environment
 echo "📊 Starting Tilt development environment..."
 echo "   This will:"
