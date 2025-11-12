@@ -27,7 +27,7 @@ const ResourceTypes = Object.freeze({
   DrugCat: "DrugCat",
   DrugCategory: "DrugCategory",
   DrugCombT: "DrugCombT",
-  DrugCombinationType: "DrugCombinationType",
+  DrugCombinationType: "DrugCombination",
 
   // Non-Drug Types
   NonDrugT: "NonDrugT",
@@ -37,7 +37,7 @@ const ResourceTypes = Object.freeze({
   VacT: "VacT",
   VaccineType: "VaccineType",
   VacCat: "VacCat",
-  VaccineCategory: "VaccineCategory",
+  VaccineCategory: "vaccineCategory",
 
   // Transition Types
   SituationType: "SituationType",

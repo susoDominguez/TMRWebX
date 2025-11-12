@@ -553,11 +553,23 @@ module.exports = {
       GROUP BY ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label`;
 
     const buildActionFilter = () => {
+      const filters = [];
+
       if (uri) {
-        if (!/^https?:\/\//.test(uri) || !uri.includes("ActAdminister")) {
-          return null;
+        const normalizedUri = String(uri).trim();
+        if (!/^https?:\/\//.test(normalizedUri)) {
+          throw new ErrorHandler(
+            StatusCodes.BAD_REQUEST,
+            `Invalid care action URI: ${normalizedUri}`
+          );
         }
-        return `?actId = <${uri}>`;
+
+        const wrappedUri = `<${normalizedUri}>`;
+        if (normalizedUri.includes("ActAdminister")) {
+          filters.push(`?actId = ${wrappedUri}`);
+        } else {
+          filters.push(`?drugTid = ${wrappedUri}`);
+        }
       }
 
       if (id) {
@@ -568,10 +580,18 @@ module.exports = {
             `Invalid care action identifier: ${cleanedId}`
           );
         }
-        return `?actId = data:ActAdminister${cleanedId}`;
+        filters.push(`?actId = data:ActAdminister${cleanedId}`);
       }
 
-      return null;
+      if (filters.length === 0) {
+        return null;
+      }
+
+      if (filters.length === 1) {
+        return filters[0];
+      }
+
+      return filters.map((condition) => `(${condition})`).join(" && ");
     };
 
     const actionFilter = buildActionFilter();

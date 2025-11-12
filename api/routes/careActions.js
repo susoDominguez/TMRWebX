@@ -16,10 +16,10 @@ const logger = require("../config/winston");
 
 // Constants and Configuration
 const CARE_ACTION_TYPES = Object.freeze({
-  DrugCombinationType: "vocab:DrugCombinationType",
+  DrugCombinationType: "vocab:DrugCombination",
   DrugCategory: "vocab:DrugCategory",
   DrugType: "vocab:DrugType",
-  VaccineCategory: "vocab:VaccineCategory",
+  VaccineCategory: "vocab:vaccineCategory",
   VaccineType: "vocab:VaccineType",
   NonDrugType: "vocab:NonDrugType",
   NonDrugAdministrationType: "vocab:NonDrugAdministrationType",
@@ -30,6 +30,28 @@ const CARE_ACTION_TYPES = Object.freeze({
 
 const DATA_URI_PREFIX = "http://anonymous.org/data/";
 
+function buildAllowFilter(prefixes = []) {
+  const list = Array.isArray(prefixes)
+    ? prefixes.filter((prefix) => typeof prefix === "string" && prefix.length > 0)
+    : [];
+  if (list.length === 0) {
+    return "";
+  }
+  const clauses = list.map((prefix) => `STRSTARTS(STR(?resource), "${prefix}")`);
+  return `FILTER(${clauses.join(" || ")})`;
+}
+
+function buildExcludeFilter(prefixes = []) {
+  const list = Array.isArray(prefixes)
+    ? prefixes.filter((prefix) => typeof prefix === "string" && prefix.length > 0)
+    : [];
+  if (list.length === 0) {
+    return "";
+  }
+  const clauses = list.map((prefix) => `!STRSTARTS(STR(?resource), "${prefix}")`);
+  return `FILTER(${clauses.join(" && ")})`;
+}
+
 // Route configurations with metadata
 const ROUTE_CONFIGURATIONS = Object.freeze({
   "/drugs/individual/get": {
@@ -38,6 +60,7 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     category: "drugs",
     subcategory: "individual",
     uriPrefixes: [`${DATA_URI_PREFIX}DrugT`],
+    linkPredicates: ["vocab:administrationOf"],
   },
   "/drugs/get": {
     types: [
@@ -49,18 +72,26 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
       "Get all drug-related care actions including combinations, categories, and types",
     category: "drugs",
     subcategory: "all",
+    linkPredicates: [
+      "vocab:administrationOf",
+      "vocab:combinedAdministrationOf",
+    ],
   },
   "/nondrugs/get": {
     types: [CARE_ACTION_TYPES.NonDrugType],
     description: "Get all non-drug care actions",
     category: "nondrugs",
     subcategory: "all",
+    uriPrefixes: [`${DATA_URI_PREFIX}NonDrugT`],
+    linkPredicates: ["vocab:applicationOf"],
   },
   "/drugs/vaccines/get": {
     types: [CARE_ACTION_TYPES.VaccineType],
     description: "Get all vaccine-related care actions",
     category: "drugs",
     subcategory: "vaccines",
+    uriPrefixes: [`${DATA_URI_PREFIX}VacT`],
+    linkPredicates: ["vocab:vaccinationWith"],
   },
   "/drugs/category/get": {
     types: [CARE_ACTION_TYPES.DrugCategory, CARE_ACTION_TYPES.DrugType],
@@ -68,12 +99,15 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     category: "drugs",
     subcategory: "category",
     uriPrefixes: [`${DATA_URI_PREFIX}DrugCat`],
+    linkPredicates: ["vocab:administrationOf"],
   },
   "/drugs/vaccines/category/get": {
     types: [CARE_ACTION_TYPES.VaccineCategory],
     description: "Get all vaccine categories",
     category: "drugs",
     subcategory: "vaccine-category",
+    uriPrefixes: [`${DATA_URI_PREFIX}VacCat`],
+    linkPredicates: ["vocab:vaccinationWith"],
   },
   "/drugs/combination/get": {
     types: [CARE_ACTION_TYPES.DrugCombinationType],
@@ -81,6 +115,7 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     category: "drugs",
     subcategory: "combination",
     uriPrefixes: [`${DATA_URI_PREFIX}CombDrugT`],
+    linkPredicates: ["vocab:combinedAdministrationOf"],
   },
   "/get": {
     types: [
@@ -106,6 +141,8 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     description: "Get vaccine category types",
     category: "vaccines",
     subcategory: "category",
+    uriPrefixes: [`${DATA_URI_PREFIX}VacCat`],
+    linkPredicates: ["vocab:vaccinationWith"],
   },
   "/vaccines/get": {
     types: [CARE_ACTION_TYPES.VaccineType],
@@ -113,6 +150,7 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     category: "vaccines",
     subcategory: "all",
     uriPrefixes: [`${DATA_URI_PREFIX}VacT`],
+    linkPredicates: ["vocab:vaccinationWith"],
   },
   "/medications/get": {
     types: [
@@ -129,6 +167,10 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
       `${DATA_URI_PREFIX}CombDrugT`,
       `${DATA_URI_PREFIX}DrugT`,
     ],
+    linkPredicates: [
+      "vocab:administrationOf",
+      "vocab:combinedAdministrationOf",
+    ],
   },
   "/medications/individual/get": {
     types: [CARE_ACTION_TYPES.DrugType],
@@ -137,6 +179,7 @@ const ROUTE_CONFIGURATIONS = Object.freeze({
     subcategory: "individual",
     uriPrefixes: [`${DATA_URI_PREFIX}DrugT`],
     excludePrefixes: [`${DATA_URI_PREFIX}DrugCat`, `${DATA_URI_PREFIX}CombDrugT`],
+    linkPredicates: ["vocab:administrationOf"],
   },
 });
 
@@ -279,13 +322,61 @@ async function handleSparqlQuery(careActionTypes, routeConfig, req, res) {
       );
     }
 
+    const allowedTypeValues = uniqueCareActionTypes.length
+      ? `VALUES ?allowedType { ${uniqueCareActionTypes.join(" ")} }`
+      : "";
+
+    const linkPredicates = Array.isArray(routeConfig.linkPredicates)
+      ? routeConfig.linkPredicates.filter(
+          (predicate) => typeof predicate === "string" && predicate.length > 0
+        )
+      : [];
+    const linkPredicateValues = linkPredicates.length
+      ? `VALUES ?linkPredicate { ${linkPredicates.join(" ")} }`
+      : "";
+
+    const queryBlocks = [];
+
+    if (allowedTypeValues) {
+      queryBlocks.push(`
+        {
+          ${allowedTypeValues}
+          ?resource a ?allowedType ;
+                    rdfs:label ?label .
+          OPTIONAL { ?resource vocab:hasSctId ?sctid . }
+          BIND(?allowedType AS ?type)
+        }
+      `);
+    }
+
+    if (linkPredicateValues) {
+      queryBlocks.push(`
+        {
+          ${linkPredicateValues}
+          ?admin ?linkPredicate ?resource .
+          ?resource rdfs:label ?label .
+          OPTIONAL { ?resource a ?type . }
+          OPTIONAL { ?resource vocab:hasSctId ?sctid . }
+        }
+      `);
+    }
+
+    if (queryBlocks.length === 0) {
+      throw new ErrorHandler(
+        StatusCodes.BAD_REQUEST,
+        "No valid care action selectors provided"
+      );
+    }
+
+    const allowFilterClause = buildAllowFilter(routeConfig.uriPrefixes);
+    const excludeFilterClause = buildExcludeFilter(routeConfig.excludePrefixes);
+
     const careActionQuery = `
       SELECT DISTINCT ?resource ?type ?label ?sctid
       WHERE {
-        ?resource a ?type ;
-                  rdfs:label ?label .
-        FILTER(?type IN (${uniqueCareActionTypes.join(", ")}))
-        OPTIONAL { ?resource vocab:hasSctId ?sctid . }
+        ${queryBlocks.join("\n        UNION\n")}
+        ${allowFilterClause}
+        ${excludeFilterClause}
       }
     `;
 

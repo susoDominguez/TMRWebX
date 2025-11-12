@@ -12,9 +12,6 @@ const auxFunct = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
 
 // Constants and Configuration
-const SNOMED_PREFIX = "http://snomed.info/sct/";
-const DATA_PREFIX = "http://anonymous.org/data/";
-const VOCAB_PREFIX = "http://anonymous.org/vocab/";
 const { isValidId, parseIdsInput, escapeQuotes } = require("../lib/router_functs/route_helpers");
 
 function mergeUniqueLists(base = [], incoming = []) {
