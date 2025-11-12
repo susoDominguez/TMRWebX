@@ -16,7 +16,7 @@ const logger = require("../config/winston");
 
 // Constants and Configuration
 const CARE_ACTION_TYPES = Object.freeze({
-  DrugCombinationType: "vocab:DrugCombination",
+  DrugCombinationType: "vocab:DrugCombinationType",
   DrugCategory: "vocab:DrugCategory",
   DrugType: "vocab:DrugType",
   VaccineCategory: "vocab:vaccineCategory",
