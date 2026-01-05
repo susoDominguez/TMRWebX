@@ -391,9 +391,9 @@ class DatabaseService {
     const startTime = Date.now();
 
     try {
-      // Simple SPARQL query to test connectivity using the correct method
-      const testQuery = "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }";
-      await this.sparqlQuery(this.config.FUSEKI_DATASET || "tmr", testQuery);
+      // Check Fuseki server connectivity using the ping endpoint
+      // This doesn't require any specific dataset to exist
+      await this.jenaClient.get("/$/ping", { timeout: 5000 });
 
       const responseTime = Date.now() - startTime;
 

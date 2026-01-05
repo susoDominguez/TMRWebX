@@ -15,6 +15,9 @@ ENV FUSEKI_HOST_PORT=http://${FUSEKI_HOST}:${FUSEKI_PORT}/
 
 # Copy only necessary files to reduce image size
 COPY server.pl .
+COPY util.pl .
+COPY setup.pl .
+COPY current_logic/ ./current_logic/
 #COPY dependencies/ ./dependencies/  
 
 # Install necessary dependencies (ensures compatibility with ARM64)

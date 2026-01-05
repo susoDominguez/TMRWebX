@@ -60,6 +60,73 @@ function nList(list, n) {
   return pairedPredicateObject;
 }
 
+// Execute a SPARQL CONSTRUCT query and return N-Quads (used to copy named graphs)
+async function sparqlConstruct(dataset_id, query) {
+  try {
+    const { data } = await axios({
+      method: "post",
+      url: `${jena_baseUrl}/${dataset_id}/query`,
+      auth: basic_auth,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/n-quads",
+      },
+      data: qs.stringify({ query }),
+    });
+
+    return data;
+  } catch (error) {
+    logger.error(`SPARQL CONSTRUCT failed: ${error.message}`, {
+      dataset: dataset_id,
+      query,
+      status: error.response?.status,
+      body: error.response?.data,
+    });
+
+    const statusCode = error.response?.status || error.statusCode;
+    const err = new Error(
+      `SPARQL CONSTRUCT error${statusCode ? ` (${statusCode})` : ""}: ${
+        error.message
+      }`
+    );
+    if (statusCode) err.statusCode = statusCode;
+    throw err;
+  }
+}
+
+// POST N-Quads into a dataset (named graphs are preserved; default graph untouched)
+async function postNQuads(dataset_id, nquads) {
+  try {
+    const { status } = await axios({
+      method: "post",
+      url: `${jena_baseUrl}/${dataset_id}/data`,
+      auth: basic_auth,
+      headers: {
+        "Content-Type": "application/n-quads",
+      },
+      data: nquads,
+      maxBodyLength: Infinity,
+    });
+
+    return { status };
+  } catch (error) {
+    logger.error(`POST N-Quads failed: ${error.message}`, {
+      dataset: dataset_id,
+      status: error.response?.status,
+      body: error.response?.data,
+    });
+
+    const statusCode = error.response?.status || error.statusCode;
+    const err = new Error(
+      `POST N-Quads error${statusCode ? ` (${statusCode})` : ""}: ${
+        error.message
+      }`
+    );
+    if (statusCode) err.statusCode = statusCode;
+    throw err;
+  }
+}
+
 /**
  *
  * @param {string} dataset_id identifier of CIG
@@ -149,13 +216,23 @@ async function sparqlJSONQuery(dataset_id, query) {
     logger.error(
       `SPARQL query failed: ${error.message}. Query: ${query}. Dataset: ${dataset_id}`
     );
-    throw new Error(
-      `SPARQL query error: ${error.message}. Check logs for details.`
+    const statusCode = error.response?.status || error.statusCode;
+    const err = new Error(
+      `SPARQL query error${statusCode ? ` (${statusCode})` : ""}: ${
+        error.message
+      }. Check logs for details.`
     );
+    if (statusCode) {
+      err.statusCode = statusCode;
+    }
+    err.cause = error;
+    throw err;
   }
 }
 
 module.exports = {
+  sparqlConstruct: sparqlConstruct,
+  postNQuads: postNQuads,
   /**
    *
    * @param {boolean} isDel is CRUD DELETE operation? otherwise it is POST
@@ -245,8 +322,8 @@ module.exports = {
 
     logger.debug(prefixAndSparqlUpdate);
 
-    //add UR to axios config
-    let url = `${jena_baseUrl}/${dataset_id}`;
+    //add URL to axios config - POST to /update endpoint for SPARQL UPDATE operations
+    let url = `${jena_baseUrl}/${dataset_id}/update`;
     let params = prefixAndSparqlUpdate;
     let config = {
       auth: basic_auth,
@@ -296,6 +373,14 @@ module.exports = {
       return response;
     }
   },
+
+  /**
+   * Executes a SPARQL query against a Jena Fuseki dataset and returns the raw JSON results.
+   * @param {string} dataset_id - Identifier of the Fuseki dataset.
+   * @param {string} query - SPARQL query string.
+   * @returns {Promise<JSON>} - Raw SPARQL query results as JSON.
+   */
+  sparqlJSONQuery: sparqlJSONQuery,
 
   /**
    * Calls the Prolog server with the specified path and data.

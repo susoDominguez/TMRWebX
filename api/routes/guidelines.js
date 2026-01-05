@@ -14,6 +14,8 @@ const router = express.Router();
 const { ErrorHandler } = require("../lib/errorHandler");
 const auxFuncts = require("../lib/router_functs/guideline_functs");
 const logger = require("../config/winston");
+const { logStart, logSuccess, logWarn, logError } = require("../lib/requestLogger");
+const { createCache, CACHE_CONFIG } = require("../lib/cacheUtils");
 
 const validateGuidelineSemantics =
   typeof auxFuncts.validateSemantics === "function"
@@ -57,83 +59,12 @@ const queryLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Enhanced caching system for parsed interactions
-const cache = new Map();
-const CACHE_TTL = 900; // 15 minutes for parsing results
-const CACHE_PREFIX = "guidelines:";
-
-/**
- * Cache utilities for guideline interactions
- */
-const cacheUtils = {
-  generateKey(route, params = {}) {
-    const sortedParams = Object.keys(params)
-      .sort()
-      .map((key) => `${key}:${params[key]}`)
-      .join(",");
-    return `${CACHE_PREFIX}${route}${sortedParams ? `:${sortedParams}` : ""}`;
-  },
-
-  get(key) {
-    const cached = cache.get(key);
-    if (!cached) return null;
-
-    if (Date.now() > cached.expiry) {
-      cache.delete(key);
-      return null;
-    }
-
-    logger.debug("Cache hit for guidelines", { key });
-    return cached.data;
-  },
-
-  set(key, data, ttlSeconds = CACHE_TTL) {
-    const expiry = Date.now() + ttlSeconds * 1000;
-    cache.set(key, { data, expiry });
-
-    // Cache size management
-    if (cache.size > 150) {
-      const firstKey = cache.keys().next().value;
-      cache.delete(firstKey);
-    }
-
-    logger.debug("Cache set for guidelines", { key, ttlSeconds });
-  },
-
-  clear(pattern = "") {
-    const keysToDelete = [];
-    for (const key of cache.keys()) {
-      if (key.includes(pattern)) {
-        keysToDelete.push(key);
-      }
-    }
-    keysToDelete.forEach((key) => cache.delete(key));
-    logger.info("Guidelines cache cleared", {
-      pattern,
-      deletedCount: keysToDelete.length,
-    });
-  },
-
-  getStats() {
-    let totalSize = 0;
-    let expiredCount = 0;
-    const now = Date.now();
-
-    for (const [key, value] of cache.entries()) {
-      totalSize++;
-      if (now > value.expiry) {
-        expiredCount++;
-      }
-    }
-
-    return {
-      totalEntries: totalSize,
-      expiredEntries: expiredCount,
-      activeEntries: totalSize - expiredCount,
-      memoryUsage: process.memoryUsage().heapUsed,
-    };
-  },
-};
+// Enhanced caching system - 15 minutes for parsing results (longer due to parsing complexity)
+const cacheUtils = createCache({
+  prefix: "guidelines:",
+  ttl: CACHE_CONFIG.PARSING_TTL,
+  maxSize: 150,
+});
 
 /**
  * Validation rules for guideline interactions
@@ -315,16 +246,18 @@ router.post(
     const requestId = `${Date.now()}-${Math.random()
       .toString(36)
       .substr(2, 9)}`;
-    const startTime = Date.now();
+    const startTime = logStart(req, "Guideline interaction parsing requested", {
+      requestId,
+      inputLength: req.body?.interaction?.length,
+    });
 
     try {
       // Check validation results
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        logger.warn("Guidelines parsing validation failed", {
+        logWarn(req, "Guidelines parsing validation failed", startTime, {
           requestId,
           errors: errors.array(),
-          ip: req.ip,
         });
 
         return res.status(StatusCodes.BAD_REQUEST).json({
@@ -336,14 +269,6 @@ router.post(
       }
 
       const { interaction, options = {}, context = {} } = req.body;
-
-      logger.info("Parsing guideline interaction", {
-        requestId,
-        inputLength: interaction.length,
-        options,
-        context: Object.keys(context),
-        ip: req.ip,
-      });
 
       // Generate cache key including options and context
       const cacheKey = cacheUtils.generateKey("/parse", {
@@ -409,13 +334,16 @@ router.post(
 
       const responseTime = Date.now() - startTime;
 
-      logger.info("Guideline interaction parsing completed", {
-        requestId,
-        success: parseResult.success,
-        responseTime,
-        cached: false,
-        ip: req.ip,
-      });
+      if (parseResult.success) {
+        logSuccess(req, "Guideline interaction parsing completed", startTime, {
+          requestId,
+          cached: false,
+        });
+      } else {
+        logWarn(req, "Guideline interaction parsing failed", startTime, {
+          requestId,
+        });
+      }
 
       const statusCode = parseResult.success
         ? StatusCodes.OK
@@ -430,12 +358,8 @@ router.post(
     } catch (error) {
       const responseTime = Date.now() - startTime;
 
-      logger.error("Failed to parse guideline interaction", {
+      logError(req, "Failed to parse guideline interaction", startTime, error, {
         requestId,
-        error: error.message,
-        stack: error.stack,
-        responseTime,
-        ip: req.ip,
       });
 
       if (error instanceof ErrorHandler) {
