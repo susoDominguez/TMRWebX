@@ -1,0 +1,19 @@
+{
+  "watch": [
+    "routes",
+    "lib",
+    "config",
+    "services",
+    "middleware",
+    "bin",
+    "app.js"
+  ],
+  "ext": "js,json",
+  "ignore": ["node_modules", "*.log", ".git", "coverage", ".nyc_output"],
+  "delay": 1000,
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "verbose": true,
+  "restartable": "rs"
+}

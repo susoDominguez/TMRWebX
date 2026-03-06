@@ -2,6 +2,7 @@ const n3 = require("n3");
 const axios = require("axios").default;
 const qs = require("qs");
 const parser = new n3.Parser();
+const { StatusCodes, ReasonPhrases } = require("http-status-codes");
 const { ErrorHandler } = require("./errorHandler.js");
 const config = require("../lib/config");
 const guidelines = require("./prefixes.js");
@@ -59,6 +60,73 @@ function nList(list, n) {
   return pairedPredicateObject;
 }
 
+// Execute a SPARQL CONSTRUCT query and return N-Quads (used to copy named graphs)
+async function sparqlConstruct(dataset_id, query) {
+  try {
+    const { data } = await axios({
+      method: "post",
+      url: `${jena_baseUrl}/${dataset_id}/query`,
+      auth: basic_auth,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/n-quads",
+      },
+      data: qs.stringify({ query }),
+    });
+
+    return data;
+  } catch (error) {
+    logger.error(`SPARQL CONSTRUCT failed: ${error.message}`, {
+      dataset: dataset_id,
+      query,
+      status: error.response?.status,
+      body: error.response?.data,
+    });
+
+    const statusCode = error.response?.status || error.statusCode;
+    const err = new Error(
+      `SPARQL CONSTRUCT error${statusCode ? ` (${statusCode})` : ""}: ${
+        error.message
+      }`
+    );
+    if (statusCode) err.statusCode = statusCode;
+    throw err;
+  }
+}
+
+// POST N-Quads into a dataset (named graphs are preserved; default graph untouched)
+async function postNQuads(dataset_id, nquads) {
+  try {
+    const { status } = await axios({
+      method: "post",
+      url: `${jena_baseUrl}/${dataset_id}/data`,
+      auth: basic_auth,
+      headers: {
+        "Content-Type": "application/n-quads",
+      },
+      data: nquads,
+      maxBodyLength: Infinity,
+    });
+
+    return { status };
+  } catch (error) {
+    logger.error(`POST N-Quads failed: ${error.message}`, {
+      dataset: dataset_id,
+      status: error.response?.status,
+      body: error.response?.data,
+    });
+
+    const statusCode = error.response?.status || error.statusCode;
+    const err = new Error(
+      `POST N-Quads error${statusCode ? ` (${statusCode})` : ""}: ${
+        error.message
+      }`
+    );
+    if (statusCode) err.statusCode = statusCode;
+    throw err;
+  }
+}
+
 /**
  *
  * @param {string} dataset_id identifier of CIG
@@ -66,60 +134,44 @@ function nList(list, n) {
  * @param {(Error, [])} callback callback returns empty array if err found
  */
 async function sparqlQuery(dataset_id, query) {
-  //logger.info(`query: ${query}`);
+  const url = `${jena_baseUrl}/${dataset_id}/query`;
+  const prefixAndSparqlQuery = `${guidelines.PREFIXES}\n${query}`;
 
-  //add URL to axios config
-  let url = `${jena_baseUrl}/${dataset_id}/query`;
-
-  const prefixAndSparqlQuery = guidelines.PREFIXES + "\n" + query;
-
-  //sparql query
-  const axios_instance = axios.create({
+  // Create an axios instance with a timeout and basic auth
+  const axiosInstance = axios.create({
     timeout: 1000,
     auth: basic_auth,
   });
 
   try {
-    const { status = 500, data = [] } = await axios_instance.post(
+    const { status, data } = await axiosInstance.post(
       url,
       qs.stringify({ query: prefixAndSparqlQuery }),
       fuseki_headers
     );
 
-    //logger.debug(`data is ${JSON.stringify(data)}`);
+    logger.debug(`data is ${JSON.stringify(data)}`);
 
-    let response = { status: status, bindings: [], head_vars: [] };
-    if (data.hasOwnProperty("head") && data.head.hasOwnProperty("vars"))
-      response.head_vars = data.head.vars;
-    if (
-      data.hasOwnProperty("results") &&
-      data.results.hasOwnProperty("bindings")
-    )
-      response.bindings = data.results.bindings;
-
-    return response;
+    return {
+      status,
+      head_vars: data?.head?.vars ?? [],
+      bindings: data?.results?.bindings ?? [],
+    };
   } catch (error) {
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
+      // The server responded with a non-2xx status code
       logger.debug(error.response.data);
       logger.debug(error.response.status);
       logger.debug(error.response.headers);
     } else if (error.request) {
       // The request was made but no response was received
-      // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-      // http.ClientRequest in node.js
       logger.debug(error.request);
     } else {
-      // Something happened in setting up the request that triggered an Error
-      logger.debug("Error", error.message ? error.message : error);
+      // An error occurred while setting up the request
+      logger.debug("Error", error.message || error);
     }
     logger.debug(error.config);
-    return {
-      status: 500,
-      bindings: [],
-      head_vars: [],
-    };
+    return { status: 500, head_vars: [], bindings: [] };
   }
 }
 
@@ -142,13 +194,14 @@ async function sparqlJSONQuery(dataset_id, query) {
         `${config.FUSEKI_USER}:${config.FUSEKI_PASSWORD}`
       ).toString("base64")}`,
       Accept: "application/sparql-results+json",
+      "Content-Type": "application/x-www-form-urlencoded",
     },
   };
 
   try {
     const response = await axios.post(
       url,
-      { query: prefixAndSparqlQuery },
+      qs.stringify({ query: prefixAndSparqlQuery }),
       options
     );
 
@@ -163,13 +216,23 @@ async function sparqlJSONQuery(dataset_id, query) {
     logger.error(
       `SPARQL query failed: ${error.message}. Query: ${query}. Dataset: ${dataset_id}`
     );
-    throw new Error(
-      `SPARQL query error: ${error.message}. Check logs for details.`
+    const statusCode = error.response?.status || error.statusCode;
+    const err = new Error(
+      `SPARQL query error${statusCode ? ` (${statusCode})` : ""}: ${
+        error.message
+      }. Check logs for details.`
     );
+    if (statusCode) {
+      err.statusCode = statusCode;
+    }
+    err.cause = error;
+    throw err;
   }
 }
 
 module.exports = {
+  sparqlConstruct: sparqlConstruct,
+  postNQuads: postNQuads,
   /**
    *
    * @param {boolean} isDel is CRUD DELETE operation? otherwise it is POST
@@ -240,6 +303,8 @@ module.exports = {
     }
   },
 
+  sparqlJSONQuery,
+
   /**
    *
    * @param {string} dataset_id CIG identifier
@@ -257,8 +322,8 @@ module.exports = {
 
     logger.debug(prefixAndSparqlUpdate);
 
-    //add UR to axios config
-    let url = `${jena_baseUrl}/${dataset_id}`;
+    //add URL to axios config - POST to /update endpoint for SPARQL UPDATE operations
+    let url = `${jena_baseUrl}/${dataset_id}/update`;
     let params = prefixAndSparqlUpdate;
     let config = {
       auth: basic_auth,
@@ -308,6 +373,14 @@ module.exports = {
       return response;
     }
   },
+
+  /**
+   * Executes a SPARQL query against a Jena Fuseki dataset and returns the raw JSON results.
+   * @param {string} dataset_id - Identifier of the Fuseki dataset.
+   * @param {string} query - SPARQL query string.
+   * @returns {Promise<JSON>} - Raw SPARQL query results as JSON.
+   */
+  sparqlJSONQuery: sparqlJSONQuery,
 
   /**
    * Calls the Prolog server with the specified path and data.
@@ -475,7 +548,7 @@ module.exports = {
    * @param {string} TrUri
    */
   getTransitionData: async function (dataset_id, TrUri) {
-    let query = ` SELECT DISTINCT  ?TrId ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?deriv ?propLabel ?propUri ?sitFromIdSCT ?sitToIdSCT ?propUriSCT 
+    let query = ` SELECT DISTINCT  ?TrId ?sitFromId ?sitToId ?sitFromLabel ?sitToLabel ?deriv ?propLabel ?propUri ?sitFromIdSCT ?sitToIdSCT ?propUriSCT ?sitFromLabelSCT ?sitToLabelSCT ?propLabelSCT 
       WHERE {
       ?TrId a vocab:TransitionType ;
             vocab:derivative ?deriv ; 
@@ -489,9 +562,12 @@ module.exports = {
       OPTIONAL { ?TrId  vocab:affects  ?propUri .
          ?propUri a  vocab:TropeType ;
            rdfs:label ?propLabel  } .
-      OPTIONAL { ?sitFromId vocab:sctid  ?sitFromIdSCT } .
-      OPTIONAL { ?sitToId vocab:sctid  ?sitToIdSCT } .
-      OPTIONAL { ?propUri vocab:sctid  ?propUriSCT } .
+  OPTIONAL { ?sitFromId vocab:hasSctId  ?sitFromIdSCT } .
+  OPTIONAL { ?sitFromId vocab:hasSctLbl ?sitFromLabelSCT } .
+  OPTIONAL { ?sitToId vocab:hasSctId  ?sitToIdSCT } .
+  OPTIONAL { ?sitToId vocab:hasSctLbl ?sitToLabelSCT } .
+  OPTIONAL { ?propUri vocab:hasSctId  ?propUriSCT } .
+  OPTIONAL { ?propUri vocab:hasSctLbl ?propLabelSCT } .
       }
 		`;
 
@@ -520,36 +596,152 @@ module.exports = {
    * @param {string | undefined} uri
    */
   getCareActionData: async function (dataset_id, id, uri) {
-    let atom = id ? `data:ActAdminister${id}` : `<${uri}>`;
+    const queryContext = {
+      dataset: dataset_id,
+      id: id || null,
+      uri: uri || null,
+    };
+    const startTime = Date.now();
+    logger.info("Fetching care action data", {
+      ...queryContext,
+      stage: "start",
+    });
 
-    const query = `
-      PREFIX vocab: <http://example.com/vocab#>
-      PREFIX owl: <http://www.w3.org/2002/07/owl#>
-      PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    
-      SELECT DISTINCT  ?actId ?adminT ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
-      (GROUP_CONCAT(DISTINCT ?subsumption;   SEPARATOR=", ") AS ?subsumes)
-      (GROUP_CONCAT(DISTINCT ?criterion;    SEPARATOR=", ") AS ?hasGroupingCriteria)
-      (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)  
-      (GROUP_CONCAT(DISTINCT ?component;   SEPARATOR=", ") AS ?components)
-		WHERE {
-      ?actId a owl:NamedIndividual , ?adminT ;
-				       ?Of ?drugTid ;
-			         rdfs:label ?adminLabel .
-     OPTIONAL { ?actId vocab:subsumes ?subsumption . }  
-     OPTIONAL { ?actId vocab:hasComponent ?component . }  
-			   ?drugTid a owl:NamedIndividual , ?drugType  ;
-			         rdfs:label ?drugLabel .
-			OPTIONAL { ?drugTid vocab:sctid  ?sctid . }
-      OPTIONAL { ?sctid rdfs:label ?sctid_label . }
-      OPTIONAL { ?drugTid vocab:hasGroupingCriteria  ?criterion . }
-      OPTIONAL { ?drugTid owl:sameAs ?same . } 
-			FILTER ( ?actId = ${atom} && ?drugType != owl:NamedIndividual && ?adminT != owl:NamedIndividual && ( ?Of = vocab:administrationOf || ?Of = vocab:applicationOf || ?Of = vocab:combinedAdministrationOf || ?Of = vocab:vaccinationWith ) ) .
-		} GROUP BY ?actId ?adminLabel ?drugType ?drugLabel ?sctid ?drugTid ?adminT
-		`;
-    //logger.debug(query);
+    const SELECT_BLOCK = `
+      SELECT DISTINCT ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label
+        (GROUP_CONCAT(DISTINCT ?subsumption; SEPARATOR=", ") AS ?subsumes)
+        (GROUP_CONCAT(DISTINCT ?criterion; SEPARATOR=", ") AS ?hasGroupingCriteria)
+        (GROUP_CONCAT(DISTINCT ?same; SEPARATOR=", ") AS ?sameAs)
+        (GROUP_CONCAT(DISTINCT ?component; SEPARATOR=", ") AS ?components)
+      WHERE {
+        ?actId a owl:NamedIndividual , ?adminT ;
+               ?Of ?drugTid ;
+               rdfs:label ?act_label .
+        OPTIONAL { ?actId vocab:hasSctId  ?actSctid . }
+        OPTIONAL { ?actId vocab:hasSctLbl ?actSctid_label . }
+        OPTIONAL { ?actId vocab:subsumes ?subsumption . }
+        OPTIONAL { ?actId vocab:hasComponent ?component . }
+        ?drugTid a owl:NamedIndividual , ?drugType ;
+                 rdfs:label ?drugLabel .
+        OPTIONAL { ?drugTid vocab:hasSctId  ?sctid . }
+        OPTIONAL { ?drugTid vocab:hasSctLbl ?sctid_label . }
+        OPTIONAL { ?drugTid vocab:hasGroupingCriteria ?criterion . }
+        OPTIONAL { ?drugTid owl:sameAs ?same . }
+        FILTER ( __FILTER_CONDITIONS__ &&
+                 ?adminT = vocab:DrugAdministrationType &&
+                 ( ?Of = vocab:administrationOf ||
+                   ?Of = vocab:provisionOf ||
+                   ?Of = vocab:applicationOf ||
+                   ?Of = vocab:combinedAdministrationOf ||
+                   ?Of = vocab:vaccinationWith ) )
+      }
+      GROUP BY ?actId ?adminT ?act_label ?actSctid ?actSctid_label ?drugType ?drugLabel ?sctid ?drugTid ?sctid_label`;
 
-    return sparqlJSONQuery(dataset_id, query);
+    const buildActionFilter = () => {
+      const filters = [];
+
+      if (uri) {
+        const normalizedUri = String(uri).trim();
+        if (!/^https?:\/\//.test(normalizedUri)) {
+          throw new ErrorHandler(
+            StatusCodes.BAD_REQUEST,
+            `Invalid care action URI: ${normalizedUri}`
+          );
+        }
+
+        const wrappedUri = `<${normalizedUri}>`;
+        if (normalizedUri.includes("ActAdminister")) {
+          filters.push(`?actId = ${wrappedUri}`);
+        } else {
+          filters.push(`?drugTid = ${wrappedUri}`);
+        }
+      }
+
+      if (id) {
+        const cleanedId = String(id).trim();
+        if (!/^[A-Za-z0-9_-]+$/.test(cleanedId)) {
+          throw new ErrorHandler(
+            StatusCodes.BAD_REQUEST,
+            `Invalid care action identifier: ${cleanedId}`
+          );
+        }
+        filters.push(`?actId = data:ActAdminister${cleanedId}`);
+      }
+
+      if (filters.length === 0) {
+        return null;
+      }
+
+      if (filters.length === 1) {
+        return filters[0];
+      }
+
+      return filters.map((condition) => `(${condition})`).join(" && ");
+    };
+
+    const actionFilter = buildActionFilter();
+    if (!actionFilter) {
+      logger.warn("Care action lookup skipped due to missing identifier", {
+        ...queryContext,
+        stage: "validation",
+      });
+      return {
+        results: {
+          bindings: [],
+        },
+      };
+    }
+
+    const query = SELECT_BLOCK.replace("__FILTER_CONDITIONS__", actionFilter);
+    logger.debug("Executing care action SPARQL query", {
+      ...queryContext,
+      stage: "query",
+      filter: actionFilter,
+      queryLength: query.length,
+    });
+
+    try {
+      const result = await sparqlJSONQuery(dataset_id, query);
+      const bindings = result?.results?.bindings ?? [];
+      const duration = Date.now() - startTime;
+
+      if (bindings.length === 0) {
+        logger.warn("Care action not found", {
+          ...queryContext,
+          stage: "complete",
+          durationMs: duration,
+          filter: actionFilter,
+        });
+        return {
+          results: {
+            bindings: [],
+          },
+        };
+      }
+
+      logger.info("Care action data retrieved", {
+        ...queryContext,
+        stage: "complete",
+        durationMs: duration,
+        bindings: bindings.length,
+      });
+
+      logger.debug("Care action bindings sample", {
+        ...queryContext,
+        stage: "complete",
+        sample: bindings[0],
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("Care action query failed", {
+        ...queryContext,
+        stage: "error",
+        durationMs: Date.now() - startTime,
+        error: error.message,
+      });
+      throw error;
+    }
   },
 
   /**
@@ -598,13 +790,18 @@ module.exports = {
    */
   getBeliefData: async function (
     datasetId,
-    belief_id,
+    beliefSelector,
     tr_ds_id,
     care_act_ds_id
   ) {
+    // For SERVICE clauses in federated SPARQL queries, Fuseki needs to use localhost
+    // because it's executing the query and needs to access its own datasets
+    const serviceHost = "localhost";
+    const dataNamespace = "http://anonymous.org/data/";
+    
     const TrUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -613,60 +810,173 @@ module.exports = {
 
     const actUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
       care_act_ds_id +
       "/query>";
 
-    //format belief_id
-    if (belief_id.startsWith("http")) belief_id = `<${belief_id}>`;
+    const normalizeToIri = (value) => {
+      if (!value || typeof value !== "string") {
+        return null;
+      }
+      if (value.startsWith("<") && value.endsWith(">")) {
+        return value;
+      }
+      if (value.startsWith("http")) {
+        return `<${value}>`;
+      }
+      return value;
+    };
+
+    let beliefGraph = null;
+    let beliefUri = null;
+
+    if (beliefSelector && typeof beliefSelector === "object") {
+      beliefGraph = beliefSelector.graphUri || beliefSelector.assertionGraph || beliefSelector.graph || null;
+      beliefUri = beliefSelector.beliefUri || beliefSelector.uri || beliefSelector.id || beliefGraph;
+    } else {
+      beliefUri = beliefSelector;
+      beliefGraph = null;
+    }
+
+    const beliefRef = normalizeToIri(beliefUri);
+    const graphRef = normalizeToIri(beliefGraph);
+
+    if (!beliefRef) {
+      throw new Error("Belief URI is required to retrieve causation belief data");
+    }
+
+    const graphLookupQuery = `
+  SELECT DISTINCT ?beliefGraph
+  WHERE {
+    GRAPH ?beliefGraph {
+      ${beliefRef} a vocab:CausationBelief .
+    }
+  }
+  LIMIT 5
+    `;
+
+    const graphLookupResults = await sparqlJSONQuery(datasetId, graphLookupQuery);
+    const graphBindings = graphLookupResults?.results?.bindings || [];
+    const graphUris = graphBindings
+      .map((binding) => binding?.beliefGraph?.value)
+      .filter((value) => typeof value === "string" && value.length > 0);
+
+    if (graphUris.length === 0) {
+      return {
+        status: 200,
+        head_vars: [],
+        bindings: [],
+        raw: graphLookupResults,
+      };
+    }
+
+    const selectedGraphUri = graphRef
+      ? graphRef.slice(1, -1)
+      : graphUris[0];
+
+    const assertionGraphRef = normalizeToIri(selectedGraphUri);
+    const provenanceGraphRef = normalizeToIri(`${selectedGraphUri}_provenance`);
+    const publicationGraphRef = normalizeToIri(`${selectedGraphUri}_publicationinfo`);
+    const nanopublicationRef = normalizeToIri(`${selectedGraphUri}_nanopub`);
 
     let query = `
-    SELECT DISTINCT 
-    ?cbUri ?freq ?strength ?TrUri
-    ?propUri ?propLabel ?propUriSCT
-    ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT
-    ?actAdmin ?adminLabel ?actType ?actLabel ?actId
+  SELECT DISTINCT 
+  ?beliefGraph ?cbUri ?cbId ?freq ?strength ?TrUri ?trId
+  ?propUri ?propLabel ?propUriSCT ?propLabelSCT
+  ?deriv ?derivedFromCB ?hasSourcesCB
+  ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromIdSCT ?sitToIdSCT ?sitFromLabelSCT ?sitToLabelSCT
+    ?actAdmin ?act_label ?actType ?actLabel ?actId
+    ?generatedAtTime ?attributedTo
     WHERE {
-      GRAPH ${belief_id} {
-        ?cbUri a vocab:CausationBelief ; 
-       vocab:frequency ?freq ;
-       vocab:strength ?strength .
-      ?actAdmin vocab:causes ?TrUri .
-      } FILTER ( ?cbUri = ${belief_id}) .
-      SERVICE ${actUrl}
-      {
-        ?actAdmin a owl:NamedIndividual , ?adminT ;
-       	?of ?actId ;
-        rdfs:label ?adminLabel .
-        ?actId a owl:NamedIndividual , ?actType ;
-        rdfs:label ?actLabel .
-        FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
-           (?of = vocab:administrationOf || ?of = vocab:applicationOf || ?of = vocab:inoculationOf || ?of = vocab:combinedParticipationOf )
-           ) .
+      GRAPH ${assertionGraphRef} {
+        BIND(${assertionGraphRef} AS ?beliefGraph)
+        BIND(${beliefRef} AS ?cbUri)
+        BIND(STRAFTER(STR(?cbUri), "${dataNamespace}") AS ?cbId)
+        ?cbUri a vocab:CausationBelief .
+        OPTIONAL { ?cbUri vocab:frequency ?freq . }
+        OPTIONAL { ?cbUri vocab:strength ?strength . }
+        ?actAdmin vocab:causes ?TrUri .
+        BIND(?TrUri AS ?trId)
       }
-        SERVICE ${TrUrl}
-       { 
-        ?TrUri a vocab:TransitionType ;
-           vocab:hasTransformableSituation ?sitFromId ;
-           vocab:hasExpectedSituation ?sitToId ;
-             vocab:affects ?propUri ;
-           vocab:derivative ?deriv .
-        OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
-             rdfs:label ?propLabel } .	
-        OPTIONAL { ?propUri vocab:sctid ?propUriSCT } .	        
-        ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
-          rdfs:label ?sitFromLabel .
-        OPTIONAL { ?sitFromId vocab:sctid ?sitFromIdSCT } .
-        ?sitToId a vocab:SituationType , owl:NamedIndividual ;
-          rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitToId vocab:sctid ?sitToIdSCT } .
+
+      OPTIONAL {
+        SERVICE SILENT ${actUrl}
+        {
+          ?actAdmin a owl:NamedIndividual , ?adminT ;
+                   ?of ?actId ;
+                   rdfs:label ?act_label .
+          ?actId a owl:NamedIndividual , ?actType ;
+                 rdfs:label ?actLabel .
+          FILTER ( ?adminT != owl:NamedIndividual && ?actType != owl:NamedIndividual &&
+             (?of = vocab:administrationOf || ?of = vocab:applicationOf || ?of = vocab:inoculationOf || ?of = vocab:combinedParticipationOf )
+          ) .
+        }
+      }
+
+      OPTIONAL {
+        SERVICE SILENT ${TrUrl}
+        { 
+          ?TrUri a vocab:TransitionType ;
+                 vocab:hasTransformableSituation ?sitFromId ;
+                 vocab:hasExpectedSituation ?sitToId ;
+                 vocab:affects ?propUri ;
+                 vocab:derivative ?deriv .
+          OPTIONAL { ?propUri  a  vocab:TropeType , owl:NamedIndividual ;
+                       rdfs:label ?propLabel } .	
+          OPTIONAL { ?propUri vocab:hasSctId ?propUriSCT } .	        
+          OPTIONAL { ?propUri vocab:hasSctLbl ?propLabelSCT } .
+          ?sitFromId a vocab:SituationType , owl:NamedIndividual ;
+                     rdfs:label ?sitFromLabel .
+          OPTIONAL { ?sitFromId vocab:hasSctId ?sitFromIdSCT } .
+          OPTIONAL { ?sitFromId vocab:hasSctLbl ?sitFromLabelSCT } .
+          ?sitToId a vocab:SituationType , owl:NamedIndividual ;
+                   rdfs:label ?sitToLabel .
+          OPTIONAL { ?sitToId vocab:hasSctId ?sitToIdSCT } .
+          OPTIONAL { ?sitToId vocab:hasSctLbl ?sitToLabelSCT } .
+        }
+      }
+
+      OPTIONAL {
+        GRAPH ${provenanceGraphRef} {
+          OPTIONAL { ${beliefRef} prov:wasDerivedFrom ?derivedFromCB . }
+          OPTIONAL {
+            ${provenanceGraphRef} a oa:Annotation ;
+                    oa:hasBody ${beliefRef} .
+            OPTIONAL { ${provenanceGraphRef} prov:wasDerivedFrom ?derivedFromCB . }
+            OPTIONAL {
+              ${provenanceGraphRef} oa:hasTarget ?annotationTarget .
+              OPTIONAL { ?annotationTarget oa:hasSource ?hasSourcesCB . }
+            }
+          }
+        }
+      }
+
+      OPTIONAL {
+        GRAPH ${publicationGraphRef} {
+          ${nanopublicationRef} prov:generatedAtTime ?generatedAtTime .
+        }
+      }
+
+      OPTIONAL {
+        GRAPH ${publicationGraphRef} {
+          ${nanopublicationRef} prov:wasAttributedTo ?attributedTo .
+        }
       }
     }
     `;
-    return sparqlJSONQuery(datasetId, query);
+    const rawResults = await sparqlJSONQuery(datasetId, query);
+
+    return {
+      status: 200,
+      head_vars: rawResults?.head?.vars || [],
+      bindings: rawResults?.results?.bindings || [],
+      raw: rawResults,
+      graph: selectedGraphUri,
+      graphsConsidered: graphUris,
+    };
   },
 
   /**
@@ -689,9 +999,12 @@ module.exports = {
     const recPubInfoURI = `<${rec_uri}_publicationinfo>`;
     const recHeadURI = `<${rec_uri}_head>`;
 
+    // For SERVICE clauses in federated SPARQL queries, use localhost
+    const serviceHost = "localhost";
+    
     const actUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -700,7 +1013,7 @@ module.exports = {
 
     const cbUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -709,7 +1022,7 @@ module.exports = {
 
     const trUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +
@@ -717,7 +1030,7 @@ module.exports = {
       "/query>";
 
     let query = ` SELECT DISTINCT ?cbUri ?cbProvUri ?contrib ?freq ?evidence ?actAdminCb ?text ?strength ?derived ?partOf
-    ?actAdmin ?adminT ?actId ?adminLabel ?actType ?actLabel  ?sctDrg 
+    ?actAdmin ?adminT ?actId ?act_label ?actType ?actLabel  ?sctDrg 
     ?TrUri  ?deriv ?sitFromId ?sitToId  ?sitFromLabel ?sitToLabel ?sitFromSctId ?sitToSctId ?sitFromStateOf ?sitToStateOf
     ?PropUri ?propSctId ?propLabel ?propSctId 
     ?generatedTime ?attributedTo
@@ -750,11 +1063,11 @@ module.exports = {
       SERVICE ${actUrl} {
         ?actAdmin a owl:NamedIndividual , ?adminT ;
        	?Of ?actId ;
-       rdfs:label ?adminLabel .
+       rdfs:label ?act_label .
         ?actId a owl:NamedIndividual ;
        a ?actType ;
         rdfs:label ?actLabel .
-        OPTIONAL { ?actId vocab:sctid  ?sctDrg . }
+        OPTIONAL { ?actId vocab:hasSctId  ?sctDrg . }
         OPTIONAL { ?actId vocab:hasComponent  ?hasComponent . 
           ?hasComponent  a owl:NamedIndividual ;
                         a ?compAdminT ;
@@ -790,9 +1103,9 @@ module.exports = {
                         rdfs:label ?sitFromLabel .
         ?sitToId a vocab:SituationType ;
                      rdfs:label ?sitToLabel .
-        OPTIONAL { ?sitFromId vocab:sctid ?sitFromSctId .   
-          ?PropUri  vocab:sctid ?propSctId	.	
-          ?sitToId vocab:sctid ?sitToSctId . }
+        OPTIONAL { ?sitFromId vocab:hasSctId ?sitFromSctId .   
+          ?PropUri  vocab:hasSctId ?propSctId	.	
+          ?sitToId vocab:hasSctId ?sitToSctId . }
         OPTIONAL { ?sitFromId vocab:stateOf ?sitFromStateOf . 
             ?sitToId vocab:stateOf ?sitToStateOf . }
       }
@@ -818,9 +1131,12 @@ module.exports = {
     const recProvURI = `<` + recAssertUri + `_provenance>`;
     const recPubInfoURI = `<` + recAssertUri + `_publicationinfo>`;
 
+    // For SERVICE clauses in federated SPARQL queries, use localhost
+    const serviceHost = "localhost";
+    
     const stmntUrl =
       "<http://" +
-      config.JENA_HOST +
+      serviceHost +
       ":" +
       config.JENA_PORT +
       "/" +

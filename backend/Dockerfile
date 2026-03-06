@@ -9,18 +9,24 @@ ARG buildtime_FUSEKI_PORT=3030
 ARG buildtime_FUSEKI_HOST=store_service
 
 # Configure environment variables
-ENV HOST=${buildtime_FUSEKI_HOST}
-ENV PORT=${buildtime_FUSEKI_PORT}
-ENV FUSEKI_HOST_PORT=http://${HOST}:${PORT}/
+ENV FUSEKI_HOST=${buildtime_FUSEKI_HOST}
+ENV FUSEKI_PORT=${buildtime_FUSEKI_PORT}
+ENV FUSEKI_HOST_PORT=http://${FUSEKI_HOST}:${FUSEKI_PORT}/
 
 # Copy only necessary files to reduce image size
-COPY . .
+COPY server.pl .
+COPY util.pl .
+COPY setup.pl .
+COPY current_logic/ ./current_logic/
+#COPY dependencies/ ./dependencies/  
 
-# Install necessary dependencies for compatibility (including ARM64)
-RUN apt-get update && apt-get install -y \
+# Install necessary dependencies (ensures compatibility with ARM64)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Ensure correct permissions
+RUN chmod -R 755 /usr/server/backend/
 
 # Expose the Prolog server port
 EXPOSE 1234
@@ -29,8 +35,6 @@ EXPOSE 1234
 ENTRYPOINT ["swipl", "-l", "server.pl"]
 CMD ["-g", "server(1234)"]
 
-#CMD ["swipl", "-g", "server(1234)", "--port=1234", "--stand_alone=true", "-t", "server.pl"]
-#ENTRYPOINT ["swipl", "-f", "–user=daemon", "–-fork=true", "-port=1234", "server.pl", "-g", "server(1234)"]
-
-# build for arm64:
-# docker buildx build --platform linux/arm64 -t reasoner_img --load .
+# Notes:
+# - Build for ARM64:
+#   docker buildx build --platform linux/arm64 -t reasoner_img --load .

@@ -4,7 +4,13 @@
   "private": true,
   "scripts": {
     "start": "node ./bin/www",
-    "devstart": "node ./bin/www"
+    "dev": "nodemon --inspect=0.0.0.0:9229 --watch . --ext js,json ./bin/www",
+    "devstart": "nodemon ./bin/www",
+    "debug": "nodemon --inspect=0.0.0.0:9229 ./bin/www",
+    "test": "jest --testTimeout=30000",
+    "test:verbose": "jest --verbose --testTimeout=30000",
+    "test:backend": "node tests/manual-backend-test.js",
+    "test:coverage": "jest --coverage --testTimeout=30000"
   },
   "dependencies": {
     "axios": "^1.6.8",
@@ -14,7 +20,11 @@
     "debug": "^4.3.4",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "helmet": "^8.0.0",
     "http-errors": "^2.0.0",
+    "http-status-codes": "^2.3.0",
     "jsonata": "^2.0.4",
     "moo": "^0.5.2",
     "morgan": "~1.10.0",
@@ -26,6 +36,20 @@
     "xml-reader": "^2.4.3"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
     "sinon": "^19.0.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "lib/**/*.js",
+      "routes/**/*.js",
+      "!node_modules/**"
+    ]
   }
 }

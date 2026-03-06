@@ -10,6 +10,138 @@ const sct_prefix = `http://snomed.info/sct/`;
 const data_prefix_length = "http://anonymous.org/data/".length;
 const vocab_prefix_length = "http://anonymous.org/vocab/".length;
 
+function isValidArgument(arg) {
+  return typeof arg === "string" && arg.trim().length > 0;
+}
+
+function parseIds(ids) {
+  return isValidArgument(ids)
+    ? ids.split(",").map((item) => item.trim())
+    : [];
+}
+
+const ResourceTypes = Object.freeze({
+  // Drug Types
+  DrugT: "DrugT",
+  DrugType: "DrugType",
+  DrugCat: "DrugCat",
+  DrugCategory: "DrugCategory",
+  DrugCombT: "DrugCombT",
+  DrugCombinationType: "DrugCombination",
+
+  // Non-Drug Types
+  NonDrugT: "NonDrugT",
+  NonDrugType: "NonDrugType",
+
+  // Vaccine Types
+  VacT: "VacT",
+  VaccineType: "VaccineType",
+  VacCat: "VacCat",
+  VaccineCategory: "vaccineCategory",
+
+  // Transition Types
+  SituationType: "SituationType",
+  TransitionType: "TransitionType",
+  PropertyType: "TropeType",
+  CompoundSituationType: "CompoundSituationType",
+
+  SitT: "Sit",
+  PropT: "Prop",
+  CompT: "CompSit",
+  TrT: "Tr",
+
+  negative: "neg",
+  and: "and",
+  or: "or",
+
+  // Action Types
+  NonDrugAdminT: "NonDrugAdministrationType",
+  DrugAdminT: "DrugAdministrationType",
+  vaccWith: "vaccinationWith",
+  adminOf: "administrationOf",
+  applyOf: "provisionOf",
+});
+
+/**
+ * Get the corresponding postfix and action type for a given resource type.
+ *
+ * @param {string} typeClass The type of resource (e.g., NonDrugType, VaccineCategory, etc.)
+ * @returns {{ postfix: string, actionTp: string, adminTp: string }} An object containing:
+ *   - `postfix`: The corresponding postfix for the resource type.
+ *   - `actionTp`: The corresponding action type or relationship for the resource type.
+ *   - `adminTp`: The corresponding action administration type.
+ */
+function getTypeDetails(typeClass) {
+  const typeMap = {
+    [ResourceTypes.NonDrugType]: {
+      postfixTp: ResourceTypes.NonDrugT,
+      actionTp: ResourceTypes.applyOf,
+      adminTp: ResourceTypes.NonDrugAdminT,
+    },
+    [ResourceTypes.VaccineCategory]: {
+      postfixTp: ResourceTypes.VacCat,
+      actionTp: ResourceTypes.vaccWith,
+      adminTp: ResourceTypes.DrugAdminT,
+    },
+    [ResourceTypes.VaccineType]: {
+      postfixTp: ResourceTypes.VacT,
+      actionTp: ResourceTypes.vaccWith,
+      adminTp: ResourceTypes.DrugAdminT,
+    },
+    [ResourceTypes.DrugCategory]: {
+      postfixTp: ResourceTypes.DrugCat,
+      actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
+    },
+    [ResourceTypes.DrugType]: {
+      postfixTp: ResourceTypes.DrugT,
+      actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
+    },
+    [ResourceTypes.DrugCombinationType]: {
+      postfixTp: ResourceTypes.DrugCombT,
+      actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
+    },
+    [ResourceTypes.SituationType]: {
+      postfixTp: ResourceTypes.SitT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.SituationType,
+    },
+    [ResourceTypes.TransitionType]: {
+      postfixTp: ResourceTypes.TrT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.TransitionType,
+    },
+    [ResourceTypes.PropertyType]: {
+      postfixTp: ResourceTypes.PropT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.PropertyType,
+    },
+    [ResourceTypes.CompoundSituationType]: {
+      postfixTp: ResourceTypes.CompT,
+      actionTp: undefined,
+      adminTp: ResourceTypes.SituationType,
+    },
+  };
+
+  return (
+    typeMap[typeClass] || {
+      postfixTp: ResourceTypes.DrugT,
+      actionTp: ResourceTypes.adminOf,
+      adminTp: ResourceTypes.DrugAdminT,
+    }
+  );
+}
+
+/**
+ *
+ * @param {Array} list
+ * @returns
+ */
+const findInvalidField = (list = []) =>
+  list.find((field) => !isValidArgument(field)) ?? null;
+
 function transformSPARQLResults(sparqlResults, schema, context = {}) {
   /**
    * Utility function to set a value in a nested object using a dot-separated path.
@@ -63,7 +195,7 @@ function transformSPARQLResults(sparqlResults, schema, context = {}) {
 }
 
 const cb_tr_schema = {
-  cbId: { targetKey: "id", transform: (value) => value },
+  cbId: { targetKey: "id", transform: (value, result) => { result.id = value; } },
   contribution: {
     targetKey: "contribution",
     transform: (value) => {
@@ -87,10 +219,10 @@ const cb_tr_schema = {
       return match ? match[1] : null; // Extract postfix or set to null if not found
     },
   },
-  actId: { targetKey: "careActionTypeRef", transform: (value) => value },
-  trId: { targetKey: "transition.id", transform: (value) => value },
-  derivedFromCB: { targetKey: "derivedFrom", transform: (value) => value },
-  hasSourcesCB: { targetKey: "hasSource", transform: (value) => value },
+  actId: { targetKey: "careActionTypeRef", transform: (value, result) => { result.careActionTypeRef = value; } },
+  trId: { targetKey: "transition.id", transform: (value, result) => { result.transition ??= {}; result.transition.id = value; } },
+  derivedFromCB: { targetKey: "derivedFrom", transform: (value, result) => { result.derivedFrom = value; } },
+  hasSourcesCB: { targetKey: "hasSource", transform: (value, result) => { result.hasSource = parseIds(value); } },
   effect: { targetKey: "effect", transform: (value) => value.toLowerCase() },
   propUri: {
     targetKey: "transition.property",
@@ -116,10 +248,10 @@ const cb_tr_schema = {
     targetKey: "transition.property.value.coding[1].code",
     transform: (value, result) => {
       if (value) {
-        result.property ??= { value: { coding: [] } };
-        result.property.value.coding[1] ??= {};
-        result.property.value.coding[1].code = value;
-        result.property.value.coding[1].system = sct_prefix;
+        result.transition.property ??= { value: { coding: [] } };
+        result.transition.property.value.coding[1] ??= {};
+        result.transition.property.value.coding[1].code = value;
+        result.transition.property.value.coding[1].system = sct_prefix;
       }
     },
   },
@@ -127,9 +259,12 @@ const cb_tr_schema = {
     targetKey: "transition.property.value.coding[1].display",
     transform: (value, result) => {
       if (value) {
-        result.property ??= { value: { coding: [] } };
-        result.property.value.coding[1] ??= {};
-        result.property.value.coding[1].display = value;
+        result.transition.property ??= { value: { coding: [] } };
+        result.transition.property.value.coding[1] ??= {};
+        result.transition.property.value.coding[1].display = value;
+        if (!result.transition.property.value.text) {
+          result.transition.property.value.text = value;
+        }
       }
     },
   },
@@ -242,7 +377,7 @@ const cb_tr_schema = {
 };
 
 const cb_schema = {
-  cbId: { targetKey: "id", transform: (value) => value },
+  cbId: { targetKey: "id", transform: (value, result) => { result.id = value; } },
   contribution: {
     targetKey: "contribution",
     transform: (value) => {
@@ -266,28 +401,28 @@ const cb_schema = {
       return match ? match[1] : null; // Extract postfix or set to null if not found
     },
   },
-  actId: { targetKey: "careActionTypeRef", transform: (value) => value },
-  trId: { targetKey: "transitionTypeRef", transform: (value) => value },
-  derivedFromCB: { targetKey: "derivedFrom", transform: (value) => value },
-  hasSourcesCB: { targetKey: "hasSource", transform: (value) => value },
+  actId: { targetKey: "careActionTypeRef", transform: (value, result) => { result.careActionTypeRef = value; } },
+  trId: { targetKey: "transitionTypeRef", transform: (value, result) => { result.transitionTypeRef = value; } },
+  derivedFromCB: { targetKey: "derivedFrom", transform: (value, result) => { result.derivedFrom = value; } },
+  hasSourcesCB: { targetKey: "hasSource", transform: (value, result) => { result.hasSource = parseIds(value); } },
 };
 
 const recommendation_schema = {
   partOf: {
     targetKey: "partOf",
-    transform: (value) => value.split("/").pop(),
+    transform: (value, result) => { result.partOf = value; },
   },
   isPartOf: {
     targetKey: "source_cig",
-    transform: (value) => value.split("/").pop(),
+    transform: (value, result) => { result.source_cig = value; },
   },
   extractedFrom: {
     targetKey: "extractedFrom",
-    transform: (value) => value.split("/").pop(),
+    transform: (value, result) => { result.extractedFrom = value; },
   },
   label: {
     targetKey: "text",
-    transform: (value) => value,
+    transform: (value, result) => { result.text = value; },
   },
   strength: {
     targetKey: "suggestion",
@@ -305,11 +440,11 @@ const recommendation_schema = {
   },
   derivedFrom: {
     targetKey: "derivedFrom",
-    transform: (value) => value.split(","),
+    transform: (value, result) => { result.derivedFrom = parseIds(value); },
   },
   hasSources: {
     targetKey: "hasSource",
-    transform: (value) => value.split(","),
+    transform: (value, result) => { result.hasSource = parseIds(value); },
   },
   attributedTo: {
     targetKey: "wasAttributedTo",
@@ -390,15 +525,56 @@ const recommendation_schema = {
   },
 };
 
+// Schema to transform SPARQL results into FHIR CareActionType-like objects
 const care_action_schema = {
-  actId: { targetKey: "id", transform: (value) => value },
-  adminLabel: { targetKey: "display", transform: (value) => value },
-  subsumes: { targetKey: "subsumes", transform: (value) => value.split(", ") },
+  actId: { targetKey: "id", transform: (value, result) => {  
+    // set the full URI as id
+    result.id = value;
+    //Ensure the value object exists
+    result.value ??= {};
+    result.value.coding ??= [];
+    // set the code and system in the first coding entry
+    result.value.coding[0] ??= {};
+    result.value.coding[0].code = value.slice(value.lastIndexOf("/") + 1); 
+    result.value.coding[0].system = data_prefix;
+    } 
+  },
+  act_label: { targetKey: "value.text", transform: (value, result) => {
+    result.value ??= {};
+    result.value.coding ??= [];
+    result.value.text = value ;
+    result.value.coding[0] ??= {};
+    result.value.coding[0].display = value;
+  } },
+  actSctid: {
+    targetKey: "value.coding[1].code",
+    transform: (value, result) => {
+      result.value ??= {};
+      result.value.coding ??= [];
+      // index 1 is for SCT code
+      result.value.coding[1] ??= {};
+      result.value.coding[1].code = value.slice(
+        value.lastIndexOf("#") + 1
+      );
+      result.value.coding[1].system = sct_prefix;
+    }
+  },
+  actSctid_label: {
+    targetKey: "value.coding[1].display",
+    transform: (value, result) => {
+      result.value ??= {};
+      result.value.coding ??= [];
+      // index 1 is for SCT label
+      result.value.coding[1] ??= {};
+      result.value.coding[1].display = value;
+    }
+  },
+  subsumes: { targetKey: "subsumes", transform: (value) => parseIds(value) },
   hasGroupingCriteria: {
     targetKey: "has_grouping_criteria",
-    transform: (value) => value.split(", "),
+    transform: (value) => parseIds(value),
   },
-  sameAs: { targetKey: "same_as", transform: (value) => value.split(", ") },
+  sameAs: { targetKey: "same_as", transform: (value) => parseIds(value) },
   adminT: {
     targetKey: "type",
     transform: (value) => value.slice(value.lastIndexOf("/") + 1),
@@ -418,16 +594,28 @@ const care_action_schema = {
   },
   drugType: {
     targetKey: "administers.type",
-    transform: (value) => value.slice(value.lastIndexOf("/") + 1),
+    transform: (value, result) => {
+      result.administers ??= {};
+      if (!value) {
+        return;
+      }
+      const fragment = value.includes("#")
+        ? value.substring(value.lastIndexOf("#") + 1)
+        : value.substring(value.lastIndexOf("/") + 1);
+      if (!fragment || fragment === "NamedIndividual") {
+        return;
+      }
+      result.administers.type ??= fragment;
+    },
   },
   drugLabel: {
     targetKey: "administers.value.coding[0].display",
     transform: (value, result) => {
       result.administers ??= {};
       result.administers.value ??= { coding: [] };
+      result.administers.value.text = value;
       result.administers.value.coding[0] ??= {};
       result.administers.value.coding[0].display = value;
-      result.administers.value.coding[0].text ??= value;
     },
   },
   sctid: {
@@ -436,11 +624,13 @@ const care_action_schema = {
       result.administers ??= {};
       result.administers.value ??= { coding: [] };
       result.administers.value.coding[1] ??= {};
-      result.administers.value.coding[1].code = value;
+      result.administers.value.coding[1].code = value.slice(
+        value.lastIndexOf("#") + 1
+      );
       result.administers.value.coding[1].system = sct_prefix;
     },
   },
-  sctLbl: {
+  sctid_label: {
     targetKey: "administers.value.coding[1].display",
     transform: (value, result) => {
       result.administers ??= {};
@@ -452,12 +642,15 @@ const care_action_schema = {
   },
   components: {
     targetKey: "administers.has_components",
-    transform: (value) => value.split(", "),
-  },
+    transform: (value, result) => {
+      result.administers ??= {};
+      result.administers.has_components = parseIds(value);
+    }
+  }
 };
 
 const transition_schema = {
-  TrId: { targetKey: "id", transform: (value) => value },
+  TrId: { targetKey: "id", transform: (value, result) => { result.id = value; } },
   effect: { targetKey: "effect", transform: (value) => value.toLowerCase() },
   propUri: {
     targetKey: "property",
@@ -611,58 +804,58 @@ const transition_schema = {
 const gpRec_schema = {
   wasDerivedFrom: {
     targetKey: "hasSource",
-    transform: (value) => value,
+    transform: (value, result) => { result.hasSource = value; },
   },
   partOf: {
     targetKey: "partOf",
-    transform: (value) => value,
+    transform: (value, result) => { result.partOf = value; },
   },
   gpRecId: {
     targetKey: "id",
-    transform: (value) => value,
+    transform: (value, result) => { result.id = value; },
   },
   extractedFrom: {
     targetKey: "extractedFrom",
-    transform: (value) => value,
+    transform: (value, result) => { result.extractedFrom = value; },
   },
   label: {
     targetKey: "title",
-    transform: (value) => value,
+    transform: (value, result) => { result.title = value; },
   },
   stUris: {
     targetKey: "clinicalStatements",
-    transform: (value) => value.split(","),
+    transform: (value, result) => { result.clinicalStatements = parseIds(value); },
   },
 };
 
 const stData_schema = {
   st_id: {
     targetKey: "id",
-    transform: (value) => value,
+    transform: (value, result) => { result.id = value; },
   },
   statementTitle: {
     targetKey: "hasStatementTitle",
-    transform: (value) => value,
+    transform: (value, result) => { result.hasStatementTitle = value; },
   },
   statementText: {
     targetKey: "hasStatementText",
-    transform: (value) => value,
+    transform: (value, result) => { result.hasStatementText = value; },
   },
   organizationName: {
     targetKey: "organization",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.organization = parseIds(value); },
   },
   jurisdiction: {
     targetKey: "jurisdiction",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.jurisdiction = parseIds(value); },
   },
   derivedFromSt: {
     targetKey: "derivedFrom",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.derivedFrom = parseIds(value); },
   },
   hasSources: {
     targetKey: "hasTarget",
-    transform: (value) => value.split(", "),
+    transform: (value, result) => { result.hasTarget = parseIds(value); },
   },
 };
 
@@ -1107,11 +1300,13 @@ function addGraphsDataFromToCig(
 }
 
 module.exports = {
+  isValidArgument,
   filter_vocab_rec_type,
   insert_precond_in_rec,
   insert_CB_in_rec,
   action_rec,
   get_care_action_data,
+  get_transition_data,
   get_causation_belief_data_short,
   get_causation_belief_w_transition_data,
   get_recommendation_data_short,
@@ -1123,4 +1318,8 @@ module.exports = {
   get_CB_uris_from_bindings,
   set_cig_id,
   set_uri,
+  parseIds,
+  ResourceTypes,
+  getTypeDetails,
+  findInvalidField,
 };
